@@ -1,0 +1,10 @@
+{
+  "header": {
+    "provider_name": "Anthropic",
+    "model_name": "claude-2",
+    "system_template": null,
+    "user_template": null
+  },
+  "data": [],
+  "mapping": {}
+}

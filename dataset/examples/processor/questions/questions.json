@@ -1,0 +1,40 @@
+{
+    "header": {
+        "type": "manual",
+        "provider_name": null,
+        "model_name": null,
+        "system_template": null,
+        "user_template": null
+    },
+    "data": [
+        { "query": "Tell me about dogs." },
+        { "query": "What are pigs?" },
+        { "query": "Who takes care of dogs?" },
+        { "query": "Who takes care of pigs?" },
+        { "query": "Where do animals live?" },
+        { "query": "What is a bat?" },
+        { "query": "Can you tell me about cows?" },
+        { "query": "How do cats act?" },
+        { "query": "What kind of food do humans eat?" },
+        { "query": "Tell me about tuna." },
+        { "query": "Tell me sea wales." },
+        { "query": "Can you tell me more about fish?" },
+        { "query": "What is a zoo?" },
+        { "query": "Is ivory expensive?" },
+        { "query": "Tell me about ivory." },
+        { "query": "What kind of food do lions eat?" },
+        { "query": "What kinds of food do humans eat?" },
+        { "query": "Are fish a good source of food?" },
+        { "query": "Tell me a bit how chickens evolved." },
+        { "query": "The chicken or the egg?" },
+        { "query": "What are eggs?" },
+        { "query": "What are hamsters?" },
+        { "query": "What is a mouse?" },
+        { "query": "What is a rat?" },
+        { "query": "Where do rats live?" },
+        { "query": "What is a chicken?" },
+        { "query": "What is a hen?" },
+        { "query": "Why are chicks yellow?" },
+        { "query": "Why do chickens exist?" }
+    ]
+}

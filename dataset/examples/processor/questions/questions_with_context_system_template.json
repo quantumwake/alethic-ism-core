@@ -1,0 +1,7 @@
+{
+  "name": "questions_system_template_default",
+  "parameters": [
+    "context"
+  ],
+  "template": "Only provide a short, concise, brief and accurate response within the context category: \"{context}\". Provide your response in a short summary paragraph. Only provide the response."
+}
