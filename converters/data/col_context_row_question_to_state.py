@@ -63,8 +63,8 @@ class ColumnContextRowQuestionToStateConverter:
 
 # main function
 if __name__ == '__main__':
-    input_filename = '../../dataset/examples/processor/vetted_questions/sg/questions_4gs.xlsx'
-    output_filename = '../../dataset/examples/processor/vetted_questions/sg/questions_4gs.json'
+    input_filename = '../../dataset/examples/processor/vetted/questions/qa_4gs.xlsx'
+    output_filename = '../../dataset/examples/processor/vetted/questions/qa_4gs.json'
 
     converter = ColumnContextRowQuestionToStateConverter()
     converter.convert(input_filename, output_filename)

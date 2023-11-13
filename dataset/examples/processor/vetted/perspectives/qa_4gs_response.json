@@ -1,0 +1,190 @@
+{
+  "header": {
+    "provider_name": "Anthropic",
+    "model_name": "claude-2",
+    "system_template": {
+      "name": "questions_system_template_default",
+      "parameters": [
+        "context"
+      ],
+      "template": "Only provide a short, concise, brief and accurate response within the context category: \"{context}\". Provide your response in a short summary paragraph. Only provide the response."
+    },
+    "user_template": {
+      "name": "questions_user_template_default",
+      "parameters": [
+        "query"
+      ],
+      "template": "{query}"
+    }
+  },
+  "config": {
+    "provider_name": "Anthropic",
+    "model_name": "claude-2",
+    "state_cache_path": "../dataset/examples/states",
+    "dump_on_every_call": true,
+    "state_query_key_definition": [
+      "query",
+      "context"
+    ],
+    "output_include_states_details_from_input": [
+      {
+        "query": "input_query"
+      },
+      {
+        "context": "input_context"
+      }
+    ],
+    "input_file": "../dataset/examples/processor/vetted/questions/qa_4gs.json",
+    "output_file": "../dataset/examples/processor/to_be_vetted/questions/qa_4gs_response.json",
+    "system_template_file": "../templates/questions/questions_with_context_system_template.json",
+    "user_template_file": "../templates/questions/questions_with_context_user_template.json"
+  },
+  "data": [
+    {
+      "key": "77a23680753d9632b0227268814e48afb2c8353b30865dab5683e593d9282528",
+      "user_prompt": "What kind of places do animals like to live in?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Animal Care and Homes\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Animals like to live in places that meet their basic needs for shelter, food, water, and safety. Wild animals may live in dens, nests, burrows, or other natural shelters like caves or trees. Pets like dogs and cats enjoy living indoors with their human families. Farm animals like horses, cows, and chickens live in barns, stables, or coops. Zoo animals live in enclosures designed to resemble their natural habitats. The ideal animal home provides comfort, security, and easy access to necessities like food and water. In general, animals flourish when their housing caters to their natural behaviors and needs.",
+      "status": "Success",
+      "input_query": "What kind of places do animals like to live in?",
+      "input_context": "Animal Care and Homes"
+    },
+    {
+      "key": "f2b934fbd85f89a52478fa32bbda0bb66cbd9b6e002e0c7e3a3bd7acbe32f41d",
+      "user_prompt": "Why do some animals only live in certain places?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Animals and the Place They Live\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Some animals are adapted to survive in specific environments. For example, polar bears have thick fur and insulating fat to survive cold Arctic climates, while camels can go a long time without water to live in hot, dry deserts. Animals evolve specialized traits over time that allow them to thrive in the conditions of their native habitat. If they were transplanted somewhere new, they would likely struggle to find food, stay warm or cool enough, and avoid predators. Each species fills an ecological niche in the place where it belongs. The habitats animals live in match their physical, behavioral, and dietary adaptations. An animal's habitat provides the resources it needs to survive and reproduce. Over time, animals become intimately connected to and reliant on their home environments. This explains why different species of animals are found living in certain regions of the world.",
+      "status": "Success",
+      "input_query": "Why do some animals only live in certain places?",
+      "input_context": "Animals and the Place They Live"
+    },
+    {
+      "key": "79db0b2e0f3e879b24ef8481450dc3e67be0c78ec3239963f88d013e1a600eae",
+      "user_prompt": "What kind of animals live on a farm?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Farm Animals and Food\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Common farm animals include cows, pigs, chickens, sheep, goats, horses, and donkeys. These animals are raised on farms for meat, milk, eggs, wool, labor, transportation, recreation, and companionship. Farm animals provide food and other products that are important for sustaining human life. Cattle, chickens, pigs, and sheep are among the most numerous farm animals worldwide, raised for beef, dairy, pork, and mutton. Other animals like goats, horses, and donkeys serve purposes like producing milk, providing transportation and labor, and being pets and companions. Overall, farms are home to a diverse array of animal species that provide essential resources for humans.",
+      "status": "Success",
+      "input_query": "What kind of animals live on a farm?",
+      "input_context": "Farm Animals and Food"
+    },
+    {
+      "key": "cbe3a049a1bc783ec392a3ecca776615109c0026c9b05dea1ac4163ea4cde679",
+      "user_prompt": "Can animals think and solve problems?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Thinking and Feeling Animals\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "There is evidence that many animals have cognitive abilities and can think and solve problems. Examples include chimpanzees using tools, crows solving puzzles, dogs understanding human gestures and language, and octopuses opening jars. Research shows animals employ logic, reasoning, imagination and make plans. Their cognitive abilities appear more limited than humans', but they likely have some level of consciousness, intelligence and emotions. Overall, scientific research demonstrates that at least some animals have cognitive capacities beyond basic instinct, allowing them to think, problem-solve and have awareness.",
+      "status": "Success",
+      "input_query": "Can animals think and solve problems?",
+      "input_context": "Thinking and Feeling Animals"
+    },
+    {
+      "key": "e619d15899a8f17e3e12170ef05089d5a116034e600fb91895b2042dafb475c7",
+      "user_prompt": "How should we take care of our pets at home?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Pets and People\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "To properly care for our pets at home, we should provide them with nutritious food, fresh water, daily exercise, affection and playtime. Keep their living spaces clean by scooping litter boxes, washing bedding, and cleaning cages regularly. Take them to the vet for annual check-ups and vaccinations. Give them toys to play with and brush or groom them regularly. Make sure they get plenty of love and attention. With proper nutrition, health care, exercise, and affection, our pets will live happy, healthy lives as members of our families.",
+      "status": "Success",
+      "input_query": "How should we take care of our pets at home?",
+      "input_context": "Pets and People"
+    },
+    {
+      "key": "f74389e02969ff6cad4ca61b496a121f423873e0ee0086b21cbf61dbbd235f6e",
+      "user_prompt": "Where do eggs come from, and how are they collected?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Using Animal Products Safely and Kindly\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Eggs come from chickens, ducks, and other birds. On farms, hens are kept in coops and their eggs are collected daily by farmers. The hens are well cared for, and the egg collection process is designed to be gentle and humane for the hens. The farmers make sure the hens have proper food, water, shelter, and veterinary care. Collecting eggs does not harm the hens if done correctly. Overall, eggs can be an ethical food source if the hens are treated humanely.",
+      "status": "Success",
+      "input_query": "Where do eggs come from, and how are they collected?",
+      "input_context": "Using Animal Products Safely and Kindly"
+    },
+    {
+      "key": "c7e1944bfcd63cbc125ae79fdb73a393df4a16cfdc7187939d0168d6e0cb4fad",
+      "user_prompt": "What do zoos do to help animals?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Animals in Zoos and Parks\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Zoos provide shelter, food, and veterinary care for animals that may struggle to survive in the wild. They have breeding programs to help endangered species, and educate the public about wildlife conservation. Zoos also fund and support field research and protection efforts for species in their natural habitats. Though controversial, most accredited zoos aim to give good welfare to animals while fostering connections between people and wildlife.",
+      "status": "Success",
+      "input_query": "What do zoos do to help animals?",
+      "input_context": "Animals in Zoos and Parks"
+    },
+    {
+      "key": "f6f844f3049cdcb4ed69d4660a113cf9ec1dca1138021855909f380960a970db",
+      "user_prompt": "Why do scientists watch and learn from animals?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Learning from Animals\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Scientists observe animals to gain insight into animal behavior, physiology, evolution, ecology, and more. Studying animals allows scientists to better understand the natural world, identify threats to wildlife, develop new medicines, improve animal welfare, and uncover principles that can be applied to human health and technology. Overall, animals provide invaluable models for scientific discovery across many disciplines.",
+      "status": "Success",
+      "input_query": "Why do scientists watch and learn from animals?",
+      "input_context": "Learning from Animals"
+    }
+  ],
+  "mapping": {
+    "77a23680753d9632b0227268814e48afb2c8353b30865dab5683e593d9282528": {
+      "key": "77a23680753d9632b0227268814e48afb2c8353b30865dab5683e593d9282528",
+      "user_prompt": "What kind of places do animals like to live in?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Animal Care and Homes\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Animals like to live in places that meet their basic needs for shelter, food, water, and safety. Wild animals may live in dens, nests, burrows, or other natural shelters like caves or trees. Pets like dogs and cats enjoy living indoors with their human families. Farm animals like horses, cows, and chickens live in barns, stables, or coops. Zoo animals live in enclosures designed to resemble their natural habitats. The ideal animal home provides comfort, security, and easy access to necessities like food and water. In general, animals flourish when their housing caters to their natural behaviors and needs.",
+      "status": "Success",
+      "input_query": "What kind of places do animals like to live in?",
+      "input_context": "Animal Care and Homes"
+    },
+    "f2b934fbd85f89a52478fa32bbda0bb66cbd9b6e002e0c7e3a3bd7acbe32f41d": {
+      "key": "f2b934fbd85f89a52478fa32bbda0bb66cbd9b6e002e0c7e3a3bd7acbe32f41d",
+      "user_prompt": "Why do some animals only live in certain places?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Animals and the Place They Live\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Some animals are adapted to survive in specific environments. For example, polar bears have thick fur and insulating fat to survive cold Arctic climates, while camels can go a long time without water to live in hot, dry deserts. Animals evolve specialized traits over time that allow them to thrive in the conditions of their native habitat. If they were transplanted somewhere new, they would likely struggle to find food, stay warm or cool enough, and avoid predators. Each species fills an ecological niche in the place where it belongs. The habitats animals live in match their physical, behavioral, and dietary adaptations. An animal's habitat provides the resources it needs to survive and reproduce. Over time, animals become intimately connected to and reliant on their home environments. This explains why different species of animals are found living in certain regions of the world.",
+      "status": "Success",
+      "input_query": "Why do some animals only live in certain places?",
+      "input_context": "Animals and the Place They Live"
+    },
+    "79db0b2e0f3e879b24ef8481450dc3e67be0c78ec3239963f88d013e1a600eae": {
+      "key": "79db0b2e0f3e879b24ef8481450dc3e67be0c78ec3239963f88d013e1a600eae",
+      "user_prompt": "What kind of animals live on a farm?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Farm Animals and Food\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Common farm animals include cows, pigs, chickens, sheep, goats, horses, and donkeys. These animals are raised on farms for meat, milk, eggs, wool, labor, transportation, recreation, and companionship. Farm animals provide food and other products that are important for sustaining human life. Cattle, chickens, pigs, and sheep are among the most numerous farm animals worldwide, raised for beef, dairy, pork, and mutton. Other animals like goats, horses, and donkeys serve purposes like producing milk, providing transportation and labor, and being pets and companions. Overall, farms are home to a diverse array of animal species that provide essential resources for humans.",
+      "status": "Success",
+      "input_query": "What kind of animals live on a farm?",
+      "input_context": "Farm Animals and Food"
+    },
+    "cbe3a049a1bc783ec392a3ecca776615109c0026c9b05dea1ac4163ea4cde679": {
+      "key": "cbe3a049a1bc783ec392a3ecca776615109c0026c9b05dea1ac4163ea4cde679",
+      "user_prompt": "Can animals think and solve problems?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Thinking and Feeling Animals\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "There is evidence that many animals have cognitive abilities and can think and solve problems. Examples include chimpanzees using tools, crows solving puzzles, dogs understanding human gestures and language, and octopuses opening jars. Research shows animals employ logic, reasoning, imagination and make plans. Their cognitive abilities appear more limited than humans', but they likely have some level of consciousness, intelligence and emotions. Overall, scientific research demonstrates that at least some animals have cognitive capacities beyond basic instinct, allowing them to think, problem-solve and have awareness.",
+      "status": "Success",
+      "input_query": "Can animals think and solve problems?",
+      "input_context": "Thinking and Feeling Animals"
+    },
+    "e619d15899a8f17e3e12170ef05089d5a116034e600fb91895b2042dafb475c7": {
+      "key": "e619d15899a8f17e3e12170ef05089d5a116034e600fb91895b2042dafb475c7",
+      "user_prompt": "How should we take care of our pets at home?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Pets and People\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "To properly care for our pets at home, we should provide them with nutritious food, fresh water, daily exercise, affection and playtime. Keep their living spaces clean by scooping litter boxes, washing bedding, and cleaning cages regularly. Take them to the vet for annual check-ups and vaccinations. Give them toys to play with and brush or groom them regularly. Make sure they get plenty of love and attention. With proper nutrition, health care, exercise, and affection, our pets will live happy, healthy lives as members of our families.",
+      "status": "Success",
+      "input_query": "How should we take care of our pets at home?",
+      "input_context": "Pets and People"
+    },
+    "f74389e02969ff6cad4ca61b496a121f423873e0ee0086b21cbf61dbbd235f6e": {
+      "key": "f74389e02969ff6cad4ca61b496a121f423873e0ee0086b21cbf61dbbd235f6e",
+      "user_prompt": "Where do eggs come from, and how are they collected?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Using Animal Products Safely and Kindly\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Eggs come from chickens, ducks, and other birds. On farms, hens are kept in coops and their eggs are collected daily by farmers. The hens are well cared for, and the egg collection process is designed to be gentle and humane for the hens. The farmers make sure the hens have proper food, water, shelter, and veterinary care. Collecting eggs does not harm the hens if done correctly. Overall, eggs can be an ethical food source if the hens are treated humanely.",
+      "status": "Success",
+      "input_query": "Where do eggs come from, and how are they collected?",
+      "input_context": "Using Animal Products Safely and Kindly"
+    },
+    "c7e1944bfcd63cbc125ae79fdb73a393df4a16cfdc7187939d0168d6e0cb4fad": {
+      "key": "c7e1944bfcd63cbc125ae79fdb73a393df4a16cfdc7187939d0168d6e0cb4fad",
+      "user_prompt": "What do zoos do to help animals?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Animals in Zoos and Parks\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Zoos provide shelter, food, and veterinary care for animals that may struggle to survive in the wild. They have breeding programs to help endangered species, and educate the public about wildlife conservation. Zoos also fund and support field research and protection efforts for species in their natural habitats. Though controversial, most accredited zoos aim to give good welfare to animals while fostering connections between people and wildlife.",
+      "status": "Success",
+      "input_query": "What do zoos do to help animals?",
+      "input_context": "Animals in Zoos and Parks"
+    },
+    "f6f844f3049cdcb4ed69d4660a113cf9ec1dca1138021855909f380960a970db": {
+      "key": "f6f844f3049cdcb4ed69d4660a113cf9ec1dca1138021855909f380960a970db",
+      "user_prompt": "Why do scientists watch and learn from animals?",
+      "system_prompt": "Only provide a short, concise, brief and accurate response within the context category: \"Learning from Animals\". Provide your response in a short summary paragraph. Only provide the response.",
+      "response": "Scientists observe animals to gain insight into animal behavior, physiology, evolution, ecology, and more. Studying animals allows scientists to better understand the natural world, identify threats to wildlife, develop new medicines, improve animal welfare, and uncover principles that can be applied to human health and technology. Overall, animals provide invaluable models for scientific discovery across many disciplines.",
+      "status": "Success",
+      "input_query": "Why do scientists watch and learn from animals?",
+      "input_context": "Learning from Animals"
+    }
+  }
+}

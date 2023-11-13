@@ -1,0 +1,9 @@
+{
+  "name": "perspective_user_template_default",
+  "parameters": [
+    { "name":  "input_query", "type": "string" },
+    { "name":  "response", "type":  "string" }
+  ],
+  "template_content": null,
+  "template_content_file": "../templates/perspectives/perspective_user_template_v3.txt"
+}

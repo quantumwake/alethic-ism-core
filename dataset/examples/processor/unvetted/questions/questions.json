@@ -1,10 +1,7 @@
 {
     "header": {
         "type": "manual",
-        "provider_name": null,
-        "model_name": null,
-        "system_template": null,
-        "user_template": null
+        "description": "Developer Test Data (not vetted by human)"
     },
     "data": [
         { "query": "Tell me about dogs." },

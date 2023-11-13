@@ -3,5 +3,5 @@
   "parameters": [
     "query"
   ],
-  "template": "{query}"
+  "template_content": "{query}"
 }
