@@ -45,6 +45,7 @@ Scoring Guidelines:
 
 Scores range from 1 to 100 for each dimension and sentiment category.
 1 indicates a low alignment or poor addressal of the freedom, while 100 indicates high alignment or excellent addressal.
+
 Qualitative Analysis:
 
 Provide insights and reasoning behind the scores assigned in each category, explaining how the response aligns with the given perspectives and addresses the Five Freedoms.

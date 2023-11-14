@@ -12,6 +12,7 @@ import dotenv
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 from tenacity import retry, wait_exponential, wait_random
 
+import utils
 from processor import map_flattener
 
 dotenv.load_dotenv()
@@ -258,11 +259,6 @@ class BaseQuestionAnswerProcessor:
 
     def process(self):
         input_file = self.config['input_file']
-        output_file = self.config['output_file']
-
-        if not os.path.exists(input_file):
-            raise FileNotFoundError(
-                f'query dataset file {input_file} not found, please use the question.csv template to create a single column question csv.')
 
         # identify whether we should dump each call result to an output csv file
         dump_on_every_call = False
@@ -274,44 +270,27 @@ class BaseQuestionAnswerProcessor:
                 else None
 
             if not dump_on_every_call_output_filename:
-                raise Exception('Cannot specify dump_on_every_call without a dump_on_every_call_output_filename output filename')
+                raise Exception(
+                    'Cannot specify dump_on_every_call without a dump_on_every_call_output_filename output filename')
 
         # if the input is .json then make sure it is a state input
-        if '.json' in input_file.lower():
+        if input_file.lower().endswith('.json'):
+            input_state = utils.load_state(input_file)
+            input_dataset = input_state['data']
 
-            with open(input_file, 'r') as fio:
-                dataset = json.load(fio)
-
-                if 'header' not in dataset:
-                    raise Exception(f'Invalid state input, please make sure you define '
-                                    f'a basic header for the input state')
-
-                if 'data' not in dataset:
-                    raise Exception(f'Invalid state input, please make sure a data field exists '
-                                    f'in the root of the input state')
-
-                dataset = dataset['data']
-
-                if not isinstance(dataset, list):
-                    raise Exception('Invalid data input states, the data input must be a list of dictionaries '
-                                    'List[dict] where each dictionary is FLAT record of key/value pairs')
-
-            for data in dataset:
+            count = len(input_dataset)
+            logging.info(f'starting processing loop with size {count}')
+            for data_idx, data in enumerate(input_dataset):
+                logging.info(f'processing dataset entry {data_idx} / {count}')
                 self.call(values=data)
 
                 if dump_on_every_call:
                     self.dump_dataframe_csv(dump_on_every_call_output_filename)
 
-        elif '.csv' in input_file.lower():
-            raise NotImplementedError('not working')
-            #
-            # df = self.load_datset_file(input_file)
-            # for row in df.itertuples():
-            #     self.call(values=row)
-            #     # if dump_on_every_call:
-                    # self.dump()
-
-            return df
+        else:
+            raise NotImplementedError('Format type not implemented, states must be in json format with header and '
+                                      'data keys, **please use a state template** to construct your input state or '
+                                      'use a previous output state as an input state to your processor')
 
     def get_model_name(self):
         return self.model_name
@@ -328,8 +307,8 @@ class BaseQuestionAnswerProcessor:
             self.state = json.load(fio)
             return self.state
 
-    def save_state(self, key: str, query_state: dict):
-        state_file = self.get_state_cache_filename()
+    def save_state(self, key: str, query_state: dict, state_file: str = None):
+        state_file = state_file if state_file else self.get_state_cache_filename()
 
         # update the data states for the specific query / question / input
         data = self.state['data']
@@ -349,6 +328,10 @@ class BaseQuestionAnswerProcessor:
 
         return self.state
 
+    # def save_state_failure(self, key: str, query_state: dict):
+    #     state_file = self.get_state_cache_filename()
+    #     state_file = f'failures_{state_file}'
+    #     self.save_state_failure()
     def load_datset_file(self, file: str):
         _file = file.lower()
         if _file.endswith('.csv'):
@@ -438,18 +421,17 @@ class BaseQuestionAnswerProcessor:
         status, system_prompt = self.build_template_text(self.system_template, values)
 
         try:
-            response = self._execute(user_prompt=user_prompt,
-                                     system_prompt=system_prompt,
-                                     values=values)
+            response_data, response_columns = self._execute(user_prompt=user_prompt,
+                                                            system_prompt=system_prompt,
+                                                            values=values)
 
-
-            logging.debug(f'processed prompt query: {query_state_key} and received response: {response}')
+            logging.debug(f'processed prompt query: {query_state_key} and received response: {response_data}')
 
             query_state = {
                 'key': query_state_key_hashed,
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
-                'response': response,
+                'response': response_data,
                 'status': 'Success'
             }
 
@@ -466,11 +448,11 @@ class BaseQuestionAnswerProcessor:
                 }
 
             query_states = []
-            if isinstance(response, dict):
-                query_state = {**query_state, **response}
+            if isinstance(response_data, dict):
+                query_state = {**query_state, **response_data}
                 query_states.append(query_state)
-            elif isinstance(response, list):
-                for item in list(response):
+            elif isinstance(response_data, list):
+                for item in list(response_data):
                     query_state = {**{
                         'user_prompt': user_prompt,
                         'system_prompt': system_prompt,
@@ -493,16 +475,15 @@ class BaseQuestionAnswerProcessor:
             query_states = [save_query_state(x) for x in query_states]
 
         except Exception as e:
-
             # save it as an error such that we can track it
-            self.save_state(key=query_state_key_hashed,
-                            query_state={
-                                'inputs': str(values),
-                                'user_prompt': user_prompt,
-                                'system_prompt': system_prompt,
-                                'response': f'error {e}',  # write the error to the answer for review purposes
-                                'status': 'Failed'
-                            })
+            self.save_state_failure(key=query_state_key_hashed,
+                                    query_state={
+                                        'inputs': str(values),
+                                        'user_prompt': user_prompt,
+                                        'system_prompt': system_prompt,
+                                        'response': f'error {e}',  # write the error to the answer for review purposes
+                                        'status': 'Failed'
+                                    })
 
             logging.error(f'critical error handling question {values} on {self.config}')
 
@@ -541,64 +522,9 @@ class BaseQuestionAnswerProcessor:
         return True, completed_template
 
 
-class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
-
-    def __init__(self, config: dict):
-        new_config = {**{'provider_name': "Anthropic", 'model_name': "claude-2"}, **config}
-        super().__init__(config=new_config)
-
-        self.anthropic = Anthropic(max_retries=5)
-
-    def batching(self, questions: List[str]):
-        raise NotImplementedError()
-
-    def _parse_response(self, response: str):
-        if not response or response.strip() == '':
-            logging.error(f'no response found for config {self.config} on {self}')
-            return response
-
-        result = ' '.join([x.strip() for x in response.split('\n\n') if x.strip() != '' and not x.strip().endswith(":")])
-        return result          # empty columns, text parsing only
-
-    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
-        # add a system message if one exists
-        final_prompt = f"{HUMAN_PROMPT} {user_prompt} {AI_PROMPT}"
-        if system_prompt:
-            final_prompt = f'{system_prompt} {final_prompt}'
-
-        # strip out any white spaces and execute the final prompt
-        final_prompt = final_prompt.strip()
-        completion = self.anthropic.completions.create(
-            model="claude-2",
-            max_tokens_to_sample=4096,
-            prompt=final_prompt,
-        )
-
-        response = completion.completion
-        return response
-
-class AnthropicQuestionAnswerProcessor(AnthropicBaseProcessor):
-
-    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
-        response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-        response = self._parse_response(response=response)
-        return response
-
-
-class AnthropicQuestionResponsePerspectiveProcessor(AnthropicBaseProcessor):
-
-    def __init__(self, config: dict):
-        new_config = {**{'provider_name': "Anthropic", 'model_name': "claude-2"}, **config}
-        super().__init__(config=new_config)
-
-        self.anthropic = Anthropic(max_retries=5)
-
-    def batching(self, questions: List[str]):
-        raise NotImplementedError()
-
     def _parse_response_json(self, response: str):
         json_detect = response.find('```json')
-        if json_detect <= 0:
+        if json_detect < 0:
             return False, response
 
         # find the first occurence of the json start {
@@ -639,11 +565,15 @@ class AnthropicQuestionResponsePerspectiveProcessor(AnthropicBaseProcessor):
                 flattened = map_flattener.flatten(data_parsed)
                 return flattened, None      # TODO extract the list of column names
 
+        ### TODO clean up this code
+        ### TODO clean up this code
+        ### TODO clean up this code
+
         # else do try deprecated method
 
         # Validate input format
         if '|' not in response or '\n' not in response:
-            raise ValueError('Invalid response format')
+            return response.strip()
 
         # Sanitize input
         response = response.strip()
@@ -682,71 +612,118 @@ class AnthropicQuestionResponsePerspectiveProcessor(AnthropicBaseProcessor):
 
         return data, columns
 
+
+class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
+
+    def __init__(self, config: dict):
+        new_config = {**{'provider_name': "Anthropic", 'model_name': "claude-2"}, **config}
+        super().__init__(config=new_config)
+
+        self.anthropic = Anthropic(max_retries=5)
+
+    def batching(self, questions: List[str]):
+        raise NotImplementedError()
+    #
+    # def _parse_response(self, response: str):
+    #     if not response or response.strip() == '':
+    #         logging.error(f'no response found for config {self.config} on {self}')
+    #         return response
+    #
+    #     result = ' '.join([x.strip() for x in response.split('\n\n') if x.strip() != '' and not x.strip().endswith(":")])
+    #     return result          # empty columns, text parsing only
+
+    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
+        # add a system message if one exists
+        final_prompt = f"{HUMAN_PROMPT} {user_prompt} {AI_PROMPT}"
+        if system_prompt:
+            final_prompt = f'{system_prompt} {final_prompt}'
+
+        # strip out any white spaces and execute the final prompt
+        final_prompt = final_prompt.strip()
+        completion = self.anthropic.completions.create(
+            model="claude-2",
+            max_tokens_to_sample=4096,
+            prompt=final_prompt,
+        )
+
+        response = completion.completion
+        return response
+
+class AnthropicQuestionAnswerProcessor(AnthropicBaseProcessor):
+
+    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
+        response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
+        data, columns = self._parse_response(response=response)
+        return data
+
+
+class AnthropicQuestionResponsePerspectiveProcessor(AnthropicBaseProcessor):
+
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
         data, columns = self._parse_response(response)      # TODO do something useful with the columns, if any
         return data
 
 
+class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
 
-class OpenAIQuestionAnswerProcessor(BaseQuestionAnswerProcessor):
-
-    def __init__(self):
-        super().__init__({
-            'provider_name': "OpenAI",
-            'model_name': "gpt-4-1106-preview"
-        })
+    def __init__(self, config: dict):
+        new_config = {**{'provider_name': "OpenAI", 'model_name': "gpt-4-1106-preview"}, **config}
+        super().__init__(config=new_config)
 
     def batching(self, questions: List[str]):
         raise NotImplementedError()
 
-    def call(self, question, force: bool = False):
-        if self.has_query_state(query=question, force=force):
-            return
-
+    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         # otherwise process the question
-        messages_dict = [
-            {
-                "role": "user",
-                "content": f"{question}"
-            }
-        ]
+        messages_dict = []
 
-        # if there is a system template, then append it to the input vector
-        if self.system_template:
+        if user_prompt:
+            user_prompt = user_prompt.strip()
             messages_dict.append({
-                "role": "system",
-                "content": self.system_template
+                "role": "user",
+                "content": f"{user_prompt}"
             })
 
-        try:
-            # execute the open ai api function and wait for the response
-            response = openai.ChatCompletion.create(
-                model=self.model_name,
-                messages=messages_dict,
-                temperature=0.8,
-                # TODO - IMPORTANT test this as it will likely have an impact on how the system responds
-                max_tokens=1024
-            )
+        if system_prompt:
+            system_prompt = system_prompt.strip()
+            messages_dict.append({
+                "role": "system",
+                "content": system_prompt
+            })
 
-            # strip out the relevant text information
+        if not messages_dict:
+            raise Exception(f'no prompts specified for values {values}')
 
-            answer = response.choices[0]['message']['content'].strip().replace('\n', ' ').replace('  ', ' ')
-            self.state[question] = {
-                'answer': answer,
-                'status': 'Success'
-            }
-            self.save_state()  # persist new state such that we do not repeat the call when interrupted
-        except Exception as e:
-            self.state[question] = {
-                'answer': f'error {e}',  # write the error to the answer for review purposes
-                'status': 'Failed'
-            }
-            logging.error(f'critical error handling question {question} on {self}')
+        # execute the open ai api function and wait for the response
+        response = openai.ChatCompletion.create(
+            model=self.model_name,
+            messages=messages_dict,
+            temperature=0.1,
+            # TODO - IMPORTANT test this as it will likely have an impact on how the system responds
+            max_tokens=4096
+        )
+
+        # final raw response, without stripping or splitting
+        return response.choices[0]['message']['content']
 
 
+class OpenAIQuestionAnswerProcessor(OpenAIBaseProcessor):
 
-def test_sg_questions_4gs():
+    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
+        response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
+        return self._parse_response(response=response)
+
+
+class OpenAIQuestionResponsePerspectiveProcessor(OpenAIBaseProcessor):
+
+    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
+        response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
+        return self._parse_response(response=response)
+
+
+
+def test_sg_questions_4gs_openai():
     config = {
         # where to store the state
         'state_cache_path': '../dataset/examples/states',
@@ -775,9 +752,62 @@ def test_sg_questions_4gs():
         'user_template_file': '../templates/questions/questions_with_context_user_template.json',
     }
 
-    anthropic_processor = AnthropicQuestionAnswerProcessor(config={**config, **locations})
-    anthropic_processor.process()
-    anthropic_processor.dump_cache_json(output_filename='../dataset/examples/processor/to_be_vetted/questions/qa_4gs_response.csv')
+    base = '../dataset/examples/processor/to_be_vetted/questions'
+
+    #
+    openai_processor = OpenAIQuestionAnswerProcessor(config={**config, **locations})
+    openai_processor.process()
+
+    openai_processor.dump_cache_json(output_filename=f'{base}/qa_4gs_response_openai.json')
+    openai_processor.dump_cache_csv(output_filename=f'{base}/qa_4gs_response_openai.csv')
+
+    #
+    # anthropic_processor = AnthropicQuestionAnswerProcessor(config={**config, **locations})
+    # anthropic_processor.process()
+    # anthropic_processor.dump_cache_json(output_filename='../dataset/examples/processor/to_be_vetted/questions/qa_4gs_response_anthropic.csv')
+
+def test_sg_questions_with_persona_4gs_openai():
+    config = {
+        # where to store the state
+        'state_cache_path': '../dataset/examples/states',
+        'dump_on_every_call': True,
+        'dump_on_every_call_output_filename': '../dataset/examples/processor/to_be_vetted/questions/qa_4gs_with_persona_response_incremental.csv',
+
+        # the output file key used when generating new output values
+        'state_query_key_definition': [
+            'query',
+            'context'
+        ],
+
+        'output_include_states_details_from_input': [
+            {'query': 'input_query'},
+            {'context': 'input_context'}
+        ]
+    }
+
+    locations = {
+        # the input questions and other parameters
+        'input_file': '../dataset/examples/processor/vetted/questions/qa_4gs.json',
+        'output_file': '../dataset/examples/processor/to_be_vetted/questions/qa_4gs_with_persona_response.json',
+
+        # templates to use
+        'system_template_file': '../templates/questions_with_persona/questions_with_persona_system_template.json',
+        'user_template_file': '../templates/questions_with_persona/questions_with_persona_user_template.json',
+    }
+
+    base = '../dataset/examples/processor/to_be_vetted/questions'
+
+    #
+    openai_processor = OpenAIQuestionAnswerProcessor(config={**config, **locations})
+    openai_processor.process()
+
+    openai_processor.dump_cache_json(output_filename=f'{base}/qa_4gs_with_persona_response_openai.json')
+    openai_processor.dump_cache_csv(output_filename=f'{base}/qa_4gs_with_persona_response_openai.csv')
+
+    #
+    # anthropic_processor = AnthropicQuestionAnswerProcessor(config={**config, **locations})
+    # anthropic_processor.process()
+    # anthropic_processor.dump_cache_json(output_filename='../dataset/examples/processor/to_be_vetted/questions/qa_4gs_response_anthropic.csv')
 
 
 def test_sg_questions_4gs_perspective():
@@ -785,6 +815,7 @@ def test_sg_questions_4gs_perspective():
         # where to store the state
         'state_cache_path': '../dataset/examples/states',
         'dump_on_every_call': True,
+        'dump_on_every_call_output_filename': '../dataset/examples/processor/to_be_vetted/perspectives/qa_4gs_perspective_response_incremental.csv',
 
         # the records need to be identified with a key, to create this we use
         # specify which fields to use from the input state, for each record, we
@@ -805,7 +836,8 @@ def test_sg_questions_4gs_perspective():
 
     locations = {
         # the input questions and other parameters
-        'input_file': '../dataset/examples/processor/to_be_vetted/questions/qa_4gs_response.json',
+        # 'input_file': '../dataset/examples/processor/to_be_vetted/questions/qa_4gs_response.json',
+        'input_file': '../dataset/examples/processor/to_be_vetted/questions/qa_4gs_response_openai.json',
         'output_file': '../dataset/examples/processor/to_be_vetted/perspectives/qa_4gs_perspective_response.json',
 
         # templates to use
@@ -814,9 +846,20 @@ def test_sg_questions_4gs_perspective():
         'state_cache_path': '../dataset/examples/states',
     }
 
-    anthropic_processor = AnthropicQuestionResponsePerspectiveProcessor(config={**config, **locations})
-    anthropic_processor.process()
-    anthropic_processor.dump_cache_csv(output_filename='../dataset/examples/processor/to_be_vetted/perspectives/qa_4gs_perspective_response.csv')
+    base = '../dataset/examples/processor/to_be_vetted/perspectives'
+
+    #
+    openai_processor = OpenAIQuestionResponsePerspectiveProcessor(config={**config, **locations})
+    openai_processor.process()
+
+    openai_processor.dump_cache_json(output_filename=f'{base}/qa_4gs_perspective_response_openai.json')
+    openai_processor.dump_cache_csv(output_filename=f'{base}/qa_4gs_perspective_response_openai.csv')
+
+    #
+    # anthropic_processor = AnthropicQuestionResponsePerspectiveProcessor(config={**config, **locations})
+    # anthropic_processor.process()
+    # anthropic_processor.dump_cache_csv(output_filename=f'{base}/qa_4gs_perspective_response_anthropic.json')
+    # anthropic_processor.dump_cache_csv(output_filename=f'{base}/qa_4gs_perspective_response_anthropic.csv')
 
 #
 # class ProcessChain:
@@ -887,8 +930,10 @@ def test_sg_questions_4gs_perspective():
 
 # main function
 if __name__ == '__main__':
-    test_sg_questions_4gs()
+    # test_sg_questions_4gs()
     # test_sg_questions_4gs_perspective()
+
+    test_sg_questions_with_persona_4gs_openai()
 
     # anthropic_processor = AnthropicQuestionAnswerProcessor(config={
     #     'input_file': '../dataset/examples/processor/questions/questions.json',
