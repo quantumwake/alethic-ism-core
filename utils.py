@@ -6,6 +6,10 @@ def convert_string_to_instanceof(value):
         return None
 
     # Convert to boolean
+
+    if not isinstance(value, str):
+        return value
+
     if value.lower() in ["true", "false"]:
         return value.lower() == "true"
 

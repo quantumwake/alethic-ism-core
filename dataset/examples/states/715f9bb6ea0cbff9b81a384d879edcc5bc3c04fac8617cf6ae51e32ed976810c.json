@@ -1,5 +1,6 @@
 {
   "header": {
+    "name": "TEST_DATA_QA_RESPONSE",
     "provider_name": "Anthropic",
     "model_name": "claude-2",
     "system_template": {
@@ -18,6 +19,7 @@
     }
   },
   "config": {
+    "name": "TEST_DATA_QA_RESPONSES",
     "provider_name": "Anthropic",
     "model_name": "claude-2",
     "state_cache_path": "../dataset/examples/states",
