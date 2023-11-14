@@ -13,8 +13,6 @@ import dotenv
 # load environment variables if any from .env
 dotenv.load_dotenv()
 
-
-
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
 clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
 clean_string_for_ddl_naming = lambda s: "_".join(''.join([clean_char_for_ddl_naming(c) for c in s]).split(' '))
@@ -56,10 +54,10 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
         "header": {
             "columns": {
                 ## '<column_name>': {
-                    ## value: [constant value or a routine] (optional)
-                    ## type: <str,int,float>,
-                    ## max_length: [min length of input strings for column values] if str (optional)
-                    ## min_length: [min length of input strings for column values] if str (optional)
+                ## value: [constant value or a routine] (optional)
+                ## type: <str,int,float>,
+                ## max_length: [min length of input strings for column values] if str (optional)
+                ## min_length: [min length of input strings for column values] if str (optional)
                 # }
             },
             "row_count": len(state_data),
@@ -77,21 +75,29 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
         # merge the data entry columns with the table columns to be created
         column_headers = organized_data['header']['columns']
 
-        data_entry_columns = data_entry.keys()
-        data_entry_columns_headers = {
+        # this is the list of keys from the current record
+        state_data_entry_keys = data_entry.keys()
+
+        # sometimes state['data'] records may differ in their keys, creating a gap in definition
+        # we merge them to create a new list of columns from the keys that may not exist yet
+        new_column_headers = {
             build_column_name(column): {
                 'column_name': build_column_name(column),
+                'state_data_entry_key': column,
                 'type': str
             }
-            for column in data_entry_columns
-            if column not in column_headers and column not in ignore_columns
+
+            # loop through and check lowercase for
+            for column in state_data_entry_keys
+            if build_column_name(column) not in column_headers and
+               build_column_name(column) not in ignore_columns
         }
 
         # merge the existing columns headers with the specific records columns
         # it would be good practice to try and keep the dataset consistent across
         # available keys/columns, generally we do not want to have key differences
         # between record entries as it leads to many empty/null values
-        column_headers = {**column_headers, **data_entry_columns_headers}
+        column_headers = {**column_headers, **new_column_headers}
 
         # check for any additional columns by invoking the higher order function
         # which should return a map of columns and constant values or a coroutine
@@ -130,9 +136,10 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
 
         # iterate the global columns, such that we preserve the ordering of data
         # and replace nonexistent column values in the data entry with a blank/null
-        #for column, column_header in column_headers.items():
+        # for column, column_header in column_headers.items():
 
         for col_index, column in enumerate(column_headers.keys()):
+            column = column.lower()
             column_header = column_headers[column]
 
             # if true then it exists in additional columns, otherwise false
@@ -141,12 +148,25 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
             if column not in organized_data:
                 organized_data[column] = [None for i in range(idx)]
 
+            # try and get the input state key, since this differs from the column name, we use this key to
+            # fetch the exact data element we need from the state['data'][row][state_data_entry_key]
+            state_data_entry_key = column_header['state_data_entry_key'] if 'state_data_entry_key' in column_header else column
+
             # override whatever value we have with the one from the dataset
-            value = data_entry[column] if column in data_entry else value
+            value = data_entry[state_data_entry_key] if state_data_entry_key in data_entry else value
 
             # append the value
             value = utils.convert_string_to_instanceof(value)
-            column_header['type'] = type(value)
+
+            # TODO hack or just a check?
+            if (type(value) is str and
+                    column_header['type'] is int or
+                    column_header['type'] is float):
+                logging.warning(f'type conversion issue due to invalid input value "{value}" for int or float values on column {column}')
+                value = None
+            else:
+                column_header['type'] = type(value)
+
             organized_data[column].append(value)
 
             def calc_min():
@@ -205,8 +225,8 @@ def create_column_ddl(column_header: dict):
     ## TODO we should probably use a DDL builder instead of this old school method
 
     # calculate the next highest value power of two
-    exponent = math.log2(max_length) + 1 # the log of the max size gives us the exponent
-    final_max_length = int(math.pow(2, exponent))   # base 2 ^ exponent
+    exponent = math.log2(max_length) + 1  # the log of the max size gives us the exponent
+    final_max_length = int(math.pow(2, exponent))  # base 2 ^ exponent
 
     # if the max value is above the max allowed then use the text type instead (or clob)
     if final_max_length >= 4096:
@@ -234,8 +254,7 @@ def add_header_columns_and_values(input_state: dict,
 
                                   input_organized_state: dict = None
                                   # passed incase you need this information during column/value creation
-):
-
+                                  ):
     header = input_state['header']
 
     return {
@@ -260,7 +279,9 @@ def routine(func, **fixed_kwargs):
         # Merge fixed_kwargs (like header_input) with the new kwargs
         all_kwargs = {**fixed_kwargs, **kwargs}
         return func(**all_kwargs)
+
     return wrapped_function
+
 
 def create_table_ddl(organized_state: dict):
     headers = organized_state['header']
@@ -298,6 +319,7 @@ async def truncate_table(table_name: str):
         logging.error(e)
         raise e
 
+
 async def drop_table(table_name: str):
     conn = await create_connection()
     try:
@@ -305,6 +327,7 @@ async def drop_table(table_name: str):
     except Exception as e:
         logging.error(e)
         raise e
+
 
 async def create_table(sql: str):
     conn = await create_connection()
@@ -349,8 +372,8 @@ async def import_table(organized_data: dict):
 
     # fetch the column names for DML operation, ensuring it gets processed
     _column_names = ','.join([parse_column_name(clean_string_for_ddl_naming(column_name))
-                             for column_name, column_header
-                             in columns.items()])
+                              for column_name, column_header
+                              in columns.items()])
 
     # if idx % batch_size:
     batch_size = 10
@@ -367,7 +390,7 @@ async def import_table(organized_data: dict):
         # await conn.execute("INSERT INTO your_table (column1, column2) VALUES ($1, $2)", value1, value2)
 
         # create column parameter indexes such that we can parameterize the inserts
-        column_params = ','.join([f'${idx}' for idx in range(1, len(columns)+1)])
+        column_params = ','.join([f'${idx}' for idx in range(1, len(columns) + 1)])
 
         _table_name = f'"{table_name}"'
         sql = f'INSERT INTO {_table_name} ({_column_names}) VALUES ({column_params})'
@@ -417,7 +440,6 @@ async def run_me_state_file(state_input_file: str, ignore_columns: [] = None, dr
     await import_table(organized_data=organized_state)
 
 
-
 async def run_me():
     # input_file = '../../dataset/examples/states/715f9bb6ea0cbff9b81a384d879edcc5bc3c04fac8617cf6ae51e32ed976810c.json'
     base_path = '../../dataset/examples/states/'
@@ -432,14 +454,13 @@ async def run_me():
 
     for state_filename in state_filenames:
         state_file_path = f'{base_path}/{state_filename}'
-        await run_me_state_file(state_file_path, ignore_columns=['input_query_original', 'input_context'])
-
-
-
+        await run_me_state_file(
+            # drop_tables=True,
+            state_input_file=state_file_path,
+            ignore_columns=['input_query_original', 'input_context'])
 
 
 asyncio.run(run_me())
-
 
 
 class OrganizedStateCSVStringIO(StringIO):
@@ -455,10 +476,10 @@ class OrganizedStateCSVStringIO(StringIO):
     def count(self):
         return int(self.organized_state['row_count'])
 
-    def seek(self, __cookie, __whence = ...):
+    def seek(self, __cookie, __whence=...):
         self.row_index = __cookie
 
-    def read(self, __size = ...):
+    def read(self, __size=...):
 
         buffer = []
         for index in range(__size):
@@ -477,11 +498,7 @@ class OrganizedStateCSVStringIO(StringIO):
             # increment the position of the row text column/char index
             self.row_text_char_index = self.row_text_char_index + 1
 
-
-
-
-
-    def readline(self, __size = ...):
+    def readline(self, __size=...):
 
         if __size:
             raise NotImplementedError(f'size input in readline not implemented of size {__size}')
@@ -501,5 +518,3 @@ class OrganizedStateCSVStringIO(StringIO):
         self.row_index = self.row_index + 1
 
         return readline
-
-
