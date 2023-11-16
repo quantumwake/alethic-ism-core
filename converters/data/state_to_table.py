@@ -1,24 +1,16 @@
 import asyncio
-import json
 import logging
-import os
 import math
-from io import StringIO
 
 import asyncpg
 
-import utils
+from utils import *
 import dotenv
 
 from evaluation.semantic_distance import BasicSemanticSearch
 
 # load environment variables if any from .env
 dotenv.load_dotenv()
-
-# only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
-clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
-clean_string_for_ddl_naming = lambda s: "_".join(''.join([clean_char_for_ddl_naming(c) for c in s]).split(' '))
-
 
 embeddings_models = {
     "bert": BasicSemanticSearch(model_name="bert-base-uncased"),
@@ -55,32 +47,6 @@ def create_embedding(text: str, model_name):
 #     for idx, distance in enumerate(distances_from_reference):
 #         print(f' - {distance}\t\t{other_sentences[idx]}')
 #
-
-def build_column_name(name: str):
-    return clean_string_for_ddl_naming(name).lower()
-
-
-def build_table_name(header: dict):
-    unique_name = header['name'] if 'name' in header else None
-
-    def prefix(name, from_header: dict = header):
-        _prefix = from_header[name].strip() if name in from_header else None
-
-        if _prefix:
-            return clean_string_for_ddl_naming(_prefix).lower()
-
-        return str()
-
-    if not unique_name:
-        provider = prefix('provider_name')
-        model_name = prefix('model_name')
-        user_template = prefix('name', from_header=header['user_template'])
-        system_template = prefix('name', from_header=header['system_template'])
-
-        table_name_appender_list = f"STATE_{provider} {model_name} {user_template} {system_template}".split()
-        unique_name = "_".join([x for x in table_name_appender_list if x])
-
-    return clean_string_for_ddl_naming(unique_name).lower()
 
 
 def organize_state_for_database(state: dict, additional_values_func=None, ignore_columns: [] = None):
@@ -129,6 +95,7 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
             for column in state_data_entry_keys
             if build_column_name(column) not in column_headers and
                build_column_name(column) not in ignore_columns
+
         }
 
         # merge the existing columns headers with the specific records columns
@@ -209,7 +176,7 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
             value = data_entry[state_data_entry_key] if state_data_entry_key in data_entry else value
 
             # append the value
-            value = utils.convert_string_to_instanceof(value)
+            value = convert_string_to_instanceof(value)
 
             def calc_min():
                 cur = column_header['min_length'] if 'min_length' in column_header else 0
@@ -552,7 +519,7 @@ async def run_me_state_file(state_input_file: str=None,
     # load the state, organize it for table format and create the DDL for
     # the new organized state such that we can create the backend tables
     if not state:
-        state = utils.load_state(state_input_file)
+        state = load_state(state_input_file)
 
     # reorganize the state such that we can use it for persisting it to a database
     # this will create a list of keys columns and an accurate row values (e.g, back-fills empty columns properly)
@@ -607,7 +574,7 @@ async def run_me(drop_tables: bool = False):
     # on this data for creating provider_name, and model_name column/values
     states = []
     for state_filename in state_filenames:
-        state = utils.load_state(f'{base_path}/{state_filename}')
+        state = load_state(f'{base_path}/{state_filename}')
         if drop_tables:
             await drop_table(state_header=state['header'])
 

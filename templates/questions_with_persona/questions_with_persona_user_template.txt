@@ -1,6 +1,6 @@
 Personal Template for a Person-Centered Perspective
 
-This template is designed to take on the persona of a person-centered entity and respond to the question and including sentiment scores for the Five Freedoms, for the following category {context}.
+This template is designed to take on the persona of a person-centered entity and respond to the question and including sentiment scores for the Five Freedoms, for the following category "{input_context}".
 
 Format:
 
@@ -71,4 +71,4 @@ Use this template to ensure a comprehensive and consistent approach in analyzing
 
 PLEASE PROVIDE ONLY THE FINAL JSON RESPONSE.
 
-Question: "{query}"
+Question: "{input_query}"
