@@ -1,5 +1,12 @@
+import hashlib
 import json
+import logging
 import os
+import re
+from typing import Any, List
+
+from processor import map_flattener
+from processor.processor_state import StateDataKeyDefinition
 
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
 clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
@@ -43,7 +50,7 @@ def build_table_name(header: dict):
     return clean_string_for_ddl_naming(unique_name).lower()
 
 
-def convert_string_to_instanceof(value):
+def identify_and_return_value_by_type(value):
     if not value:
         return None
 
@@ -66,7 +73,109 @@ def convert_string_to_instanceof(value):
             return value
 
 
-def load_state(state_file: str):
+def has_extension(filename: str, extensions: [str]):
+    filename = filename.lower()
+    return any(filename.endswith(ext) for ext in extensions)
+
+
+def load_template(template_file: str):
+    if not template_file or not os.path.exists(template_file):
+        return None
+
+    with open(template_file, 'r') as fio:
+        template_dict = json.load(fio)
+
+    # if template content exists then set it, it can be overwritten by a file
+    if 'template_content' in template_dict:
+        template_content = template_dict['template_content']
+    else:
+        template_content = None
+
+    # if a template file exists then try and load it
+    if 'template_content_file' in template_dict:
+
+        # throw an exception if both the template_file and template keys are set
+        if template_content:
+            raise Exception(f'Cannot define a template_content and a template_content_file in the same '
+                            f'template configuration {template_file}. For example, if you define the key '
+                            f'"template_content" with some text content, you cannot also define a '
+                            f'"template_content_file" which points to a different content from a file"')
+
+        # otherwise load the template
+        template_file = template_dict['template_content_file']
+        with open(template_file, 'r') as fio_tc:
+            template_content = fio_tc.read().strip()
+            template_dict['template_content'] = template_content
+
+    if not template_content:
+        raise Exception(f'no template defined in template file {template_file} with configuration {template_dict}')
+
+    return template_dict
+
+
+def extract_values_from_query_state_by_key_definition(query_state: dict,
+                                                      key_definitions: List[StateDataKeyDefinition] = None):
+
+    # if the key config map does not exist then attempt
+    # to use the 'query' key as the key value mapping
+    if not key_definitions:
+        if "query" not in query_state:
+            raise Exception(f'query does not exist in query state {query_state}')
+
+        return query_state['query']
+
+    # iterate each parameter name and look it up in the state object
+    results = {}
+    for key in key_definitions:
+        key_name = key.name
+        alias = key.alias
+
+        # if it does not exist, throw an exception to warn the user that the state input is incorrect.
+        if key_name not in query_state:
+            raise Exception(f'Invalid state input for parameter: {key_name}, '
+                            f'query_state: {query_state}, '
+                            f'key definition: {key}')
+
+        if not alias:
+            alias = key.name
+
+        # add a new key state value pair,
+        # constructing a key defined by values from the query_state
+        # given that the key exists and is defined in the config_name mapping
+        results[alias] = query_state[key_name]
+
+    return results
+
+
+def calculate_hash(input_string: str):
+    # Create a SHA-256 hash object
+    hash_object = hashlib.sha256()
+
+    # Update the hash object with the bytes of the string
+    hash_object.update(input_string.encode())
+
+    # Get the hexadecimal representation of the hash
+    return hash_object.hexdigest()
+
+
+def calculate_string_list_hash(names: [str]):
+    plain = ",".join([f'({idx}:{key})' for idx, key in enumerate(sorted(names))])
+    return calculate_hash(plain)
+
+
+def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataKeyDefinition]):
+    # this will be used as the primary key
+    state_key_values = extract_values_from_query_state_by_key_definition(
+        key_definitions=key_definitions,
+        query_state=query_state)
+
+    # iterate each primary key value pair and create a tuple for hashing
+    keys = [(name, value) for name, value in state_key_values.items()]
+
+    # hash the keys as a string in sha256
+    return calculate_hash(str(keys)), keys
+
+def load_state(state_file: str) -> Any:
     state = {}
     if not os.path.exists(state_file):
         raise FileNotFoundError(
@@ -75,7 +184,7 @@ def load_state(state_file: str):
     with open(state_file, 'r') as fio:
         state = json.load(fio)
 
-        if 'header' not in state:
+        if 'config' not in state:
             raise Exception(f'Invalid state input, please make sure you define '
                             f'a basic header for the input state')
 
@@ -90,3 +199,150 @@ def load_state(state_file: str):
                             'List[dict] where each dictionary is FLAT record of key/value pairs')
 
     return state
+
+
+def build_template_text(template: dict, query_state: dict):
+    if not template:
+        warning = f'template is not set with query state {query_state}'
+        logging.warning(warning)
+        return False, None
+
+    error = None
+    if 'name' not in template:
+        error = f'template name not set, please specify a template name for template {template}'
+
+    if 'template_content' not in template:
+        error = (f'template_content not specified, please specify the template_content for template {template} '
+                 f'by either specifying the template_content or template_content_file as text or filename '
+                 f'of the text representing the template {template}')
+
+    if error:
+        logging.error(error)
+        raise Exception(error)
+
+    # process the template now
+    template_name = template['name']
+    template_content = template['template_content']
+
+    if 'parameters' not in template:
+        logging.info(f'no parameters founds for {template_name}')
+        return template_content
+
+    def replace_variable(match):
+        variable_name = match.group(1)  # Extract variable name within {{...}}
+        return query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
+
+    completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
+    return True, completed_template
+
+
+def _parse_response_json(response: str):
+    json_detect = response.find('```json')
+    if json_detect < 0:
+        return False, type(response), response
+
+    # find the first occurence of the json start {
+    json_start = response.find('{', json_detect)
+    if json_start < 0:
+        raise Exception(f'Invalid: json starting position not found, please ensure your response '
+                        f'at position {json_detect}, for response {response}')
+
+    # we found the starting point, now we need to find the ending point
+    json_end = response.find('```', json_start)
+
+    if json_end <= 0:
+        raise Exception('Invalid: json ending position not found, please ensure your response is wrapped '
+                        'with ```json\n{}\n``` where {} is the json response')
+
+    json_response = response[json_start:json_end].strip()
+    try:
+        json_response = json.loads(json_response)
+        json_response = {build_column_name(key): value for key, value in json_response.items()}
+    except:
+        raise Exception(f'Invalid: json object even though we were able to extract it from the response text, '
+                        f'the json response is still invalid, please ensure that json_response is correct, '
+                        f'here is what we tried to parse into a json dictionary:\n{json_response}')
+
+    return True, 'json', json_response
+
+
+def parse_response_auto_detect_type(response: str):
+    data_parse_status, data_type, data_parsed = _parse_response_json(response)
+    return data_parse_status, data_type, data_parsed
+
+
+def parse_response(response: str):
+    # try and identify and parse the response
+    data_parse_status, data_type, data_parsed = parse_response_auto_detect_type(response)
+
+    # if the parsed data is
+    if data_parse_status:
+        if 'json' == data_type:
+            flattened = map_flattener.flatten(data_parsed)
+            return flattened, data_type  # TODO extract the list of column names
+        elif 'csv' == data_type:
+            raise Exception(f'unsupported csv format, need to fix the _parse_response_csv(.) function')
+
+    return response.strip(), data_type
+
+
+def parse_response_strip_assistant_message(response: str):
+    response, data_type = parse_response(response)
+
+    if data_type is not str:
+        return response, data_type
+
+    has = response.find(':\n\n')
+    if has >= 0:
+        return response[has:], data_type
+
+    return response, data_type
+
+
+def obsolete_parse_response_csv(response: str):
+    ### TODO clean up this code
+    ### TODO clean up this code
+    ### TODO clean up this code
+
+    # else do try deprecated method
+
+    # Validate input format
+    if '|' not in response or '\n' not in response:
+        return response.strip()
+
+    # Sanitize input
+    response = response.strip()
+
+    # split the data to rows by new line, and only fetch rows with '|' delimiter
+    rows = [x for x in response.split('\n') if '|' in x]
+
+    data = []
+    columns = []
+
+    # iterate each row found
+    for index, row in enumerate(rows):
+        row_data = [x.strip() for x in row.split('|') if len(x.strip()) > 0]
+        has_row_data = [x for x in row_data if x != '' and not re.match(r'-+', x)]
+
+        if not has_row_data:
+            continue
+
+        # must be header, hopefully
+        # TODO should probably check against a schema requirement to ensure that the data that is produced meets the output requirements
+        if index == 0:
+            columns = row_data
+            continue
+
+        # make sure that the number of columns matches the number of data values, check on each row
+        if len(row_data) != len(columns):
+            error = (f'failed to process {row_data}, incorrect number of columns, '
+                     f'expected {len(columns)} received: {len(row_data)} using response: {response}, '
+                     f'with response: {response}')
+
+            logging.error(error)
+            raise Exception(error)
+
+        record = {columns[i]: p for i, p in enumerate(row_data)}
+        data.append(record)
+
+    return data, columns

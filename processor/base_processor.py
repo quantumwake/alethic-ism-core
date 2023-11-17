@@ -8,73 +8,82 @@ import pandas as pd
 from tenacity import wait_exponential, retry, wait_random
 
 import utils
+from processor.processor_state import State, StateDataKeyDefinition, StateDataRowColumnData
+
+DEFAULT_OUTPUT_PATH = '/tmp/states'
 
 
 class BaseProcessor:
 
-    def __init__(self, name: str, config: dict,
-                 processors: List[Any] = None):
+    def __init__(self, state: State,
+                 processors: List['BaseProcessor'] = None):
 
-        #
+        self.state = state
         self.processors = processors
-
-        self.state = {
-            'header': {
-                'name': name
-            },
-            'config': config,
-            'data': list(),
-            'mapping': dict(),
-        }
-
-
-    @property
-    def header(self):
-        return self.state['header']
-
-    @header.setter
-    def header(self, value):
-        self.state['header'] = value
 
     @property
     def config(self):
-        return self.state['config']
+        return self.state.config
 
     @config.setter
-    def config(self, value):
-        self.state['config'] = value
+    def config(self, config):
+        self.state.config = config
 
     @property
     def name(self):
-        return self.header['name']
+        return self.config.name
 
     @name.setter
     def name(self, name: str):
-        self.header['name'] = name
+        self.config.name = name
 
     @property
-    def input_state_filename(self):
-        return self.config['input_file'] \
-            if 'input_file' in self.config \
-            else self.config['input_state_filename']
-
-    @input_state_filename.setter
-    def input_state_filename(self, value):
-        self.config['input_file'] = value
+    def data(self):
+        return self.state.data
 
     @property
-    def state_cache_path(self):
-        return self.config['state_cache_path'] \
-            if 'state_cache_path' in self.config \
-            else '/tmp/states'
+    def columns(self):
+        return self.state.columns
 
-    @state_cache_path.setter
-    def state_cache_path(self, path: str):
-        self.config['state_cache_path'] = path
+    @columns.setter
+    def columns(self, columns):
+        self.state.columns = columns
 
     @property
-    def state_query_key_definition(self):
-        return self.config['state_query_key_definition']
+    def mapping(self):
+        return self.state.mapping
+
+    @property
+    def input_path(self):
+        return self.config.input_path
+
+    @input_path.setter
+    def input_path(self, value):
+        self.config.input_path = value
+
+    @property
+    def output_path(self):
+        return self.config.output_path
+
+    @output_path.setter
+    def output_path(self, path: str):
+        self.config.output_path = path
+
+    @property
+    def output_primary_key_definition(self):
+        return self.config.output_primary_key_definition
+
+    def output_primary_key_definition(self, value):
+        self.config.output_primary_key_definition = value
+
+    @property
+    def include_extra_from_input_definition(self):
+        return self.config.include_extra_from_input_definition
+
+    @include_extra_from_input_definition.setter
+    def include_extra_from_input_definition(self, value):
+        self.config.include_extra_from_input_definition = value
+
 
     def add_output_from_dict(self, query_state: dict):
         if len(self.output_dataframe) > 0:
@@ -83,112 +92,16 @@ class BaseProcessor:
         else:
             self.output_dataframe = pd.DataFrame([query_state])
 
-    def load_template(self, template_file: str):
-        if not template_file or not os.path.exists(template_file):
-            return None
-
-        with open(template_file, 'r') as fio:
-            template_dict = json.load(fio)
-
-        # if template content exists then set it, it can be overwritten by a file
-        if 'template_content' in template_dict:
-            template_content = template_dict['template_content']
-        else:
-            template_content = None
-
-        # if a template file exists then try and load it
-        if 'template_content_file' in template_dict:
-
-            # throw an exception if both the template_file and template keys are set
-            if template_content:
-                raise Exception(f'Cannot define a template_content and a template_content_file in the same '
-                                f'template configuration {template_file}. For example, if you define the key '
-                                f'"template_content" with some text content, you cannot also define a '
-                                f'"template_content_file" which points to a different content from a file"')
-
-            # otherwise load the template
-            template_file = template_dict['template_content_file']
-            with open(template_file, 'r') as fio_tc:
-                template_content = fio_tc.read().strip()
-                template_dict['template_content'] = template_content
-
-        if not template_content:
-            raise Exception(f'no template defined in template file {template_file} with configuration {template_dict}')
-
-        return template_dict
-
-    def get_hash_from_string(self, input_string: str):
-        # Create a SHA-256 hash object
-        hash_object = hashlib.sha256()
-
-        # Update the hash object with the bytes of the string
-        hash_object.update(input_string.encode())
-
-        # Get the hexadecimal representation of the hash
-        return hash_object.hexdigest()
-
-    def extract_values_from_query_state_by_key_config_name(self, config_name: str, query_state: dict):
-        # if the key config map does not exist then attempt
-        # to use the 'query' key as the key value mapping
-        if config_name not in self.config:
-            if "query" not in query_state:
-                raise Exception(f'query does not exist in query state {query_state}')
-
-            return query_state['query']
-
-        # basically a list of parameter names (or parameters by ( name = alias )
-        # pairing to pick off data from the query state object
-        key_definition = self.config[config_name]
-
-        # iterate each parameter name and look it up in the state object
-        results = {}
-        for name in key_definition:
-
-            alias = name
-            # check to make sure that this is not a dict
-            if isinstance(name, dict):
-                # if dictionary then we must strip out the name and alias name
-                # this is used to create a target dictionary from the source dictionary
-                # but using a new alias, as defined by the config values
-                #    'config_name':[{ 'query': 'value'}, ...]
-                keyval = dict(name)
-                if len(keyval) != 1:
-                    raise Exception(
-                        f'Invalid key value pair set for config_name {config_name}, values {keyval} is invalid, only a single key value pair is allowed when defining alias')
-
-                # since there should only be 1 value, pop it and read it in
-                keyval = keyval.popitem()
-                name = keyval[0]  # the new name is no longer the dict but the key name in the dict
-                alias = keyval[1]  # the alias is not the name but pulled from the dict key value
-
-            # if it does not exist, throw an exception to warn the user that the state input is incorrect.
-            if name not in query_state:
-                raise Exception(f'Invalid state input for parameter: {name}, '
-                                f'query_state: {query_state}, '
-                                f'key definition: {key_definition}')
-
-            # add a new key state value pair,
-            # constructing a key defined by values from the query_state
-            # given that the key exists and is defined in the config_name mapping
-            results[alias] = query_state[name]
-
-        return results
-
-    def get_output_filename(self):
-        return self.config['output_file'] \
-            if 'output_file' in self.config \
-            else None
-
     def batching(self, questions: List[str]):
         pass
 
     def has_query_state(self, query_state_key: str, force: bool = False):
         # make sure that the state is initialized and that there is a data key
-        if not self.state or not self.state['mapping']:
+        if not self.mapping:
             return None
 
-        mapping = self.state['mapping']
-        if not force and query_state_key in mapping:  # skip if not forced and state exists
+        # skip if not forced and state exists
+        if not force and query_state_key in self.mapping:
             logging.info(f'query {query_state_key}, cached, on config: {self.config}')
             return True
 
@@ -196,70 +109,104 @@ class BaseProcessor:
         logging.info(f'query {query_state_key}, not cached, on config: {self.config}')
         return False
 
-    def __call__(self, *args, **kwargs):
-        input_file = self.input_state_filename
+    def _be_a_dumb_coder(self):
+        pass
+        # # identify whether we should dump each call result to an output csv file
+        # dump_on_every_call = False
+        # dump_on_every_call_output_filename = None
+        # if 'dump_on_every_call' in self.config:
+        #     dump_on_every_call = bool(self.config['dump_on_every_call'])
+        #     dump_on_every_call_output_filename = self.config['dump_on_every_call_output_filename'] \
+        #         if 'dump_on_every_call_output_filename' in self.config \
+        #         else None
+        #
+        #     if not dump_on_every_call_output_filename:
+        #         raise Exception(
+        #             'Cannot specify dump_on_every_call without a dump_on_every_call_output_filename output filename')
+        #####
+        #####
+        #
+        # if dump_on_every_call:
+        #     self.dump_dataframe_csv(dump_on_every_call_output_filename)
 
-        # identify whether we should dump each call result to an output csv file
-        dump_on_every_call = False
-        dump_on_every_call_output_filename = None
-        if 'dump_on_every_call' in self.config:
-            dump_on_every_call = bool(self.config['dump_on_every_call'])
-            dump_on_every_call_output_filename = self.config['dump_on_every_call_output_filename'] \
-                if 'dump_on_every_call_output_filename' in self.config \
-                else None
+    def __call__(self,
+                 input_file: str = None,
+                 input_state: State = None,
+                 force_state_overwrite: bool = False,
+                 *args, **kwargs):
 
-            if not dump_on_every_call_output_filename:
-                raise Exception(
-                    'Cannot specify dump_on_every_call without a dump_on_every_call_output_filename output filename')
+        # first lets try and load the stored state from the storage
+        current_stored_state_filename = self.built_final_output_path()
+        if os.path.exists(current_stored_state_filename):
+            # important to distinguish input_state with self.state (output_state)
+            self.state = State.load_state(current_stored_state_filename)
+
+        # might have been set in the forward function
+        input_file = input_file if input_file else self.input_path
 
         # if the input is .json then make sure it is a state input
-        if input_file.lower().endswith('.json'):
-            input_state = utils.load_state(input_file)
-            input_dataset = input_state['data']
+        # TODO we can stream the inputs and outputs, would be more significantly more efficient
+        #  especially if we actually stream it, meaning no data will reside past the record point
+        #  in each machine, until the target output destination(s), which is likely a database
+        if input_file:
+            logging.info(f'attempting to load input state from {input_file} for config {self.config}')
+            input_state = State.load_state(input_file)
 
-            count = len(input_dataset)
+        # raise exception if nil
+        if input_state and input_state.data:
+            count = input_state.count
             logging.info(f'starting processing loop with size {count}')
-            for data_idx, data in enumerate(input_dataset):
-                logging.info(f'processing dataset entry {data_idx} / {count}')
-                self.call(values=data)
 
-                if dump_on_every_call:
-                    self.dump_dataframe_csv(dump_on_every_call_output_filename)
+            if count == 0:
+                # force derive the count to see if there are rows
+                first_column = list(input_state.columns.keys())[0]
+                count = len(input_state.data[first_column].values)
+                input_state.count = count
 
+            for index in range(count):
+                logging.info(f'processing query state index {index} from {count}')
+                query_state = {
+                    # column_name: derived from the list of columns
+                    # column_value: derived from all columns but for a specific column->index
+                    column_name: input_state.data[column_name][index]
+                    for column_name, column_header
+                    in input_state.columns.items()
+                }
+
+                self._process_input_data_entry(input_query_state=query_state)
         else:
-            raise NotImplementedError('Format type not implemented, states must be in json format with header and '
-                                      'data keys, **please use a state template** to construct your input state or '
-                                      'use a previous output state as an input state to your processor')
+            error = f'*******INVALID INPUT STATE or INPUT STATE FILE or STREAM*********\n'\
+                    f'input_state: {input_state if input_state else "<not loaded>"}, \n'\
+                    f'and or data: {input_state.data if input_state.data else "<not loaded>"}. \n'\
+                    f'use one of the processor execution parameters, such as input_state=..'
+
+            logging.error(error)
+            raise Exception(error)
 
     def load_state(self):
-        state_file = self.build_state_cache_filename()
+        state_file = self.built_final_output_path()
         if not os.path.exists(state_file):
             return self.state
 
-        with open(state_file, 'r') as fio:
-            return json.load(fio)
+        return State.load_state(state_file)
 
-    def save_state(self, key: str, query_state: dict, state_file: str = None):
-        # fetch the state file name previously configured, or autogenerated
-        state_file = state_file if state_file else self.build_state_cache_filename()
-
-        # update the data states for the specific query / question / input
-        data = self.state['data']
-        data.append(query_state)
-
-        # store a hashed value, not the best method I admit,
-        # but it will do for now we are not dealing with massive data, yet
+    def save_state(self, key: str, query_state: dict, output_state_path: str = None):
+        # 1. query: add the query_state entry on the output state
+        # 2. mapping: store a key indexes such that we can fetch the list of values if needed
+        #
         # TODO IMPORTANT - PERFORMANCE AND STORAGE
-        # TODO look into this potential performance and storage bottleneck,
-        # TODO probably would benefit from a database backend instead
-        # key = self.get_query_state_key(query_state)
-        mapping = self.state['mapping']
-        mapping[key] = query_state
+        #  look into this potential performance and storage bottleneck,
+        #  probably would benefit from a database backend instead or stream it
+        #  REPLACE WITH CENTRAL CACHE
 
-        # write the state as json
-        with open(state_file, 'w') as fio:
-            json.dump(self.state, fio)
+        # apply the response query state to the output state
+        self.state.apply_columns(query_state=query_state)
+        self.state.apply_row_data(query_state=query_state)
 
+        # persist the entire output state to the storage class
+        # fetch the state file name previously configured, or autogenerated
+        output_state_path = output_state_path if output_state_path else self.built_final_output_path()
+        self.state.save_state(output_state_path)
         return self.state
 
     # def save_state_failure(self, key: str, query_state: dict):
@@ -276,9 +223,7 @@ class BaseProcessor:
         return None
 
     def write_record(self, query_state: str):
-        data = self.state['mapping'] if 'mapping' in self.state else None
-
-        if not data:
+        if not self.mapping:
             error = f'no data mapping found in query state {query_state} of {self.config} for {self}'
             logging.error(error)
             raise Exception(error)
@@ -292,7 +237,7 @@ class BaseProcessor:
     def dump_cache(self, output_filename: str):
 
         # safe for consistency
-        output_filename = self.get_output_filename() if not output_filename else output_filename
+        output_filename = self.output_path if not output_filename else output_filename
 
         if not output_filename:
             error = f'unable to persist to csv output file, output_filename is not set'
@@ -308,7 +253,7 @@ class BaseProcessor:
 
     def dump_cache_csv(self, output_filename: str = None):
 
-        output_filename = self.get_output_filename() if not output_filename else output_filename
+        output_filename = self.output_path if not output_filename else output_filename
 
         # safe for consistency
         if not output_filename:
@@ -318,14 +263,14 @@ class BaseProcessor:
             raise Exception('Invalid filename specified for CSV export, please make sure it ends with .csv')
 
         if output_filename:
-            data = self.state['data']
+            data = self.state.data
             df = pd.DataFrame(data)
             df.to_csv(output_filename)
         else:
             logging.error(f'unable to persist to csv output file, output_filename is not set')
 
     def dump_cache_json(self, output_filename: str = None):
-        output_filename = self.get_output_filename() if not output_filename else output_filename
+        output_filename = self.output_path if not output_filename else output_filename
 
         if not output_filename:
             logging.error(f'unable to persist to JSON output file, output_filename is not set')
@@ -336,23 +281,37 @@ class BaseProcessor:
         with open(output_filename, 'w') as fio:
             json.dump(self.state, fio)
 
-    def build_state_cache_filename(self):
+    def built_final_output_path(self, output_extension: str = 'pickle', prefix:str =None):
         if not self.name:
-            raise Exception(f'Processor name not defined, please ensure to define a unique processor name as part, otherwise your states might get overwritten or worse, merged.')
+            raise Exception(
+                f'Processor name not defined, please ensure to define a unique processor name as part, otherwise your states might get overwritten or worse, merged.')
 
-        state_file_hashed = self.get_hash_from_string(self.name)
-        state_file = f'{self.state_cache_path}/{state_file_hashed}.json'
-        return state_file
+        if utils.has_extension(self.output_path, ['pkl', 'pickle', 'json', 'csv', 'xlsx']):
+            return self.output_path
 
-    def get_query_state_key(self, query_state: dict):
-        state_values = self.extract_values_from_query_state_by_key_config_name(config_name='state_query_key_definition',
-                                                                               query_state=query_state)
+        # create temporary state storage area : if the output path is not set and does not exists already
+        if not self.output_path:
+            self.output_path = DEFAULT_OUTPUT_PATH
+            if not os.path.exists(self.output_path):
+                os.mkdir(self.output_path)
 
-        keys = [(name, value) for name, value in state_values.items()]
+        # when directory, then simply prefix output path to config.name
+        if os.path.isdir(self.output_path):
+            to_be_hashed = self.name
+            if prefix:
+                to_be_hashed = f'[{prefix}]/[{to_be_hashed}]'
 
-        return self.get_hash_from_string(str(keys)), keys
+            state_file_hashed = utils.calculate_hash(to_be_hashed)
+            state_file = f'{self.output_path}/{state_file_hashed}.{output_extension}'
+            self.output_path = state_file
+            return state_file
 
-    def call(self, values: dict, force: bool = False):
+        # otherwise return the full path
+        return self.output_path
+
+
+
+    def _process_input_data_entry(self, input_query_state: dict, force: bool = False):
         raise NotImplementedError("""
         "The 'call' method is a bit like a digital maestro, orchestrating data in a symphony of updates, tailored for a 
         variety of processor types. The star of the show? The question and answer handling processor, which is basically 
@@ -392,4 +351,3 @@ So, in this alternate reality, is your digital life a soap opera, a comedy, or a
 it's a bit of everything, with a dash of mystery and a sprinkle of the unknown, just to keep things 
 interesting!
                                   """)
-

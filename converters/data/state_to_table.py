@@ -176,7 +176,7 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
             value = data_entry[state_data_entry_key] if state_data_entry_key in data_entry else value
 
             # append the value
-            value = convert_string_to_instanceof(value)
+            value = identify_and_return_value_by_type(value)
 
             def calc_min():
                 cur = column_header['min_length'] if 'min_length' in column_header else 0

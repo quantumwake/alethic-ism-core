@@ -15,24 +15,20 @@ from tenacity import retry, wait_exponential, wait_random
 import utils
 from processor import map_flattener
 from processor.base_processor import BaseProcessor
-from processor.base_question_answer_processor import BaseQuestionAnswerProcessor
+from processor.base_question_answer_processor import BaseQuestionAnswerProcessor, StateConfigLM
+from processor.processor_state import State
 
 dotenv.load_dotenv()
 openai_api_key = os.environ.get('OPENAI_API_KEY', None)
 openai.api_key = openai_api_key
 
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()
-LOG_PATH = os.environ.get("LOG_PATH", "../logs/")
-LOG_FILE = f'{LOG_PATH}/examples.log'
-
-logging.basicConfig(filename=LOG_FILE, encoding='utf-8', level=LOG_LEVEL)
-
 
 class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
 
-    def __init__(self, name: str, config: dict, processors: List[BaseProcessor] = None, *args, **kwargs):
-        new_config = {**{'provider_name': "Anthropic", 'model_name': "claude-2"}, **config}
-        super().__init__(name=name, config=new_config, processors=processors, **kwargs)
+    def __init__(self, state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
+        super().__init__(state=state, processors=processors, **kwargs)
+        self.provider_name = self.config.provider_name if self.config.provider_name else "Anthropic"
+        self.model_name = self.config.model_name if self.config.model_name else "claude-2w"
 
         self.anthropic = Anthropic(max_retries=5)
 
@@ -63,15 +59,16 @@ class AnthropicQuestionAnswerProcessor(AnthropicBaseProcessor):
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-        data, columns = self._parse_response(response=response)
-        return data
+        return utils.parse_response_strip_assistant_message(response=response)
 
 
 class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
 
-    def __init__(self, name: str, config: dict, processors: List[BaseProcessor] = None, *args, **kwargs):
-        new_config = {**{'provider_name': "OpenAI", 'model_name': "gpt-4-1106-preview"}, **config}
-        super().__init__(name=name, config=new_config, processors=processors, **kwargs)
+    def __init__(self, state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
+        super().__init__(state=state, processors=processors, **kwargs)
+        self.provider_name = self.config.provider_name if self.config.provider_name else "OpenAI"
+        self.model_name = self.config.model_name if self.config.model_name else "gpt-4-1106-preview"
+
 
     def batching(self, questions: List[str]):
         raise NotImplementedError()
@@ -116,5 +113,5 @@ class OpenAIQuestionAnswerProcessor(OpenAIBaseProcessor):
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-        return self._parse_response(response=response)
+        return utils.parse_response(response=response)
 
