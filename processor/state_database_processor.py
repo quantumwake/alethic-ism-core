@@ -369,10 +369,44 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
     pass
 
 
+def test_me(input_state_filename: str,
+        designated_embedding_columns: List[str] = ['input_query', 'input_context', 'question', 'responses_response', 'response']):
+
+    # state = State.load_state('../dataset/examples/states/5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle')
+    state = State.load_state(input_path=input_state_filename)
+
+    #
+    state.columns = {column.name: StateDataColumnDefinition(name=column.name) for _, column in state.columns.items()}
+
+    additional_columns_function_constants = utils.higher_order_routine(
+        build_query_state_from_config,
+        input_state=state)
+
+    additional_columns_function_embeddings = utils.higher_order_routine(
+        build_query_state_embedding_from_columns,
+        input_state=state,
+        designated_embedding_columns=designated_embedding_columns)
+
+    def combined(*args, **kwargs):
+        results_1 = additional_columns_function_constants(**kwargs)
+        results_2 = additional_columns_function_embeddings(**kwargs)
+        return {**results_1, **results_2}
+
+    # go
+    # additional_columns_function = utils.higher_order_routine(func=combined)
+    # processor = StateDatabaseProcessor(state, additional_values_func = additional_columns_function)
+    # processor(input_state=state)
+
 if __name__ == '__main__':
+    # test_me('../dataset/examples/states/13051c84c9eaed649eb85fdf6d1fd5acfa25ef31eb75df24a2eebbf6b4820c6e.pickle')
+    test_me('../dataset/examples/states/5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle')
+    test_me('../dataset/examples/states/574345d04a9522b0677b8e449f432a829fd3b382e9a555061cc29910763b6a4d.pickle')
+
+
+def old_stuff():
     # state = State.load_state('../dataset/examples/states/5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle')
     state = State.load_state('../testme.pickle')
-    # state.columns = {column.name: StateDataColumnDefinition(name=column.name) for _, column in state.columns.items()}
+    state.columns = {column.name: StateDataColumnDefinition(name=column.name) for _, column in state.columns.items()}
 
     # def maxx(values: List[Any]):
     #     max = None

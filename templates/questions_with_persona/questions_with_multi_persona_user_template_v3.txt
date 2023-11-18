@@ -2,8 +2,8 @@ Template for Contextual Multi-Perspective Responses
 
 Input Fields:
 
-Question: {input_query}
-Use-Case Category: {input_context}
+Question: {query}
+Use-Case Category: {context}
 
 Guidelines and Definitions:
 
@@ -19,8 +19,8 @@ Output (in JSON format):
 
 ``json
 {
-    "Question": "{input_query}",
-    "Use-Case Category": "{input_context}",
+    "Question": "{query}",
+    "Use-Case Category": "{context}",
     "Responses": [
         {
             "Perspective": "Utilitarian",

@@ -147,8 +147,8 @@ class State(BaseModel):
         def new_columns():
             return [
                 StateDataColumnDefinition(
-                    name=utils.build_column_name(name),
-                    data_type=type(utils.identify_and_return_value_by_type(value))   # just guess
+                    name=utils.build_column_name(name)
+                    # data_type=str(type(utils.identify_and_return_value_by_type(value)))   # just guess
                 ) for name, value in query_state.items()
                 if self.columns is None or name not in self.columns
             ]

@@ -2,6 +2,8 @@ import hashlib
 import json
 import logging
 import os
+import queue
+import threading
 from typing import List, Any
 
 import pandas as pd
@@ -12,6 +14,25 @@ from processor.processor_state import State, StateDataKeyDefinition, StateDataRo
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
 
+class ThreadQueueManager:
+    def __init__(self, num_workers):
+        self.queue = queue.Queue()
+        self.workers = [threading.Thread(target=self.worker) for _ in range(num_workers)]
+        for worker in self.workers:
+            worker.daemon = True
+            worker.start()
+
+    def worker(self):
+        while True:
+            function = self.queue.get()
+            function()
+            self.queue.task_done()
+
+    def add_to_queue(self, item):
+        self.queue.put(item)
+
+    def wait_for_completion(self):
+        self.queue.join()
 
 class BaseProcessor:
 
@@ -20,6 +41,7 @@ class BaseProcessor:
 
         self.state = state
         self.processors = processors
+        self.lock = threading.Lock()
 
     @property
     def config(self):
@@ -84,7 +106,6 @@ class BaseProcessor:
     def include_extra_from_input_definition(self, value):
         self.config.include_extra_from_input_definition = value
 
-
     def add_output_from_dict(self, query_state: dict):
         if len(self.output_dataframe) > 0:
             _append_query_state = pd.DataFrame([query_state])
@@ -140,7 +161,7 @@ class BaseProcessor:
 
         # if the input_state was not passed in, but there is a current state in place,
         # then do *not* reload the state as the current input_state will be overwritten
-        if not input_state and os.path.exists(current_stored_state_filename):
+        if os.path.exists(current_stored_state_filename):
             # important to distinguish input_state with self.state (output_state)
             self.state = State.load_state(current_stored_state_filename)
 
@@ -166,6 +187,8 @@ class BaseProcessor:
                 count = len(input_state.data[first_column].values)
                 input_state.count = count
 
+            # initialize a thread pool
+            manager = ThreadQueueManager(num_workers=5)
             for index in range(count):
                 logging.info(f'processing query state index {index} from {count}')
                 query_state = {
@@ -176,7 +199,13 @@ class BaseProcessor:
                     in input_state.columns.items()
                 }
 
-                self.process_input_data_entry(input_query_state=query_state)
+                process_func = utils.higher_order_routine(self.process_input_data_entry,
+                                                          input_query_state=query_state)
+                # output_query_states = self.process_input_data_entry(input_query_state=query_state)
+                manager.add_to_queue(process_func)
+
+            # wait on workers until the task is completed
+            manager.wait_for_completion()
         else:
             error = f'*******INVALID INPUT STATE or INPUT STATE FILE or STREAM*********\n'\
                     f'input_state: {input_state if input_state else "<not loaded>"}, \n'\
@@ -193,7 +222,7 @@ class BaseProcessor:
 
         return State.load_state(state_file)
 
-    def save_state(self, key: str, query_state: dict, output_state_path: str = None):
+    def save_state(self, query_state: dict, output_state_path: str = None):
         # 1. query: add the query_state entry on the output state
         # 2. mapping: store a key indexes such that we can fetch the list of values if needed
         #

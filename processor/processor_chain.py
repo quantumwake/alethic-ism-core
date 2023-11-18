@@ -106,8 +106,8 @@ chain = ProcessorChain(
 
     # First Processor - Q/A "Vetted" Questions
     processors=[
-        anthropic_question_answer,
-        openai_question_answer,
+        # anthropic_question_answer,
+        # openai_question_answer,
         openai_question_answer_multi_persona
     ]
 )

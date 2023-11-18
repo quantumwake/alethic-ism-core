@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import threading
 
 import pandas as pd
 
@@ -10,7 +11,7 @@ from typing import List
 import utils
 from processor.processor_state import StateConfig, State, StateConfigLM
 from utils import build_column_name, load_template
-from processor.base_processor import BaseProcessor
+from processor.base_processor import BaseProcessor, ThreadQueueManager
 
 
 class BaseQuestionAnswerProcessor(BaseProcessor):
@@ -62,6 +63,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
     def __init__(self, state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
         super().__init__(state=state, processors=processors, **kwargs)
 
+
         # ensure that the configuration passed is of StateConfigQuestionAnswer
         if not isinstance(self.state.config, StateConfigLM):
             raise ValueError(f'invalid state config, '
@@ -97,6 +99,21 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
         # state_file = f'{self.output_path}/{state_file_hashed}.json'
         # return state_file
 
+
+    def process_write_output_state(self, query_states: [dict]):
+        with self.lock:
+            logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
+            def save_query_state(query_state: dict):
+                # persist new state such that we do not repeat the call when interrupted
+                self.save_state(query_state=query_state)
+
+                # persist the new record to the output file, if any
+                # TODO STREAM IT self.write_record(query_state=query_state)
+
+                return query_state
+
+            return [save_query_state(x) for x in query_states]
+
     def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:
             return
@@ -113,15 +130,6 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
         # if it already exists, then skip it, unless forced
         if self.has_query_state(query_state_key=input_state_key, force=force):
-
-            # if self.model_name == 'claude-2w':
-            #     # TOOD quick hack to fix previous datasets
-            #     indexes = self.mapping[input_state_key]
-            #     for index in indexes.values:
-            #         fix_response = self.data['response'][index]
-            #         fix_response, data_type = utils.parse_response_strip_assistant_message(fix_response)
-            #         self.data['response'][index] = fix_response
-
             return
 
         # build out the final prompts with appropriate data injected
@@ -129,6 +137,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
         status, system_prompt = utils.build_template_text(self.system_template, input_query_state)
 
         try:
+
             # execute the underlying model function
             response_data, response_columns = self._execute(user_prompt=user_prompt,
                                                             system_prompt=system_prompt,
@@ -184,28 +193,22 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             else:
                 query_states.append(output_query_state)
 
-            def save_query_state(query_state: dict):
-                # persist new state such that we do not repeat the call when interrupted
-                self.save_state(key=input_state_key,
-                                query_state=query_state)
+            # write the query states (synchronized)
+            self.process_write_output_state(query_states=query_states)
 
-                # persist the new record to the output file, if any
-                # TODO STREAM IT self.write_record(query_state=query_state)
-
-                return query_state
-
-            query_states = [save_query_state(x) for x in query_states]
+            return query_states
 
         except Exception as e:
-            # save it as an error such that we can track it
-            self.save_state(key=input_state_key,
-                            query_state={
-                                'inputs': str(input_query_state),
-                                'user_prompt': user_prompt,
-                                'system_prompt': system_prompt,
-                                'response': f'error {e}',  # write the error to the answer for review purposes
-                                'status': 'Failed'
-                            })
+            raise e
+            # # save it as an error such that we can track it
+            # self.save_state(key=input_state_key,
+            #                 query_state={
+            #                     'inputs': str(input_query_state),
+            #                     'user_prompt': user_prompt,
+            #                     'system_prompt': system_prompt,
+            #                     'response': f'error {e}',  # write the error to the answer for review purposes
+            #                     'status': 'Failed'
+            #                 })
 
             logging.error(f'critical error handling question {input_query_state} on {self.config}')
 
