@@ -137,7 +137,10 @@ class BaseProcessor:
 
         # first lets try and load the stored state from the storage
         current_stored_state_filename = self.built_final_output_path()
-        if os.path.exists(current_stored_state_filename):
+
+        # if the input_state was not passed in, but there is a current state in place,
+        # then do *not* reload the state as the current input_state will be overwritten
+        if not input_state and os.path.exists(current_stored_state_filename):
             # important to distinguish input_state with self.state (output_state)
             self.state = State.load_state(current_stored_state_filename)
 
@@ -173,7 +176,7 @@ class BaseProcessor:
                     in input_state.columns.items()
                 }
 
-                self._process_input_data_entry(input_query_state=query_state)
+                self.process_input_data_entry(input_query_state=query_state)
         else:
             error = f'*******INVALID INPUT STATE or INPUT STATE FILE or STREAM*********\n'\
                     f'input_state: {input_state if input_state else "<not loaded>"}, \n'\
@@ -310,8 +313,49 @@ class BaseProcessor:
         return self.output_path
 
 
+    def _process_input_data_entry_pre(self, input_query_state: dict, force: bool = False):
+        if not input_query_state:
+            return False
 
-    def _process_input_data_entry(self, input_query_state: dict, force: bool = False):
+        # create the query data row primary key hash
+        # the individual state values of the input file
+        input_state_key, query_state_key = utils.build_state_data_row_key(
+            # we need the input query to create the primary key
+            query_state=input_query_state,
+
+            # we use the primary key definition because we are creating a primary key
+            key_definitions=self.state.config.output_primary_key_definition
+        )
+
+        # if it already exists, then skip it, unless forced
+        if self.has_query_state(query_state_key=input_state_key, force=force):
+
+
+            # if self.model_name == 'claude-2w':
+            #     return False
+
+            # TOOD quick hack to fix previous datasets
+            # indexes = self.mapping[input_state_key]
+            # for index in indexes.values:
+            #
+            #     pass
+            #
+            # for index in indexes.values:
+            #     for column, _ in self.columns.items():
+            #         self.data[column][index]
+
+                # data fixes
+                # fix_response = self.data['response'][index]
+                # fix_response, data_type = utils.parse_response_strip_assistant_message(fix_response)
+                # self.data['response'][index] = fix_response
+
+            return False
+
+        return True
+    #
+    # def process_input_data_entry_post(self, input_state_key, input_query_state: dict, force: bool = False):
+    #
+    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         raise NotImplementedError("""
         "The 'call' method is a bit like a digital maestro, orchestrating data in a symphony of updates, tailored for a 
         variety of processor types. The star of the show? The question and answer handling processor, which is basically 

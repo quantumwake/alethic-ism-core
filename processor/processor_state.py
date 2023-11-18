@@ -4,31 +4,23 @@ import pickle
 import utils
 
 from enum import Enum as PyEnum
-from typing import Any, List, Dict, Optional, Type
-from pydantic import BaseModel, Field, field_validator, validator
-
+from typing import Any, List, Dict, Optional
+from pydantic import BaseModel, field_validator
 
 class StateDataKeyDefinition(BaseModel):
     name: str
     alias: Optional[str] = None
-    #
-    # def __init__(self, name: str, alias: str = None):
-    #     self.name = name
-    #     self.alias = alias
 
 
 class StateStorageClass(PyEnum):
     FILE = "FILE"
     DATABASE = "DATABASE"
 
+
 class StateStorage(BaseModel):
     name: str
     storage_class: StateStorageClass
 
-    # def __init__(self, name: str = None, storage_class: StateStorageClass = StateStorageClass.FILE):
-    #     self.name = name if name else str(storage_class)
-    #     self.storage_class = storage_class
-    #
 
 class StateConfig(BaseModel):
 
@@ -40,35 +32,22 @@ class StateConfig(BaseModel):
     output_primary_key_definition: Optional[List[StateDataKeyDefinition]] = None
     include_extra_from_input_definition: Optional[List[StateDataKeyDefinition]] = None
 
-    #
-    # def __init__(self, **data):
-    #     super().__init__(**data)
-    #
-    # @field_validator('output_primary_key_definition', 'include_extra_from_input_definition', pre=True, always=True)
-    # def set_empty_list_if_none(cls, v):
-    #     return v or []
 
-    #
-    # def __init__(self, name: str,
-    #              input_path: str,
-    #              input_storage: Optional[StateStorage] = StateStorage(name="input"),
-    #              output_path: Optional[str] = None,
-    #              output_storage: Optional[StateStorage] = StateStorage(name="output"),
-    #              output_primary_key_definition: Optional[List[StateDataKeyDefinition]] = None,
-    #              include_extra_from_input_definition: Optional[List[StateDataKeyDefinition]] = None):
-    #
-    #     self.name = name
-    #     self.input_path = input_path
-    #     self.input_storage = input_storage
-    #     self.output_storage = output_storage
-    #     self.output_path = output_path
-    #     self.output_primary_key_definition = output_primary_key_definition
-    #     self.include_extra_from_input_definition = include_extra_from_input_definition
+class StateConfigLM(StateConfig):
+    system_template_path: Optional[str] = None
+    user_template_path: str
+    provider_name: str = None
+    model_name: str = None
 
 
 class StateDataColumnDefinition(BaseModel):
-    name: str
-    data_type: str = 'str'
+    name: str                           # Column Name
+    data_type: str = 'str'              # Data type found in table
+    null: Optional[bool] = True         # Is nullable
+    min_length: Optional[int] = None    # Length of min string values
+    max_length: Optional[int] = None    # Length of max string values
+    dimensions: Optional[int] = None    # Dimensions for vector
+    value: Optional[Any] = None
 
     @field_validator('data_type')
     def convert_type_to_string(cls, v):
@@ -82,18 +61,10 @@ class StateDataColumnDefinition(BaseModel):
             type: lambda t: t.__name__  # For serialization to JSON
         }
 
-    # def __init__(self, name: str, data_type: type):
-    #     self.name = name
-    #     self.data_type = data_type
-
 
 class StateDataColumnIndex(BaseModel):
     key: str
     values: List[Any]
-
-    # def __init__(self, key: str, value: Any):
-    #     self.key = key
-    #     self.values = [value]
 
     def add_index_value(self, value):
         if not self.values:
@@ -107,11 +78,11 @@ class StateDataColumnIndex(BaseModel):
 class StateDataRowColumnData(BaseModel):
     values: List[Any]
 
-    # def __init__(self, values: List[Any] = None):
-    #     self.values = values if values else [Any]
-
     def __getitem__(self, item):
         return self.values[item]
+
+    def __setitem__(self, key, value):
+        self.values[key] = value
 
     def add_column_data(self, value: Any):
         if self.values:
@@ -121,10 +92,6 @@ class StateDataRowColumnData(BaseModel):
 
         # list of values for a given column
         return self.values
-
-    # @property
-    # def row_count(self):
-    #     return len(self.values)
 
 
 class State(BaseModel):
@@ -179,7 +146,7 @@ class State(BaseModel):
         # calculate the columns definition hash, we use this to compare to ensure there is some consistency
         def new_columns():
             return [
-                StateDataKeyDefinition(
+                StateDataColumnDefinition(
                     name=utils.build_column_name(name),
                     data_type=type(utils.identify_and_return_value_by_type(value))   # just guess
                 ) for name, value in query_state.items()
@@ -216,7 +183,6 @@ class State(BaseModel):
             logging.error(f'query state entry does not contain any column information,'
                           f'it must be a dictionary of key/value pairs, where each key is a '
                           f'column name and the value is the data for the record name:value')
-
 
     def apply_row_data(self, query_state: dict):
         values = [value for value in query_state.values()]
@@ -301,44 +267,44 @@ class State(BaseModel):
         else:
             raise Exception(f'Unsupported file type for {output_path}')
 
-# build a test state
-test_state = State(
-    config=StateConfig(
-        name='test state 1',
-        input_path='../dataset/examples/states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
-        output_path='../dataset/examples/states/',
-        # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
-        output_primary_key_definition=[
-            StateDataKeyDefinition(name='query'),
-            StateDataKeyDefinition(name='context'),
-        ],
-        include_extra_from_input_definition=[
-            StateDataKeyDefinition(name='query', alias='input_query'),
-            StateDataKeyDefinition(name='context', alias='input_context'),
-        ]
-    ),
-    columns={
-        'query':  StateDataColumnDefinition(name='query'),
-        'context': StateDataColumnDefinition(name='context'),
-        'response': StateDataColumnDefinition(name='response'),
-        'analysis_dimension': StateDataColumnDefinition(name='response'),
-        'analysis_dimension_score': StateDataColumnDefinition(name='response')
-    },
-    data={
-        'query': StateDataRowColumnData(values=['tell me about dogs.', 'where do cows live?', 'why do cows exist?']),
-        'context': StateDataRowColumnData(values=['Education', 'Education', 'Education']),
-        'response': StateDataRowColumnData(values=['dogs are pets', 'cows live on farms', 'as a food source']),
-        'analysis_dimension': StateDataRowColumnData(values=['Person-Centric', 'Person-Centric', 'Person-Centric']),
-        'analysis_dimension_score': StateDataRowColumnData(values=[63, 68, 20])
-    },
-    mapping={
-        'abc': StateDataColumnIndex(key='abc', values=[0]),
-        'def': StateDataColumnIndex(key='def', values=[1]),
-        'ghi': StateDataColumnIndex(key='jkl', values=[2])
-    }
-)
-
 if __name__ == '__main__':
+    # build a test state
+    test_state = State(
+        config=StateConfig(
+            name='test state 1',
+            input_path='../dataset/examples/states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
+            output_path='../dataset/examples/states/',
+            # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
+            output_primary_key_definition=[
+                StateDataKeyDefinition(name='query'),
+                StateDataKeyDefinition(name='context'),
+            ],
+            include_extra_from_input_definition=[
+                StateDataKeyDefinition(name='query', alias='input_query'),
+                StateDataKeyDefinition(name='context', alias='input_context'),
+            ]
+        ),
+        columns={
+            'query': StateDataColumnDefinition(name='query'),
+            'context': StateDataColumnDefinition(name='context'),
+            'response': StateDataColumnDefinition(name='response'),
+            'analysis_dimension': StateDataColumnDefinition(name='response'),
+            'analysis_dimension_score': StateDataColumnDefinition(name='response')
+        },
+        data={
+            'query': StateDataRowColumnData(
+                values=['tell me about dogs.', 'where do cows live?', 'why do cows exist?']),
+            'context': StateDataRowColumnData(values=['Education', 'Education', 'Education']),
+            'response': StateDataRowColumnData(values=['dogs are pets', 'cows live on farms', 'as a food source']),
+            'analysis_dimension': StateDataRowColumnData(values=['Person-Centric', 'Person-Centric', 'Person-Centric']),
+            'analysis_dimension_score': StateDataRowColumnData(values=[63, 68, 20])
+        },
+        mapping={
+            'abc': StateDataColumnIndex(key='abc', values=[0]),
+            'def': StateDataColumnIndex(key='def', values=[1]),
+            'ghi': StateDataColumnIndex(key='jkl', values=[2])
+        }
+    )
 
     test_state.save_state(output_path='../dataset/examples/states/test_state.pickle')
     test_state.save_state(output_path='../dataset/examples/states/test_state.json')

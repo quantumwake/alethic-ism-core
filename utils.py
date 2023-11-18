@@ -6,7 +6,7 @@ import re
 from typing import Any, List
 
 from processor import map_flattener
-from processor.processor_state import StateDataKeyDefinition
+from processor.processor_state import StateDataKeyDefinition, StateConfig, StateConfigLM
 
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
 clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
@@ -27,22 +27,22 @@ def build_column_name(name: str):
     return clean_string_for_ddl_naming(name).lower()
 
 
-def build_table_name(header: dict):
-    unique_name = header['name'] if 'name' in header else None
+def build_table_name(config: StateConfig):
+    unique_name = config.name if config.name else None
 
-    def prefix(name, from_header: dict = header):
-        _prefix = from_header[name].strip() if name in from_header else None
+    def prefix(name):
+        _prefix = config.name.strip() if name else None
 
         if _prefix:
             return clean_string_for_ddl_naming(_prefix).lower()
 
         return str()
 
-    if not unique_name:
-        provider = prefix('provider_name')
-        model_name = prefix('model_name')
-        user_template = prefix('name', from_header=header['user_template'])
-        system_template = prefix('name', from_header=header['system_template'])
+    if not unique_name and isinstance(config, StateConfigLM):
+        provider = prefix(config.provider_name)
+        model_name = prefix(config.model_name)
+        user_template = prefix(config.user_template_path)
+        system_template = prefix(config.system_template_path)
 
         table_name_appender_list = f"STATE_{provider} {model_name} {user_template} {system_template}".split()
         unique_name = "_".join([x for x in table_name_appender_list if x])
@@ -72,6 +72,28 @@ def identify_and_return_value_by_type(value):
             # Return as string if all else fails
             return value
 
+# This function is designed to augment the input dataset with additional data. It offers two methods:
+# First, you can add static column/value pairs to each row.
+# Second, you can use a function to generate column/value pairs dynamically.
+#
+# Example Applications:
+#   1. Create an embedding from a column in the input dataset for a specific row.
+#   2. Add a fixed value to every row, like a header for input state, such as:
+#       - provider_name
+#       - model_name
+#       - etc.
+def get_column_state_value(value: Any):
+    if not value:
+        return None
+
+    if isinstance(value, str):
+        return value
+
+    elif callable(value):
+        value = value()
+        return value
+
+    return value
 
 def has_extension(filename: str, extensions: [str]):
     filename = filename.lower()
@@ -163,17 +185,32 @@ def calculate_string_list_hash(names: [str]):
     return calculate_hash(plain)
 
 
+def calculate_string_dict_hash(item: dict):
+    plain = ",".join([f'({key}:{value})' for key, value in item.items()])
+    return calculate_hash(plain)
+
+
 def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataKeyDefinition]):
-    # this will be used as the primary key
-    state_key_values = extract_values_from_query_state_by_key_definition(
-        key_definitions=key_definitions,
-        query_state=query_state)
+    try:
+        # this will be used as the primary key
+        state_key_values = extract_values_from_query_state_by_key_definition(
+            key_definitions=key_definitions,
+            query_state=query_state)
 
-    # iterate each primary key value pair and create a tuple for hashing
-    keys = [(name, value) for name, value in state_key_values.items()]
+        # iterate each primary key value pair and create a tuple for hashing
+        keys = [(name, value) for name, value in state_key_values.items()]
 
-    # hash the keys as a string in sha256
-    return calculate_hash(str(keys)), keys
+        # hash the keys as a string in sha256
+        return calculate_hash(str(keys)), keys
+    except Exception as e:
+        error = (f'error in trying to build state data row key for key definition {key_definitions} '
+                 f'and query_state {query_state}. Ensure that the output include keys and query state '
+                 f'keys you are trying to use with this key definition are reflective of both the input '
+                 f'query state and the response query state. Not that aliases could also cause key match '
+                 f'errors, ensure that key combinations are correct. Exception: {e}')
+
+        logging.error(error)
+        raise Exception(error)
 
 def load_state(state_file: str) -> Any:
     state = {}
@@ -236,7 +273,7 @@ def build_template_text(template: dict, query_state: dict):
     return True, completed_template
 
 
-def _parse_response_json(response: str):
+def parse_response_json(response: str):
     json_detect = response.find('```json')
     if json_detect < 0:
         return False, type(response), response
@@ -267,7 +304,7 @@ def _parse_response_json(response: str):
 
 
 def parse_response_auto_detect_type(response: str):
-    data_parse_status, data_type, data_parsed = _parse_response_json(response)
+    data_parse_status, data_type, data_parsed = parse_response_json(response)
     return data_parse_status, data_type, data_parsed
 
 
@@ -292,11 +329,27 @@ def parse_response_strip_assistant_message(response: str):
     if data_type is not str:
         return response, data_type
 
-    has = response.find(':\n\n')
-    if has >= 0:
-        return response[has:], data_type
+    remark_pos = response.find(':\n\n')
+    if remark_pos >= 0:
+        remark_pos = remark_pos + 3   # move forward 3 positions since thats what we searched for
+        if remark_pos >= len(response):
+            return response
+
+        # else return characters after the has position
+        return response[remark_pos:], data_type
 
     return response, data_type
+
+
+
+def higher_order_routine(func, **fixed_kwargs):
+    # The higher-order function
+    def wrapped_function(**kwargs):
+        # Merge fixed_kwargs (like header_input) with the new kwargs
+        all_kwargs = {**fixed_kwargs, **kwargs}
+        return func(**all_kwargs)
+
+    return wrapped_function
 
 
 def obsolete_parse_response_csv(response: str):

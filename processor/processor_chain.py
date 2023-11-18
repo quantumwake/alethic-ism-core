@@ -7,6 +7,7 @@ import utils
 from processor.base_processor import BaseProcessor
 from processor.base_question_answer_processor import StateConfigLM
 from processor.processor_state import State, StateConfig, StateDataKeyDefinition
+from processor.processors import anthropic_question_answer, openai_question_answer, openai_question_answer_multi_persona
 from processor.question_answer_v2 import OpenAIQuestionAnswerProcessor, AnthropicQuestionAnswerProcessor
 
 
@@ -89,28 +90,6 @@ class ProcessorChain(BaseProcessor):
 # def do_something(data_entry: dict, input_state: dict)
 
 
-a_a="""Here is a brief summary paragraph on places animals like to live in:
-
-Animals like to live in habitats suited to their needs. Wild animals tend to prefer natural environments like forests, grasslands, wetlands, deserts etc. Domesticated animals are often kept as pets in homes or on farms. They like safe spaces with shelter, food, water and room to move around. The ideal home for an animal provides comfort, protects them from predators, and allows them to exhibit natural behaviors. With proper care, animals can thrive in a variety of environments.
-"""
-
-b_a="""Here is a brief summary paragraph responding to why some animals only live in certain places:
-
-Some animals are only found living in certain places due to adaptations that help them survive in those particular environments. For example, polar bears are found in icy, Arctic regions because they have thick fur and insulating fat to withstand the cold temperatures. Penguins are found in Antarctica because they are excellent swimmers adapted to the cold waters. Camels survive in hot, dry deserts due to their ability to go long periods without water. The adaptations and abilities of different animal species determine where they are able to successfully live.
-"""
-
-c_a="""Here is a one paragraph summary response on farm animals:
-
-Common farm animals include cows, pigs, chickens, sheep, goats, horses, and donkeys. These animals are raised on farms for meat, milk, eggs, wool, labor, transportation, recreation, and companionship. Cows provide beef and dairy products. Pigs provide pork. Chickens give eggs and meat. Sheep produce wool and meat. Goats offer milk and meat. Horses and donkeys are used for labor, transportation, and recreation on farms. A variety of farm animals are raised to provide food and other products for human use and enjoyment.
-"""
-
-
-
-a_b = utils.parse_response(a_a)
-b_b = utils.parse_response(b_a)
-c_b = utils.parse_response(c_a)
-
-
 
 chain = ProcessorChain(
     state=State(
@@ -127,81 +106,10 @@ chain = ProcessorChain(
 
     # First Processor - Q/A "Vetted" Questions
     processors=[
-        AnthropicQuestionAnswerProcessor(
-            state=State(
-                config=StateConfigLM(
-                    name="[AnimaLLM]/[Evaluation]/[Human]/[Categorical]/[Question]",
-                    system_template_path='../templates/questions/questions_with_context_system_template.json',
-                    user_template_path='../templates/questions/questions_with_context_user_template.json',
-                    output_primary_key_definition=[
-                        StateDataKeyDefinition(name="query"),
-                        StateDataKeyDefinition(name="context")
-                    ],
-                    include_extra_from_input_definition=[
-                        StateDataKeyDefinition(name="query", alias='input_query'),
-                        StateDataKeyDefinition(name="context", alias='input_context')
-                    ]
-                )
-            )
-        ),
-
-        OpenAIQuestionAnswerProcessor(
-            state=State(
-                config=StateConfigLM(
-                    name="[AnimaLLM]/[Evaluation]/[Human]/[Categorical]/[Question]",
-                    system_template_path='../templates/questions/questions_with_context_system_template.json',
-                    user_template_path='../templates/questions/questions_with_context_user_template.json',
-                    output_primary_key_definition=[
-                        StateDataKeyDefinition(name="query"),
-                        StateDataKeyDefinition(name="context")
-                    ],
-                    include_extra_from_input_definition=[
-                        StateDataKeyDefinition(name="query", alias='input_query'),
-                        StateDataKeyDefinition(name="context", alias='input_context')
-                    ]
-                )
-            ),
-        ),
+        anthropic_question_answer,
+        openai_question_answer,
+        openai_question_answer_multi_persona
     ]
 )
 
 chain()
-
-anthropic_2 = AnthropicQuestionAnswerProcessor(
-            state=State(
-                config=StateConfigLM(
-                    name="[AnimaLLM]/[Evaluation]/[Human]/[Categorical]/[Question]",
-                    model_name="claude",
-                    system_template_path='../templates/questions/questions_with_context_system_template.json',
-                    user_template_path='../templates/questions/questions_with_context_user_template.json',
-                    output_primary_key_definition=[
-                        StateDataKeyDefinition(name="query"),
-                        StateDataKeyDefinition(name="context")
-                    ],
-                    include_extra_from_input_definition=[
-                        StateDataKeyDefinition(name="query", alias='input_query'),
-                        StateDataKeyDefinition(name="context", alias='input_context')
-                    ]
-                )
-            ),
-        ),
-
-processors = [
-                OpenAIQuestionAnswerProcessor(
-                    state=State(
-                        config=StateConfigLM(
-                            name="[AnimaLLM]/[Evaluation]/[Human]/[Categorical]/[Question]",
-                            system_template_path='../templates/perspectives/questions_with_context_system_template.json',
-                            user_template_path='../templates/perspectives/questions_with_context_user_template.json',
-                            output_primary_key_definition=[
-                                StateDataKeyDefinition(name="query"),
-                                StateDataKeyDefinition(name="context")
-                            ],
-                            include_extra_from_input_definition=[
-                                StateDataKeyDefinition(name="query", alias='input_query'),
-                                StateDataKeyDefinition(name="context", alias='input_context')
-                            ]
-                        )
-                    )
-                )
-            ]

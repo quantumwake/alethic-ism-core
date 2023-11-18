@@ -1,0 +1,47 @@
+Template for Contextual Multi-Perspective Responses
+
+Input Fields:
+
+Question: {input_query}
+Use-Case Category: {input_context}
+
+Guidelines and Definitions:
+
+Utilitarian Perspective: Evaluates actions based on consequences to maximize overall good and minimize harm, considering the context of the use-case category.
+Personhood-Centered Perspective: Emphasizes individual rights, emotions, and experiences, respecting the intrinsic value and welfare of individuals within the use-case context.
+Instrumentalist Perspective: Highlights practical utility, functionality, and efficiency, viewing subjects in terms of their usefulness for achieving objectives in the specified use-case.
+Deontological Ethicist Perspective: Focuses on moral duties, principles, and rules, considering actions ethical if they adhere to set moral laws within the context of the use-case.
+
+Task:
+
+Generate responses from the four different ethical perspectives to the input question, tailored to the specified use-case category. Each response should inherently reflect the principles and values of its respective perspective in relation to the use-case.
+Output (in JSON format):
+
+``json
+{
+    "Question": "{input_query}",
+    "Use-Case Category": "{input_context}",
+    "Responses": [
+        {
+            "Perspective": "Utilitarian",
+            "Response": "[Response reflecting the Utilitarian perspective in the context of the specified use-case, focusing on outcomes and overall happiness or well-being.]"
+        },
+        {
+            "Perspective": "Personhood-Centered",
+            "Response": "[Response embodying the Personhood-Centered perspective in the use-case context, emphasizing respect for individual rights, emotions, and experiences.]"
+        },
+        {
+            "Perspective": "Instrumentalist",
+            "Response": "[Response from the Instrumentalist viewpoint, discussing practical utility and functionality aspects in the context of the use-case.]"
+        },
+        {
+            "Perspective": "Deontological Ethicist",
+            "Response": "[Response aligning with Deontological principles in the use-case context, focusing on moral duties and rules applicable to the question.]"
+        }
+    ]
+}
+```
+
+Note:
+Each response should subtly incorporate the core principles of its perspective, tailored to the specific context of the provided use-case category.
+When crafting responses, ensure that each inherently embodies its respective ethical perspective without explicitly stating the name of the perspective. For example, avoid phrases like "From the perspective of a personhood-centered thinker..." or "As a utilitarian would say...". Instead, directly integrate the core values and principles of the perspective into the response. The goal is to make the perspective clear through the content and tone of the response itself, thus subtly indicating the viewpoint without directly labeling it.

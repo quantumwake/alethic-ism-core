@@ -8,16 +8,9 @@ from tenacity import wait_exponential, retry, wait_random
 from typing import List
 
 import utils
-from processor.processor_state import StateConfig, State
+from processor.processor_state import StateConfig, State, StateConfigLM
 from utils import build_column_name, load_template
 from processor.base_processor import BaseProcessor
-
-
-class StateConfigLM(StateConfig):
-    system_template_path: str
-    user_template_path: str
-    provider_name: str = None
-    model_name: str = None
 
 
 class BaseQuestionAnswerProcessor(BaseProcessor):
@@ -104,13 +97,13 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
         # state_file = f'{self.output_path}/{state_file_hashed}.json'
         # return state_file
 
-    def _process_input_data_entry(self, input_query_state: dict, force: bool = False):
+    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:
             return
 
         # create the query data row primary key hash
         # the individual state values of the input file
-        query_state_key_hashed, query_state_key = utils.build_state_data_row_key(
+        input_state_key, query_state_key = utils.build_state_data_row_key(
             # we need the input query to create the primary key
             query_state=input_query_state,
 
@@ -119,7 +112,16 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
         )
 
         # if it already exists, then skip it, unless forced
-        if self.has_query_state(query_state_key=query_state_key_hashed, force=force):
+        if self.has_query_state(query_state_key=input_state_key, force=force):
+
+            # if self.model_name == 'claude-2w':
+            #     # TOOD quick hack to fix previous datasets
+            #     indexes = self.mapping[input_state_key]
+            #     for index in indexes.values:
+            #         fix_response = self.data['response'][index]
+            #         fix_response, data_type = utils.parse_response_strip_assistant_message(fix_response)
+            #         self.data['response'][index] = fix_response
+
             return
 
         # build out the final prompts with appropriate data injected
@@ -136,7 +138,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
             # we build a new output state to be appended to the output states
             output_query_state = {
-                'state_key': query_state_key_hashed,
+                'state_key': input_state_key,
                 # 'data_key': query_state_key_hashed,
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
@@ -166,7 +168,11 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                     if not isinstance(item, dict):
                         raise Exception(f'item in response list of rows must be in of type dict.')
 
+                    state_item_key = utils.calculate_string_dict_hash(item)
+
                     output_query_state = {**{
+                        'state_key': input_state_key,
+                        'state_item_key': state_item_key,
                         'user_prompt': user_prompt,
                         'system_prompt': system_prompt,
                         'status': 'Success'
@@ -180,7 +186,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
             def save_query_state(query_state: dict):
                 # persist new state such that we do not repeat the call when interrupted
-                self.save_state(key=query_state_key_hashed,
+                self.save_state(key=input_state_key,
                                 query_state=query_state)
 
                 # persist the new record to the output file, if any
@@ -192,7 +198,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
         except Exception as e:
             # save it as an error such that we can track it
-            self.save_state(key=query_state_key_hashed,
+            self.save_state(key=input_state_key,
                             query_state={
                                 'inputs': str(input_query_state),
                                 'user_prompt': user_prompt,
@@ -202,5 +208,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                             })
 
             logging.error(f'critical error handling question {input_query_state} on {self.config}')
+
+
 
 

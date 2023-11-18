@@ -4,6 +4,7 @@ import math
 
 import asyncpg
 
+from processor.processor_state import State
 from utils import *
 import dotenv
 
@@ -49,60 +50,19 @@ def create_embedding(text: str, model_name):
 #
 
 
-def organize_state_for_database(state: dict, additional_values_func=None, ignore_columns: [] = None):
-    state_data = state['data']
-    state_header = state['header']
+def organize_state_for_database(state: State,
+                                additional_values_func=None,
+                                ignore_columns: [] = None):
 
-    # columns = set()
-    organized_data = {
-        "header": {
-            "columns": {
-                ## '<column_name>': {
-                ## value: [constant value or a routine] (optional)
-                ## type: <str,int,float>,
-                ## max_length: [min length of input strings for column values] if str (optional)
-                ## min_length: [min length of input strings for column values] if str (optional)
-                # }
-            },
-            "row_count": len(state_data),
-            "table_name": build_table_name(state_header)
-        }
-    }
+    state_data = state.data
 
-    for idx, data_entry in enumerate(state_data):
-        logging.info(f'processing {idx} / {len(state_data)}')
-
-        if not isinstance(data_entry, dict):
-            raise Exception(f'Invalid input data entry, it must be a dictionary, '
-                            f'received {type(data_entry)} expected {type(dict)}')
-
+    for index in range(state.count):
         # merge the data entry columns with the table columns to be created
-        column_headers = organized_data['header']['columns']
+        column_headers = state.columns
 
         # this is the list of keys from the current record
-        state_data_entry_keys = data_entry.keys()
-
-        # sometimes state['data'] records may differ in their keys, creating a gap in definition
-        # we merge them to create a new list of columns from the keys that may not exist yet
-        new_column_headers = {
-            build_column_name(column): {
-                'column_name': build_column_name(column),
-                'state_data_entry_key': column,
-                'type': str
-            }
-
-            # loop through and check lowercase for
-            for column in state_data_entry_keys
-            if build_column_name(column) not in column_headers and
-               build_column_name(column) not in ignore_columns
-
-        }
-
-        # merge the existing columns headers with the specific records columns
-        # it would be good practice to try and keep the dataset consistent across
-        # available keys/columns, generally we do not want to have key differences
-        # between record entries as it leads to many empty/null values
-        column_headers = {**column_headers, **new_column_headers}
+        # state_data_entry_keys = data_entry.keys()
+        logging.info(f'processing {index} / {len(state_data)}')
 
         # check for any additional columns by invoking the higher order function
         # which should return a map of columns and constant values or a coroutine
@@ -165,7 +125,7 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
             column_header = column_header if _column_header else column_header
 
             if column not in organized_data:
-                organized_data[column] = [None for i in range(idx)]
+                organized_data[column] = [None for i in range(index)]
 
             # try and get the input state key, since this differs from the column name, we use this key to
             # fetch the exact data element we need from the state['data'][row][state_data_entry_key]
@@ -226,7 +186,6 @@ def organize_state_for_database(state: dict, additional_values_func=None, ignore
     return organized_data
 
 
-#
 def create_column_ddl(column_header: dict):
     if 'column_name' not in column_header:
         error = f'column_name does not exist in {column_header}'
@@ -345,16 +304,16 @@ def add_header_columns_and_values_embeddings(input_state: dict,
 
     return result_columns
 
-def add_header_columns_and_values(input_state: dict,
+def add_header_columns_and_values(input_state: State,
                                   # the initial input state that was passed in, it can be dict of your choice
 
-                                  data_entry_state: dict = None,
+                                  data_entry_state: State = None,
                                   # passed incase you want to do something with it
 
                                   input_organized_state: dict = None
                                   # passed incase you need this information during column/value creation
                                   ):
-    header = input_state['header']
+    config = input_state['header']
 
     return {
         'provider_name': {
@@ -372,16 +331,6 @@ def add_header_columns_and_values(input_state: dict,
     }
 
 
-
-
-def routine(func, **fixed_kwargs):
-    # The higher-order function
-    def wrapped_function(**kwargs):
-        # Merge fixed_kwargs (like header_input) with the new kwargs
-        all_kwargs = {**fixed_kwargs, **kwargs}
-        return func(**all_kwargs)
-
-    return wrapped_function
 
 
 def create_table_ddl(organized_state: dict):
@@ -423,10 +372,10 @@ async def truncate_table(table_name: str):
         raise e
 
 
-async def drop_table(table_name: str = None, state_header: dict = None):
+async def drop_table(config: StateConfig, table_name: str = None):
     conn = await create_connection()
     try:
-        table_name = build_table_name(state_header) if state_header else table_name
+        table_name = build_table_name(config) if config else table_name
         if not table_name:
             raise Exception(f'unable to drop table {table_name}, table does not exist')
 
@@ -519,7 +468,7 @@ async def run_me_state_file(state_input_file: str=None,
     # load the state, organize it for table format and create the DDL for
     # the new organized state such that we can create the backend tables
     if not state:
-        state = load_state(state_input_file)
+        state = State.load_state(state_input_file)
 
     # reorganize the state such that we can use it for persisting it to a database
     # this will create a list of keys columns and an accurate row values (e.g, back-fills empty columns properly)
@@ -563,20 +512,17 @@ async def run_me(drop_tables: bool = False):
     base_path = '../../dataset/examples/states/'
 
     state_filenames = [
-        '1e1e2abcb60e42da491546c16f1cf7224cb991d899b1ea443d222a86384a88bb.json',
-        '9afe7f3daeb42c0139a742b372ece6b1410e3cdfcf95338fc11710beab80f049.json',
-        '715f9bb6ea0cbff9b81a384d879edcc5bc3c04fac8617cf6ae51e32ed976810c.json',
-        '5415290561bf8559d8671c16017aed476bc463f3ffc55cf6a469a856ef28ac95.json',
-        'f50625bfeaade54954c1a42d310f1d5e5e7dd41a49fd279940c3ad74d67e2d5b.json'
+        '5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle'
     ]
 
     # load the state, we need this for the additional columns, as it depends
     # on this data for creating provider_name, and model_name column/values
-    states = []
+    states = [State]
     for state_filename in state_filenames:
-        state = load_state(f'{base_path}/{state_filename}')
+        state = State.load_state(f'{base_path}/{state_filename}')
+
         if drop_tables:
-            await drop_table(state_header=state['header'])
+            await drop_table(config=state.config)
 
         states.append(state)
 
@@ -591,12 +537,13 @@ async def run_me(drop_tables: bool = False):
         # TODO this needs to be a param
         # the columns to process
         designated_embedding_columns = ['input_query',
-                                        'question',
-                                        'response',
                                         'input_context',
-                                        'evaluation_analysis']
+                                        'question',
+                                        'response']
 
-        additional_columns_function_constants = routine(add_header_columns_and_values, input_state=state)
+        additional_columns_function_constants = routine(add_header_columns_and_values,
+                                                        input_state=state)
+
         additional_columns_function_embeddings = routine(add_header_columns_and_values_embeddings,
                                                          input_state=state,
                                                          designated_embedding_columns=designated_embedding_columns)
