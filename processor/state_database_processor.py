@@ -18,31 +18,6 @@ dotenv.load_dotenv()
 DATABASE_URL = os.environ.get("OUTPUT_DATABASE_URL", "postgresql://postgres:postgres1@localhost:5432/postgres")
 
 
-#
-# # TODO this needs to be a param
-# # the columns to process
-# designated_embedding_columns = ['input_query',
-#                                 'input_context',
-#                                 'question',
-#                                 'response']
-#
-# additional_columns_function_constants = routine(add_header_columns_and_values,
-#                                                 input_state=state)
-#
-# additional_columns_function_embeddings = routine(add_header_columns_and_values_embeddings,
-#                                                  input_state=state,
-#                                                  designated_embedding_columns=designated_embedding_columns)
-#
-#
-# def combined(*args, **kwargs):
-#     results_1 = additional_columns_function_constants(**kwargs)
-#     results_2 = additional_columns_function_embeddings(**kwargs)
-#     return {**results_1, **results_2}
-#
-#
-# additional_columns_function = routine(func=combined)
-
-
 def build_query_state_embedding_from_columns(input_state: State,
                                              designated_embedding_columns: dict = None,
                                              input_query_state: dict = None):
@@ -153,7 +128,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         table_name = utils.build_table_name(state.config)
         # count = self.count_table()
         # if count:
-        self.drop_table()
+        # self.drop_table()
         self.create_table()
 
     class SqlStatement:
@@ -278,7 +253,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
             conn.commit()
         except Exception as e:
             logging.warning(e)
-            raise e
+            #raise e
 
     def drop_table(self, ddl: str = None):
         table_name = utils.build_table_name(self.config)
@@ -392,13 +367,13 @@ def test_me(input_state_filename: str,
         results_2 = additional_columns_function_embeddings(**kwargs)
         return {**results_1, **results_2}
 
-    # go
-    # additional_columns_function = utils.higher_order_routine(func=combined)
-    # processor = StateDatabaseProcessor(state, additional_values_func = additional_columns_function)
-    # processor(input_state=state)
+    # step into the room of functions, said the "unfireable math guy".
+    additional_columns_function = utils.higher_order_routine(func=combined)
+    processor = StateDatabaseProcessor(state, additional_values_func=additional_columns_function)
+    processor(input_state=state)
 
 if __name__ == '__main__':
-    # test_me('../dataset/examples/states/13051c84c9eaed649eb85fdf6d1fd5acfa25ef31eb75df24a2eebbf6b4820c6e.pickle')
+    test_me('../dataset/examples/states/13051c84c9eaed649eb85fdf6d1fd5acfa25ef31eb75df24a2eebbf6b4820c6e.pickle')
     test_me('../dataset/examples/states/5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle')
     test_me('../dataset/examples/states/574345d04a9522b0677b8e449f432a829fd3b382e9a555061cc29910763b6a4d.pickle')
 
