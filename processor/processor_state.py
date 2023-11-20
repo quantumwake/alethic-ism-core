@@ -1,6 +1,10 @@
 import json
 import logging
 import pickle
+from sre_parse import State
+
+import pydantic
+
 import utils
 
 from enum import Enum as PyEnum
@@ -25,6 +29,7 @@ class StateStorage(BaseModel):
 class StateConfig(BaseModel):
 
     name: str
+    copy_to_children: bool = pydantic.Field(False)
     input_path: Optional[str] = None
     input_storage: Optional[StateStorage] = None
     output_storage: Optional[StateStorage] = None
@@ -32,12 +37,59 @@ class StateConfig(BaseModel):
     output_primary_key_definition: Optional[List[StateDataKeyDefinition]] = None
     include_extra_from_input_definition: Optional[List[StateDataKeyDefinition]] = None
 
+    def __setstate__(self, state):
+        super().__setstate__(state)
+
+        # missing values
+        self.copy_to_children = self.copy_to_children \
+            if 'copy_to_children' in state['__dict__'] else False
+
+
+    def project_basic_config(self, config: 'StateConfig'):
+        self.name = config.name if config.name else self.name
+
+        # TODO rethink this, don't like how this is done as it is confusing.
+        #  we have to remap the configuration as it is overwritten
+        #  (perhaps we need to disginquish more concretely between the input state and current states)
+
+        if self.copy_to_children:
+            self.output_primary_key_definition = config.output_primary_key_definition \
+                if config.output_primary_key_definition else self.output_primary_key_definition
+
+            self.include_extra_from_input_definition = config.include_extra_from_input_definition \
+                if config.include_extra_from_input_definition else self.include_extra_from_input_definition
+        else:
+            self.output_primary_key_definition = config.output_primary_key_definition
+            self.output_primary_key_definition = config.include_extra_from_input_definition
+
 
 class StateConfigLM(StateConfig):
     system_template_path: Optional[str] = None
     user_template_path: str
     provider_name: str = None
     model_name: str = None
+
+    def project_basic_config(self, config: 'StateConfigLM'):
+        super().project_basic_config(config=config)
+
+        if self.copy_to_children:
+            self.system_template_path = config.system_template_path \
+                if config.system_template_path else self.system_template_path
+
+            self.user_template_path = config.user_template_path\
+                if config.user_template_path else self.user_template_path
+
+            self.provider_name = config.provider_name \
+                if config.provider_name else self.provider_name
+
+            self.model_name = config.model_name \
+                if config.model_name else self.model_name
+        else:
+            self.system_template_path = config.system_template_path
+            self.user_template_path = config.user_template_path
+            self.provider_name = config.provider_name
+            self.model_name = config.model_name
+
 
 
 class StateDataColumnDefinition(BaseModel):
@@ -242,7 +294,7 @@ class State(BaseModel):
         self.count = self.count + 1
 
     @staticmethod
-    def load_state(input_path: str) -> Any:
+    def load_state(input_path: str) -> State:
         if utils.has_extension(input_path, ['.pickle', '.pkl']):
             with open(input_path, 'rb') as fio:
                 return pickle.load(fio)

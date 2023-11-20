@@ -50,7 +50,7 @@ class ProcessorChain(BaseProcessor):
             input_processor(input_state=parent_processor.state)
 
             # the output state file of the current processor run, goes into the
-            output_state_file = input_processor.built_final_output_path()
+            output_state_file = input_processor.build_final_output_path()
 
             # if it has child processors
             if not input_processor.processors:
@@ -91,11 +91,42 @@ class ProcessorChain(BaseProcessor):
 
 
 
-chain = ProcessorChain(
+class ProcessorChainV2(BaseProcessor):
+
+    def handle(self, processor: BaseProcessor, input_state: State):
+        # TODO must return some sort of state update? or maybe not just needs a healthcheck
+        processor(input_state=input_state)
+
+    def __call__(self, input_state: State, *args, **kwargs):
+        if not self.processors:
+            raise Exception(f'no downstream processors available to propagate input query state. '
+                            f'current config processor: {self.config}')
+
+        for processor_node in self.processors:
+            logging.debug(f'processing input state {input_state.config}')
+            func = utils.higher_order_routine(self.handle,
+                                              processor=processor_node,
+                                              input_state=input_state)
+            self.manager.add_to_queue(func)
+
+        # wait for the completion of all processors or some exit code?
+        # TODO should be running a health check on this
+        self.manager.wait_for_completion()
+
+    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
+        # TODO handle this in a distributed way
+        #  we could handle each individual state separately
+        #  but for now we are simply passing the entire state as an input
+        super().process_input_data_entry()
+        pass
+
+
+
+
+chain = ProcessorChainV2(
     state=State(
         config=StateConfig(
             name="AnimaLLM Test Evaluation Processor Chain",
-            input_path='../dataset/examples/processor/vetted/questions/qa_4gs_v2.json',
             output_path='../dataset/examples/states',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name="query"),
@@ -107,9 +138,12 @@ chain = ProcessorChain(
     # First Processor - Q/A "Vetted" Questions
     processors=[
         # anthropic_question_answer,
-        # openai_question_answer,
-        openai_question_answer_multi_persona
+        openai_question_answer,
+        # openai_question_answer_multi_persona
     ]
 )
 
-chain()
+initial_input_state_file  ='../dataset/examples/processor/vetted/questions/qa_4gs_v2.json'
+initial_input_state = State.load_state(initial_input_state_file)
+
+chain(input_state=initial_input_state)

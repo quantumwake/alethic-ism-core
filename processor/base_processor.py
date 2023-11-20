@@ -36,9 +36,12 @@ class ThreadQueueManager:
 
 class BaseProcessor:
 
+
     def __init__(self, state: State,
                  processors: List['BaseProcessor'] = None):
 
+        # TODO swap this with a pub/sub system at some point
+        self.manager = ThreadQueueManager(num_workers=1)
         self.state = state
         self.processors = processors
         self.lock = threading.Lock()
@@ -130,6 +133,33 @@ class BaseProcessor:
         logging.info(f'query {query_state_key}, not cached, on config: {self.config}')
         return False
 
+    def execute_downstream_processor_node(self, node: 'BaseProcessor'):
+
+        if not isinstance(node, BaseProcessor):
+            raise Exception(f'Invalid processor type {node}, expected '
+                            f'class base type {type(node)}')
+#
+        # execute processor
+        node(input_state=self.state)
+
+    def execute_downstream_processor_nodes(self):
+        if not self.processors:
+            logging.info(f'no downstream processors available for config input {self.config} with input state {self.build_final_output_path()}')
+
+        # iterate each child processor and inject the output state
+        # of the current processor into each of the child processor
+        for downstream_node in self.processors:
+            # the output state file of the current processor run, goes into the
+            # output_state_file = input_processor.built_final_output_path()
+
+            # TODO we could probably use a queue such that it can be better distributed
+            #  abstraction probably required
+
+            # downstream / adjacent processors nodes
+            process_func = utils.higher_order_routine(self.execute_downstream_processor_node, node=downstream_node)
+            self.manager.add_to_queue(process_func)
+
+
     def _be_a_dumb_coder(self):
         pass
         # # identify whether we should dump each call result to an output csv file
@@ -156,17 +186,18 @@ class BaseProcessor:
                  force_state_overwrite: bool = False,
                  *args, **kwargs):
 
+        if input_state and input_file:
+            raise Exception(f'cannot have both input_state and input_file specified, you can either '
+                            f'load the state prior and pass it as a parameter, or specify the input state '
+                            f'file')
+
         # first lets try and load the stored state from the storage
-        current_stored_state_filename = self.built_final_output_path()
+        current_stored_state_filename = self.build_final_output_path()
 
-        # if the input_state was not passed in, but there is a current state in place,
-        # then do *not* reload the state as the current input_state will be overwritten
+        # the output state is derived from the input state parameters load the
+        # current output state to ensure we do not reprocess the input state
         if os.path.exists(current_stored_state_filename):
-            # important to distinguish input_state with self.state (output_state)
             self.state = State.load_state(current_stored_state_filename)
-
-        # might have been set in the forward function
-        input_file = input_file if input_file else self.input_path
 
         # if the input is .json then make sure it is a state input
         # TODO we can stream the inputs and outputs, would be more significantly more efficient
@@ -187,8 +218,9 @@ class BaseProcessor:
                 count = len(input_state.data[first_column].values)
                 input_state.count = count
 
+
             # initialize a thread pool
-            manager = ThreadQueueManager(num_workers=5)
+
             for index in range(count):
                 logging.info(f'processing query state index {index} from {count}')
                 query_state = {
@@ -201,11 +233,16 @@ class BaseProcessor:
 
                 process_func = utils.higher_order_routine(self.process_input_data_entry,
                                                           input_query_state=query_state)
-                # output_query_states = self.process_input_data_entry(input_query_state=query_state)
-                manager.add_to_queue(process_func)
+
+                self.manager.add_to_queue(process_func)
 
             # wait on workers until the task is completed
-            manager.wait_for_completion()
+            self.manager.wait_for_completion()
+
+
+            # # execute the downstream function to handle state propagation
+            # self.execute_downstream_processor_nodes()
+
         else:
             error = f'*******INVALID INPUT STATE or INPUT STATE FILE or STREAM*********\n'\
                     f'input_state: {input_state if input_state else "<not loaded>"}, \n'\
@@ -216,7 +253,7 @@ class BaseProcessor:
             raise Exception(error)
 
     def load_state(self):
-        state_file = self.built_final_output_path()
+        state_file = self.build_final_output_path()
         if not os.path.exists(state_file):
             return self.state
 
@@ -237,7 +274,7 @@ class BaseProcessor:
 
         # persist the entire output state to the storage class
         # fetch the state file name previously configured, or autogenerated
-        output_state_path = output_state_path if output_state_path else self.built_final_output_path()
+        output_state_path = output_state_path if output_state_path else self.build_final_output_path()
         self.state.save_state(output_state_path)
         return self.state
 
@@ -313,7 +350,7 @@ class BaseProcessor:
         with open(output_filename, 'w') as fio:
             json.dump(self.state, fio)
 
-    def built_final_output_path(self, output_extension: str = 'pickle', prefix:str =None):
+    def build_final_output_path(self, output_extension: str = 'pickle', prefix: str=None):
         if not self.name:
             raise Exception(
                 f'Processor name not defined, please ensure to define a unique processor name as part, otherwise your states might get overwritten or worse, merged.')

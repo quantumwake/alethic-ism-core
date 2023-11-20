@@ -75,10 +75,14 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
-    def built_final_output_path(self):
+    def build_final_output_path(self):
         provider = ''.join([char for char in self.provider_name if char.isalnum()]).lower()
         model_name = ''.join([char for char in self.model_name if char.isalnum()]).lower()
-        return super().built_final_output_path(prefix=f'{provider}_{model_name}')
+        user_template = self.user_template          # this will be hashed
+        system_template = self.system_template      # this will be hashed
+
+        # return super().build_final_output_path(prefix=f'{provider}_{model_name}')
+        return super().build_final_output_path(prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
 
         #
         # # if there is a system template file used, then the state file should include a suffix
