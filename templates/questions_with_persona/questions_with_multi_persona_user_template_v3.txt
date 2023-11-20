@@ -17,7 +17,7 @@ Task:
 Generate responses from the four different ethical perspectives to the input question, tailored to the specified use-case category. Each response should inherently reflect the principles and values of its respective perspective in relation to the use-case.
 Output (in JSON format):
 
-``json
+```json
 {
     "Question": "{query}",
     "Use-Case Category": "{context}",
