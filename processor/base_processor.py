@@ -488,8 +488,8 @@ if __name__ == '__main__':
     test_state = State(
         config=StateConfig(
             name='test state 1',
-            input_path='../dataset/examples/states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
-            output_path='../dataset/examples/states/',
+            input_path='../states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
+            output_path='../states/',
             # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name='query'),
@@ -522,8 +522,8 @@ if __name__ == '__main__':
         }
     )
 
-    test_state.save_state(output_path='../dataset/examples/states/test_state.pickle')
-    test_state.save_state(output_path='../dataset/examples/states/test_state.json')
+    test_state.save_state(output_path='../states/test_state.pickle')
+    test_state.save_state(output_path='../states/test_state.json')
 
     # when adding a new row you only provide the values, it must match the same
     # number of columns and in the order of the columns that were added, otherwise

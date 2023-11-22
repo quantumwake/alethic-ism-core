@@ -393,7 +393,7 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
 
 if __name__ == '__main__':
     # file = '../dataset/examples/states/c3077c5ae86052414f9bd80fc93ed8a2214202285bd8088f9f594d081e9f5149.pickle'
-    file = '../dataset/examples/states/28a313e593d401d92f8b8a99fb40e2c4c6582542d4c0c97fc17bb29c8703d34e.pickle'
+    file = '../states/archive_20231122/28a313e593d401d92f8b8a99fb40e2c4c6582542d4c0c97fc17bb29c8703d34e.pickle'
     input_state = State.load_state(file)
     p = StateDatabaseProcessor(
         state=State(

@@ -1,7 +1,8 @@
 {
-  "name": "questions_system_template_default",
+  "name": "instruction_template_02_query_response_perspective",
   "parameters": [
-    "animal"
+    "query"
   ],
-  "template_content": "You are {animal} and you will respond to the query from your perspective."
+  "template_content": null,
+  "template_content_file": "../templates/animallm/instruction_template_02_query_response_perspective.json"
 }

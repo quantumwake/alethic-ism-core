@@ -14,15 +14,13 @@ LOG_FILE = f'{LOG_PATH}/examples.log'
 
 logging.basicConfig(encoding='utf-8', level=LOG_LEVEL)
 
-
-
 # initialize a list of processors with the same initial configuration
 processors = initialize_processors_with_same_state_config(
     config=StateConfigLM(
         name="AnimaLLM Instruction Template 01 (Processor)",
         system_template_path='../templates/animallm/instruction_template_01_system_template.json',
         user_template_path='../templates/animallm/instruction_template_01_user_template.json',
-        output_path='../dataset/examples/states',
+        output_path='../states',
         output_primary_key_definition=[
             StateDataKeyDefinition(name="query", alias="query"),
             StateDataKeyDefinition(name="animal", alias="animal")
@@ -32,18 +30,18 @@ processors = initialize_processors_with_same_state_config(
             StateDataKeyDefinition(name="animal", alias="animal")
         ]
     ),
-    processor_types=[AnthropicQuestionAnswerProcessor, OpenAIQuestionAnswerProcessor])
+    processor_types=[OpenAIQuestionAnswerProcessor])
 
 # load the initial state objects and merge them
-query_template_state = State.load_state('../dataset/animallm/query_template_state.json')
-animal_state = State.load_state('../dataset/animallm/animal_state.json')
+query_template_state = State.load_state('../dataset/animallm/query_template_state_devtest.json')
+animal_state = State.load_state('../dataset/animallm/animal_state_devtest.json')
 
 # the initial state to inject into the next processors (for template 01 question and answering)
 animal_query_state_join_processor = FullJoinStateProcessor(
     state=State(
         config=StateConfig(
             name="merged state",
-            output_path='../dataset/examples/states',
+            output_path='../states/animallm/devtest',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name='animal'),
                 StateDataKeyDefinition(name='query')
