@@ -7,7 +7,8 @@ import utils
 from processor.base_processor import BaseProcessor
 from processor.base_question_answer_processor import StateConfigLM
 from processor.processor_state import State, StateConfig, StateDataKeyDefinition
-from processor.processors import anthropic_question_answer, openai_question_answer, openai_question_answer_multi_persona
+from processor.processors import anthropic_question_answer, openai_question_answer, \
+    openai_question_answer_multi_persona, openai_question_answer_devtestset
 from processor.question_answer_v2 import OpenAIQuestionAnswerProcessor, AnthropicQuestionAnswerProcessor
 
 
@@ -81,13 +82,8 @@ class ProcessorChain(BaseProcessor):
             proc.include_extra_from_input_definition = f(proc.include_extra_from_input_definition, self.include_extra_from_input_definition)
             proc.output_primary_key_definition = f(proc.output_primary_key_definition, self.output_primary_key_definition)
             execute_processor_recursive(proc, self)
-#
-# class StateQueryKeyDefinitionType(Enum):
-#     RED = 1
-#     GREEN = 2
-#     BLUE = 3
 
-# def do_something(data_entry: dict, input_state: dict)
+
 
 
 
@@ -126,7 +122,7 @@ class ProcessorChainV2(BaseProcessor):
 chain = ProcessorChainV2(
     state=State(
         config=StateConfig(
-            name="AnimaLLM Test Evaluation Processor Chain",
+            name="AnimaLLM Evaluation Processor Chain",
             output_path='../dataset/examples/states',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name="query"),
@@ -138,12 +134,15 @@ chain = ProcessorChainV2(
     # First Processor - Q/A "Vetted" Questions
     processors=[
         # anthropic_question_answer,
-        openai_question_answer,
+        # openai_question_answer,
+        openai_question_answer_devtestset
         # openai_question_answer_multi_persona
     ]
 )
 
-initial_input_state_file  ='../dataset/examples/processor/vetted/questions/qa_4gs_v2.json'
-initial_input_state = State.load_state(initial_input_state_file)
 
-chain(input_state=initial_input_state)
+if __name__ == '__main__':
+    initial_input_state_file ='../dataset/examples/processor/vetted/questions/qa_4gs_v2_devtestset.json'
+    initial_input_state = State.load_state(initial_input_state_file)
+
+    chain(input_state=initial_input_state)

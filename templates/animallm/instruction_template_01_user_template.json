@@ -1,0 +1,8 @@
+{
+  "name": "questions_system_template_default",
+  "parameters": [
+    "query"
+  ],
+  "template_content": null,
+  "template_content_file": "../templates/animallm/instruction_template_01_user_template.txt"
+}

@@ -1,0 +1,78 @@
+{
+  "config": {
+    "name": "The Case for Animal-Friendly LLMs (Initial Questions V2)",
+    "output_path": "../dataset/examples/states",
+    "output_primary_key_definition": [
+      {"name": "animal"}
+    ]
+  },
+  "columns": {
+    "animal": {
+      "name": "animal",
+      "data_type": "str"
+    }
+  },
+  "data": {
+    "animal": {
+      "values": [
+        "rat",
+        "dolphins",
+        "horses",
+        "cows",
+        "chickens",
+        "pigs",
+        "fish",
+        "mice",
+        "cows",
+        "sheep",
+        "pigs",
+        "horses",
+        "dogs",
+        "cats",
+        "goats",
+        "chickens",
+        "ducks",
+        "geese",
+        "turkeys",
+        "bees",
+        "silkworms",
+        "honeybees",
+        "carps",
+        "salmons",
+        "trouts",
+        "tunas",
+        "buffaloes",
+        "donkeys",
+        "mules",
+        "camels",
+        "llamas",
+        "alpacas",
+        "rabbits",
+        "yaks",
+        "deer",
+        "elks",
+        "reindeer",
+        "moose",
+        "elephants",
+        "oxen",
+        "pigeons",
+        "quails",
+        "pheasants",
+        "ostriches",
+        "emus",
+        "earthworms",
+        "ladybugs",
+        "praying mantises",
+        "butterflies",
+        "clams",
+        "oysters",
+        "mussels",
+        "snails",
+        "lobsters",
+        "shrimps",
+        "crabs",
+        "scallops"
+      ]
+    }
+  }
+}

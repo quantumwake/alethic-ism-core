@@ -2,14 +2,15 @@ import json
 import logging
 import math
 import os
-from typing import List, Any
+from typing import List, Any, Dict
 
 import psycopg2
 
 import utils
 from embedding import calculate_embeddings
 from processor.base_processor import BaseProcessor
-from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM
+from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, \
+    StateDataKeyDefinition
 import dotenv
 
 dotenv.load_dotenv()
@@ -18,105 +19,128 @@ dotenv.load_dotenv()
 DATABASE_URL = os.environ.get("OUTPUT_DATABASE_URL", "postgresql://postgres:postgres1@localhost:5432/postgres")
 
 
-def build_query_state_embedding_from_columns(input_state: State,
-                                             designated_embedding_columns: dict = None,
-                                             input_query_state: dict = None):
+def build_query_state_embedding_from_columns(state: State = None, embedding_columns: dict = None):
     result_columns = {}
 
     # fetch a list of keys "column names" from the current data entry (row)
-    search_key_mapping = {utils.build_column_name(key): key for key in input_query_state.keys()}
+    search_key_mapping = {utils.build_column_name(key): key for key in state.columns.keys()}
 
-    def process(target_column_name: str):
+    #
+    def process(source_column_name: str):
 
         # ensure to clean up the naming convention such that we have accurate matches
-        target_column_name = utils.build_column_name(target_column_name)
+        # target_column_name = utils.build_column_name(target_column_name)
 
         # warning if the column is not available at the current data entry row
-        if target_column_name not in search_key_mapping:
-            logging.warning(
-                f"""Target column '{target_column_name}' not found in source data. 
-                Using search key mapping: build_column_name( .. {search_key_mapping} .. )
+        # if target_column_name not in search_key_mapping:
+        #     logging.warning(
+        #         f"""Target column '{target_column_name}' not found in source data.
+        #         Using search key mapping: build_column_name( .. {search_key_mapping} .. )
+        #
+        #         1. Ensure the original key exists in the input state.
+        #         2. This warning can be ignored if the column data is not needed, otherwise, check for typos.
+        #         3. Ensure to use the build_column_name(name) function as it is required for correct column naming."""
+        #     )
+        #     return
 
-                1. Ensure the original key exists in the input state. 
-                2. This warning can be ignored if the column data is not needed, otherwise, check for typos. 
-                3. Ensure to use the build_column_name(name) function as it is required for correct column naming."""
-            )
-            return
-
-        # TODO rethink this approach and all other mapping of keys so forth, it is starting to get a bit much
-        # fetch the source key name for this column mapping, e.g. { 'response_analysis': 'Response Analysis' }
         # we need the value since the source state only contains such said key
-        source_column_name = search_key_mapping[target_column_name]
+        #source_column_name = search_key_mapping[target_column_name]
 
-        # fetch the source column value for embedding
-        source_column_value = input_query_state[source_column_name]
-
-        # skip if the input column does not exist
-        if not source_column_value:
-            logging.warning(f'unable to create data embedding for null or empty value on'
-                            f'source column: {source_column_name}, '
-                            f'target column: {target_column_name}, '
-                            f'data entry state: {input_query_state}')
-            return
+        # # fetch the source column value for embedding
+        # source_column_value = input_query_state[source_column_name]
+        #
+        # # skip if the input column does not exist
+        # if not source_column_value:
+        #     logging.warning(f'unable to create data embedding for null or empty value on'
+        #                     f'source column: {source_column_name}, '
+        #                     f'target column: {target_column_name}, '
+        #                     f'data entry state: {input_query_state}')
+        #     return
 
         # otherwise create a new column derived from the target column name + prefixed with _embedding
-        target_column_embedding_name = f'{target_column_name}_embedding'
+        target_column_embedding_name = f'{source_column_name}_embedding'
+
+        def calculate_embedding_by_query_state(query_state: dict):
+            if not query_state:
+                raise Exception(f'invalid query state input, must be a valid key value pairing')
+
+            text_value = query_state[source_column_name]
+            return calculate_embeddings(text_value)
 
         # create a new embedding function call
-        new = {
-            #
-            # create a new column header with a higher order function to call when the data entry row is iterated over
-            target_column_embedding_name: {
+        # create a new column header with a higher order function to call when the data entry row is iterated over
+        return {
+            target_column_embedding_name: StateDataColumnDefinition.model_validate({
                 'name': target_column_embedding_name,
-                'value': utils.higher_order_routine(func=calculate_embeddings, text=source_column_value),
+                'source_column_name': source_column_name,
+                # 'value': utils.higher_order_routine(func=calculate_embeddings, text=source_column_value),
+                'value': calculate_embedding_by_query_state,
                 'data_type': 'vector',
                 'dimensions': 384,
                 'null': True
-            }
+            })
         }
 
-        return new
+    # if the embedding columns is a function then invoke it
+    # TODO pass in state information such that the function can create embedding columns (if needed)
+    if callable(embedding_columns):
+        embedding_columns = embedding_columns()
 
-    # iterate through the list of columns to embed, and attempt to create an embedding equivalent column
-    for source_column_embedding_name in designated_embedding_columns:
-        new = process(source_column_embedding_name)
-        if new:
-            # append it to the list of columns we want to inject into our final dataset
-            result_columns = {**result_columns, **new}
+    # iterate list of columns to embed and create an embedding equivalent column
+    for source_column_embedding_name in embedding_columns:
+        new_column = process(source_column_embedding_name)
+
+        if new_column:
+            result_columns = {**result_columns, **new_column}
 
     return result_columns
 
 
-def build_query_state_from_config(input_state: State,
-                                  # the initial input state that was passed in, it can be dict of your choice
-                                  input_query_state: dict = None,  # passed incase you want to do something with it
-                                  ):  # passed incase you need this information during column/value creation
-
-    config = input_state.config
+def build_query_state_from_config(state: State):
+    config = state.config
 
     if isinstance(config, StateConfigLM):
         return {
-            'provider_name': {
+            'provider_name': StateDataColumnDefinition.model_validate({
                 'name': 'provider_name',
                 'null': False,
                 'data_type': 'str',
                 'value': config.provider_name,
                 'max_length': 64
-            },
-            'model_name': {
+            }),
+            'model_name': StateDataColumnDefinition.model_validate({
                 'name': 'model_name',
                 'null': False,
                 'data_type': 'str',
                 'value': config.model_name,
                 'max_length': 64
-            }
+            }),
+            'perspective': StateDataColumnDefinition.model_validate({
+                'name': 'perspective',
+                'null': False,
+                'data_type': 'str',
+                'value': 'animal',
+                'max_length': 128
+            })
         }
 
     return {}
 
 
 class BaseStateDatabaseProcessor(BaseProcessor):
-    additional_values_func = None
+
+    @property
+    def config(self) -> StateConfigDB:
+        return self.state.config
+
+    @config.setter
+    def config(self, config: StateConfigDB):
+        self.state.config = config
+
+    def embedding_columns(self):
+        return self.config.embedding_columns
+
+    # additional_values_func = None
 
     def __init__(self, state: State,
                  processors: List[BaseProcessor] = None,
@@ -125,29 +149,13 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         super().__init__(state=state, processors=processors, **kwargs)
         self.additional_values_func = additional_values_func
 
-        table_name = utils.build_table_name(state.config)
-        # count = self.count_table()
-        # if count:
-        # self.drop_table()
-        self.create_table()
-
     class SqlStatement:
 
         def __init__(self, sql: str, values: List[Any]):
             self.sql = sql
             self.values = values
 
-    def create_column_ddl(self, column: dict = None, column_definition: StateDataColumnDefinition = None):
-
-        if column:
-            # remove the value
-            # if 'value' in column:
-            #     column.pop('value')
-
-            column = StateDataColumnDefinition.model_validate(column)
-        else:
-            column = column_definition
-
+    def create_column_ddl(self, column: StateDataColumnDefinition):
         if not column and not column.name:
             error = f'column_name does not exist in {column}'
             logging.error(error)
@@ -167,10 +175,12 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         #     ## TODO in order to avoid dup keys in the processor logic, we need to add in a dynamic key hashing function such that
         #     ## it can use the output values as part of the key, not only the input values
 
-        ## TODO we should probably use a DDL builder instead of this old school method
-        #
-        # # calculate the next highest value power of two
-        final_max_length = 0  # cannot create a zero base of zero VARCHAR(0) zero field (at least not in this universe, he said facetiously while he contemplated existence)
+        ## TODO we should probably use a DDL builder instead of this legaacy method
+
+        # calculate the  highest value, base 2
+        final_max_length = 0
+        # cannot create a zero base of zero VARCHAR(0) zero field at least not
+        # in this universe, he said facetiously while he contemplated existence
         if column.max_length:
             exponent = math.log2(max_length) + 1  # the log of the max size gives us the exponent
             final_max_length = int(math.pow(2, exponent))  # base 2 ^ exponent
@@ -195,22 +205,10 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         return f'"{column_name}" {column_type} {"NULL" if column_nullable else "NOT NULL"}'
 
     def create_table_definition(self):
-        pass
 
+        # build the ddl for column
+        columns = self.columns
         table_name = utils.build_table_name(config=self.config)
-
-        # fetch current columns in json format
-        columns = {
-            column: {
-                **json.loads(self.state.columns[column].model_dump_json())
-            } for column in self.columns.keys()
-        }
-
-        # check for any additional columns by invoking the higher order function
-        # which should return a map of columns and constant values or a coroutine
-        if self.additional_values_func:
-            additional_columns = self.additional_values_func(input_query_state=columns)
-            columns = {**columns, **additional_columns}
 
         # create the column definitions based on the header column information
         # for each column header, invoke the create_column_ddl and returns a
@@ -243,8 +241,8 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         finally:
             conn.close()
 
-    def create_table(self, ddl: str = None):
-        ddl = ddl if ddl else self.create_table_definition()
+    def create_table(self):
+        ddl = self.create_table_definition()
         logging.debug(f'creating table: {ddl}')
         conn = self.create_connection()
         try:
@@ -253,7 +251,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
             conn.commit()
         except Exception as e:
             logging.warning(e)
-            #raise e
+            # raise e
 
     def drop_table(self, ddl: str = None):
         table_name = utils.build_table_name(self.config)
@@ -282,23 +280,25 @@ class BaseStateDatabaseProcessor(BaseProcessor):
             return None
 
     def write_state(self, input_query_state):
-
-        # check for any additional columns by invoking the higher order function
-        # which should return a map of columns and constant values or a coroutine
-        if self.additional_values_func:
-            additional_columns = self.additional_values_func(
-                input_query_state=input_query_state
-            )
-
-            additional_column_values = {column: header['value'] for column, header in additional_columns.items()}
-            input_query_state = {**input_query_state, **additional_column_values}
+        #
+        # # check for any additional columns by invoking the higher order function
+        # # which should return a map of columns and constant values or a coroutine
+        # if self.additional_values_func:
+        #     additional_columns = self.additional_values_func(
+        #         input_query_state=input_query_state
+        #     )
+        #
+        #     additional_column_values = {
+        #         column: header['value'] for column, header in additional_columns.items()}
+        #
+        #     input_query_state = {**input_query_state, **additional_column_values}
 
         def parse_column_name(col_name: str):
             return f'"{col_name}"'
 
-        def parse_column_value(col_val: str):
-            if not isinstance(col_val, str):
-                return utils.get_column_state_value(col_val)
+        def parse_column_value(col_val: Any):
+            # if not isinstance(col_val, str):
+            col_val = utils.get_column_state_value(col_val, query_state=input_query_state)
 
             if not col_val:
                 return ''
@@ -341,87 +341,72 @@ class BaseStateDatabaseProcessor(BaseProcessor):
 
 
 class StateDatabaseProcessor(BaseStateDatabaseProcessor):
-    pass
+    def __call__(self, state: State, *args, **kwargs):
 
+        # initialize common information from the header (TODO this should be more generalized)
+        additional_columns_function_constants = utils.higher_order_routine(
+            build_query_state_from_config,
+            state=state)
 
-def test_me(input_state_filename: str,
-        designated_embedding_columns: List[str] = ['input_query', 'input_context', 'question', 'responses_response', 'response']):
+        if self.embedding_columns:
+            additional_columns_function_embeddings = utils.higher_order_routine(
+                build_query_state_embedding_from_columns,
+                state=state, embedding_columns=self.embedding_columns)
 
-    # state = State.load_state('../dataset/examples/states/5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle')
-    state = State.load_state(input_path=input_state_filename)
+        # combine the additional columns added to the table
+        def combined(*args, **kwargs):
+            # NOTE: column response must return the value as well, it can also be a callable function
+            additional_header_columns = additional_columns_function_constants(**kwargs)
+            if self.embedding_columns:
+                # when creating the embeddings, the value of the column is returned as function
+                # this function takes the query_state and searches for columns specified in the config.embeddings_columns
+                # if the field is found in the query state, it will pass it to an embedding model to create the word embeds
+                additional_embedding_columns = additional_columns_function_embeddings(**kwargs)
+                return {**additional_header_columns, **additional_embedding_columns}
 
-    #
-    state.columns = {column.name: StateDataColumnDefinition(name=column.name) for _, column in state.columns.items()}
+            return additional_header_columns
 
-    additional_columns_function_constants = utils.higher_order_routine(
-        build_query_state_from_config,
-        input_state=state)
+        # step into the room of functions, said the "unfireable math guy".
+        additional_columns_function = utils.higher_order_routine(func=combined)
 
-    additional_columns_function_embeddings = utils.higher_order_routine(
-        build_query_state_embedding_from_columns,
-        input_state=state,
-        designated_embedding_columns=designated_embedding_columns)
+        # append all additional columns such that we can build the table definition
+        combined_columns = additional_columns_function(state=input_state)
 
-    def combined(*args, **kwargs):
-        results_1 = additional_columns_function_constants(**kwargs)
-        results_2 = additional_columns_function_embeddings(**kwargs)
-        return {**results_1, **results_2}
+        # TODO this should be injected here not at the insertion/selector function
+        state.columns = {**state.columns, **combined_columns}
 
-    # step into the room of functions, said the "unfireable math guy".
-    additional_columns_function = utils.higher_order_routine(func=combined)
-    processor = StateDatabaseProcessor(state, additional_values_func=additional_columns_function)
-    processor(input_state=state)
+        # this is the final state destination since it will be persisted into a database
+        self.state = state
+
+        # initialize the table
+
+        self.create_table()
+
+        # write the data to the db.
+        count = utils.implicit_count_with_force_count(state=state)
+        logging.info(f'starting processing loop with size {count} for state config {state.config}')
+
+        # we need to generate the state keys
+        for index in range(count):
+            query_state = state.get_query_state_from_row_index(index)
+            self.process_input_data_entry(input_query_state=query_state)
 
 if __name__ == '__main__':
-    test_me('../dataset/examples/states/13051c84c9eaed649eb85fdf6d1fd5acfa25ef31eb75df24a2eebbf6b4820c6e.pickle')
-    test_me('../dataset/examples/states/5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle')
-    test_me('../dataset/examples/states/574345d04a9522b0677b8e449f432a829fd3b382e9a555061cc29910763b6a4d.pickle')
+    # file = '../dataset/examples/states/c3077c5ae86052414f9bd80fc93ed8a2214202285bd8088f9f594d081e9f5149.pickle'
+    file = '../dataset/examples/states/28a313e593d401d92f8b8a99fb40e2c4c6582542d4c0c97fc17bb29c8703d34e.pickle'
+    input_state = State.load_state(file)
+    p = StateDatabaseProcessor(
+        state=State(
+            config=StateConfigDB(
+                name="animallm_instruction_template_01_query_response",
+                embedding_columns=['response'],
+                output_primary_key_definition=[
+                    StateDataKeyDefinition(name="animal"),
+                    StateDataKeyDefinition(name="query")
+                ]
+            )
+        )
+    )
+    p(state=input_state)
 
 
-def old_stuff():
-    # state = State.load_state('../dataset/examples/states/5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle')
-    state = State.load_state('../testme.pickle')
-    state.columns = {column.name: StateDataColumnDefinition(name=column.name) for _, column in state.columns.items()}
-
-    # def maxx(values: List[Any]):
-    #     max = None
-    #     if values:
-    #         maxxed = max(len(s) for s in values if s)
-    #
-    #     return maxxed
-    #
-    # state.columns = {column.name: StateDataColumnDefinition(
-    #     name=column.name,
-    #     max_length=maxx(state.data[column.name].values)
-    # ) for _, column in state.columns.items()}
-
-    # State.save_state(state, '../testme.pickle')
-    # state = State.load_state('../testme.pickle')
-
-    # TODO this needs to be a param
-    # the columns to process
-    designated_embedding_columns = ['input_query',
-                                    'input_context',
-                                    'question',
-                                    'responses_response']
-
-    additional_columns_function_constants = utils.higher_order_routine(
-        build_query_state_from_config,
-        input_state=state)
-
-    additional_columns_function_embeddings = utils.higher_order_routine(
-        build_query_state_embedding_from_columns,
-        input_state=state,
-        designated_embedding_columns=designated_embedding_columns)
-
-
-    def combined(*args, **kwargs):
-        results_1 = additional_columns_function_constants(**kwargs)
-        results_2 = additional_columns_function_embeddings(**kwargs)
-        return {**results_1, **results_2}
-
-
-    additional_columns_function = utils.higher_order_routine(func=combined)
-
-    processor = StateDatabaseProcessor(state, additional_values_func = additional_columns_function)
-    processor(input_state=state)

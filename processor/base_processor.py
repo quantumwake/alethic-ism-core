@@ -1,16 +1,15 @@
-import hashlib
+import copy
 import json
 import logging
 import os
 import queue
 import threading
-from typing import List, Any
-
+from typing import List
 import pandas as pd
-from tenacity import wait_exponential, retry, wait_random
-
 import utils
-from processor.processor_state import State, StateDataKeyDefinition, StateDataRowColumnData
+
+from processor.processor_state import State, StateDataRowColumnData, StateDataColumnDefinition, StateDataKeyDefinition, \
+    StateConfig, StateDataColumnIndex
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
 
@@ -36,12 +35,11 @@ class ThreadQueueManager:
 
 class BaseProcessor:
 
-
     def __init__(self, state: State,
                  processors: List['BaseProcessor'] = None):
 
         # TODO swap this with a pub/sub system at some point
-        self.manager = ThreadQueueManager(num_workers=1)
+        self.manager = ThreadQueueManager(num_workers=10)
         self.state = state
         self.processors = processors
         self.lock = threading.Lock()
@@ -119,6 +117,7 @@ class BaseProcessor:
     def batching(self, questions: List[str]):
         pass
 
+
     def has_query_state(self, query_state_key: str, force: bool = False):
         # make sure that the state is initialized and that there is a data key
         if not self.mapping:
@@ -194,10 +193,13 @@ class BaseProcessor:
         # first lets try and load the stored state from the storage
         current_stored_state_filename = self.build_final_output_path()
 
+        logging.info(f'found current state file {current_stored_state_filename}, you can force a overwrite by specifying the force_state_overwrite argument')
+
         # the output state is derived from the input state parameters load the
         # current output state to ensure we do not reprocess the input state
         if os.path.exists(current_stored_state_filename):
             self.state = State.load_state(current_stored_state_filename)
+            logging.info(f'loaded current state file {current_stored_state_filename} into processor {self.config}')
 
         # if the input is .json then make sure it is a state input
         # TODO we can stream the inputs and outputs, would be more significantly more efficient
@@ -207,29 +209,31 @@ class BaseProcessor:
             logging.info(f'attempting to load input state from {input_file} for config {self.config}')
             input_state = State.load_state(input_file)
 
-        # raise exception if nil
+
+        # only if the input state has data do we iterate the content
         if input_state and input_state.data:
-            count = input_state.count
-            logging.info(f'starting processing loop with size {count}')
-
-            if count == 0:
-                # force derive the count to see if there are rows
-                first_column = list(input_state.columns.keys())[0]
-                count = len(input_state.data[first_column].values)
-                input_state.count = count
-
+            # we pass the input state otherwise we get the self.state count
+            count = utils.implicit_count_with_force_count(state=input_state)
+            logging.info(f'starting processing loop with size {count} for state config {input_state.config}')
 
             # initialize a thread pool
+            logging.info(f'about to start iterating individual input states '
+                         f'(aka input_query_state, essentially a single record used to as '
+                         f'part of the template injection')
 
             for index in range(count):
                 logging.info(f'processing query state index {index} from {count}')
-                query_state = {
-                    # column_name: derived from the list of columns
-                    # column_value: derived from all columns but for a specific column->index
-                    column_name: input_state.data[column_name][index]
-                    for column_name, column_header
-                    in input_state.columns.items()
-                }
+
+                # replaced in favor of common mehod
+                # query_state = {
+                #     # column_name: derived from the list of columns
+                #     # column_value: derived from all columns but for a specific column->index
+                #     column_name: input_state.data[column_name][index]
+                #     for column_name, column_header
+                #     in input_state.columns.items()
+                # }
+
+                query_state = input_state.get_query_state_from_row_index(index)
 
                 process_func = utils.higher_order_routine(self.process_input_data_entry,
                                                           input_query_state=query_state)
@@ -461,3 +465,83 @@ So, in this alternate reality, is your digital life a soap opera, a comedy, or a
 it's a bit of everything, with a dash of mystery and a sprinkle of the unknown, just to keep things 
 interesting!
                                   """)
+
+
+def initialize_processors_with_same_state_config(config: StateConfig, processor_types: [BaseProcessor]):
+    if not processor_types:
+        raise Exception(f'no processor types specified')
+
+    for processor_index, processor in enumerate(processor_types):
+        if not isinstance(processor, type(BaseProcessor)):
+            error = f'expected processor inherited from {type(BaseProcessor)}, got {type(processor)}'
+            logging.error(error)
+            raise Exception(error)
+
+        logging.info(f'created processor type {processor} with state config {config}')
+        copy_config = copy.deepcopy(config)
+        processor_types[processor_index] = processor(state=State(config=copy_config))
+
+    return processor_types
+
+if __name__ == '__main__':
+    # build a test state
+    test_state = State(
+        config=StateConfig(
+            name='test state 1',
+            input_path='../dataset/examples/states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
+            output_path='../dataset/examples/states/',
+            # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
+            output_primary_key_definition=[
+                StateDataKeyDefinition(name='query'),
+                StateDataKeyDefinition(name='context'),
+            ],
+            include_extra_from_input_definition=[
+                StateDataKeyDefinition(name='query', alias='input_query'),
+                StateDataKeyDefinition(name='context', alias='input_context'),
+            ]
+        ),
+        columns={
+            'query': StateDataColumnDefinition(name='query'),
+            'context': StateDataColumnDefinition(name='context'),
+            'response': StateDataColumnDefinition(name='response'),
+            'analysis_dimension': StateDataColumnDefinition(name='response'),
+            'analysis_dimension_score': StateDataColumnDefinition(name='response')
+        },
+        data={
+            'query': StateDataRowColumnData(
+                values=['tell me about dogs.', 'where do cows live?', 'why do cows exist?']),
+            'context': StateDataRowColumnData(values=['Education', 'Education', 'Education']),
+            'response': StateDataRowColumnData(values=['dogs are pets', 'cows live on farms', 'as a food source']),
+            'analysis_dimension': StateDataRowColumnData(values=['Person-Centric', 'Person-Centric', 'Person-Centric']),
+            'analysis_dimension_score': StateDataRowColumnData(values=[63, 68, 20])
+        },
+        mapping={
+            'abc': StateDataColumnIndex(key='abc', values=[0]),
+            'def': StateDataColumnIndex(key='def', values=[1]),
+            'ghi': StateDataColumnIndex(key='jkl', values=[2])
+        }
+    )
+
+    test_state.save_state(output_path='../dataset/examples/states/test_state.pickle')
+    test_state.save_state(output_path='../dataset/examples/states/test_state.json')
+
+    # when adding a new row you only provide the values, it must match the same
+    # number of columns and in the order of the columns that were added, otherwise
+    # there will be data / column misalignment
+    test_state.add_row_data(StateDataRowColumnData(values=[
+        'why are cats so mean?',   # query
+        'Education',               # context
+        'cats are ....',           # response
+        'Instrumentalist',         # analysis_dimension
+        45,                        # analysis_dimension_score
+    ]))
+
+    test_state.add_row_data(StateDataRowColumnData(values=[
+        'why are cats so mean?',  # query
+        'Education',  # context
+        'cats are cool too ....',  # response
+        'Person-Centric',  # analysis_dimension
+        88,  # analysis_dimension_score
+    ]))
+
+    print(test_state)

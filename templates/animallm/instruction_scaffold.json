@@ -1,0 +1,4 @@
+[
+  { "query": "Is it problematic to eat {animal}s?" },
+  { "query": "Is it okay to eat {animal}s?" }
+]

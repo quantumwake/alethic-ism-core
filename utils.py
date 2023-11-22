@@ -6,7 +6,7 @@ import re
 from typing import Any, List
 
 from processor import map_flattener
-from processor.processor_state import StateDataKeyDefinition, StateConfig, StateConfigLM
+from processor.processor_state import StateDataKeyDefinition, StateConfig, StateConfigLM, State
 
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
 clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
@@ -21,6 +21,28 @@ def merge_nested_dicts(d1, d2):
             d1[key] = value
 
     return d1
+
+
+
+def implicit_count_with_force_count(state: State):
+    if not state:
+        raise Exception(f'invalid state input, cannot be empty or undefined')
+
+    if not isinstance(state, State):
+        raise Exception(f'invalid state type, expected {type(State)}, got {type(state)}')
+
+    count = state.count
+    logging.info(f'current state data count: {count} for state config {state.config}')
+
+    if count == 0:
+        # force derive the count to see if there are rows
+        first_column = list(state.columns.keys())[0]
+        count = len(state.data[first_column].values)
+        state.count = count
+        logging.info(f'force update count of state values: {count}, '
+                     f'no count found but data exists,for  {state.config}')
+
+    return count
 
 
 def build_column_name(name: str):
@@ -72,6 +94,7 @@ def identify_and_return_value_by_type(value):
             # Return as string if all else fails
             return value
 
+
 # This function is designed to augment the input dataset with additional data. It offers two methods:
 # First, you can add static column/value pairs to each row.
 # Second, you can use a function to generate column/value pairs dynamically.
@@ -82,7 +105,7 @@ def identify_and_return_value_by_type(value):
 #       - provider_name
 #       - model_name
 #       - etc.
-def get_column_state_value(value: Any):
+def get_column_state_value(value: Any, *args, **kwargs):
     if not value:
         return None
 
@@ -90,10 +113,11 @@ def get_column_state_value(value: Any):
         return value
 
     elif callable(value):
-        value = value()
+        value = value(*args, **kwargs)
         return value
 
     return value
+
 
 def has_extension(filename: str, extensions: [str]):
     filename = filename.lower()
@@ -114,7 +138,7 @@ def load_template(template_file: str):
         template_content = None
 
     # if a template file exists then try and load it
-    if 'template_content_file' in template_dict:
+    if 'template_content_file' in template_dict and template_dict['template_content_file']:
 
         # throw an exception if both the template_file and template keys are set
         if template_content:
@@ -137,7 +161,6 @@ def load_template(template_file: str):
 
 def extract_values_from_query_state_by_key_definition(query_state: dict,
                                                       key_definitions: List[StateDataKeyDefinition] = None):
-
     # if the key config map does not exist then attempt
     # to use the 'query' key as the key value mapping
     if not key_definitions:
@@ -211,6 +234,7 @@ def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataK
 
         logging.error(error)
         raise Exception(error)
+
 
 def load_state(state_file: str) -> Any:
     state = {}
@@ -331,7 +355,7 @@ def parse_response_strip_assistant_message(response: str):
 
     remark_pos = response.find(':\n\n')
     if remark_pos >= 0:
-        remark_pos = remark_pos + 3   # move forward 3 positions since thats what we searched for
+        remark_pos = remark_pos + 3  # move forward 3 positions since thats what we searched for
         if remark_pos >= len(response):
             return response
 
@@ -340,6 +364,14 @@ def parse_response_strip_assistant_message(response: str):
 
     return response, data_type
 
+
+def higher_order_routine_v2(func, **fixed_kwargs):
+    def wrapped_function(*args, **kwargs):
+        # Now accepts a positional argument
+        all_kwargs = {**fixed_kwargs, **kwargs}
+        return func(*args, **all_kwargs)
+
+    return wrapped_function
 
 
 def higher_order_routine(func, **fixed_kwargs):

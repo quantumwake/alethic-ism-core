@@ -1,21 +1,15 @@
-import logging
-import re
-from typing import List, Any, Type
+from typing import List
 
 import os.path
-import json
 import openai
-import pandas as pd
-import hashlib
 import dotenv
 
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 from tenacity import retry, wait_exponential, wait_random
 
 import utils
-from processor import map_flattener
 from processor.base_processor import BaseProcessor
-from processor.base_question_answer_processor import BaseQuestionAnswerProcessor, StateConfigLM
+from processor.base_question_answer_processor import BaseQuestionAnswerProcessor
 from processor.processor_state import State
 
 dotenv.load_dotenv()
@@ -28,7 +22,7 @@ class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
     def __init__(self, state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
         super().__init__(state=state, processors=processors, **kwargs)
         self.provider_name = self.config.provider_name if self.config.provider_name else "Anthropic"
-        self.model_name = self.config.model_name if self.config.model_name else "claude-2w"
+        self.model_name = self.config.model_name if self.config.model_name else "claude-2"
 
         self.anthropic = Anthropic(max_retries=5)
 
@@ -113,5 +107,6 @@ class OpenAIQuestionAnswerProcessor(OpenAIBaseProcessor):
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
+
         return utils.parse_response(response=response)
 

@@ -29,3 +29,4 @@ def create_embedding(text: str, model_name):
 def calculate_embeddings(text: str):
     return create_embedding(text=text, model_name='st_minilm_l6_v2')
 
+

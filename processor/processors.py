@@ -52,7 +52,7 @@ openai_question_answer = OpenAIQuestionAnswerProcessor(
         config=StateConfigLM(
             # copy_to_children=False,
             name="[AnimaLLM]/[Evaluation]/[Human]/[Categorical]/[Question]",
-            #system_template_path='../templates/questions/questions_with_context_system_template.json',
+            system_template_path='../templates/questions/questions_with_context_system_template.json',
             user_template_path='../templates/questions/questions_with_context_user_template.json',
             output_path='../dataset/examples/states',
             output_primary_key_definition=[
@@ -62,6 +62,27 @@ openai_question_answer = OpenAIQuestionAnswerProcessor(
             include_extra_from_input_definition=[
                 StateDataKeyDefinition(name="query", alias='input_query'),
                 StateDataKeyDefinition(name="context", alias='input_context')
+            ]
+        ),
+    ),
+    processors=[
+        # openai_perspective_multi_persona_evaluator_v1
+    ]
+)
+
+openai_question_answer_devtestset = OpenAIQuestionAnswerProcessor(
+    state=State(
+        config=StateConfigLM(
+            # copy_to_children=False,
+            name="AnimaLLM Input Template 1 (Animals)",
+            system_template_path='../templates/questions/questions_system_animal_template.json',
+            user_template_path='../templates/questions/questions_user_animal_template.json',
+            output_path='../dataset/examples/states',
+            output_primary_key_definition=[
+                StateDataKeyDefinition(name="animal")
+            ],
+            include_extra_from_input_definition=[
+                StateDataKeyDefinition(name="animal")
             ]
         ),
     ),

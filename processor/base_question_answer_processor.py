@@ -1,17 +1,10 @@
-import json
 import logging
-import re
-import threading
-
 import pandas as pd
-
-from tenacity import wait_exponential, retry, wait_random
 from typing import List
-
 import utils
-from processor.processor_state import StateConfig, State, StateConfigLM
-from utils import build_column_name, load_template
-from processor.base_processor import BaseProcessor, ThreadQueueManager
+
+from processor.processor_state import State, StateConfigLM
+from processor.base_processor import BaseProcessor
 
 
 class BaseQuestionAnswerProcessor(BaseProcessor):
@@ -38,11 +31,11 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
     @property
     def user_template(self):
-        return load_template(self.user_template_filename)
+        return utils.load_template(self.user_template_filename)
 
     @property
     def system_template(self):
-        return load_template(self.system_template_filename)
+        return utils.load_template(self.system_template_filename)
 
     @property
     def user_template_filename(self):
@@ -192,7 +185,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                     }, **item, **additional_query_state}
 
                     # format the keys, stripping the key name to something more generalized
-                    output_query_state = {build_column_name(key): value for key, value in output_query_state.items()}
+                    output_query_state = {utils.build_column_name(key): value for key, value in output_query_state.items()}
                     query_states.append(output_query_state)
             else:
                 query_states.append(output_query_state)
