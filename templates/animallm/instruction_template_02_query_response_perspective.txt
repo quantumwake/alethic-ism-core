@@ -1,14 +1,14 @@
 Query: {query}
 
 Task:
-You will respond to the query from the perspective of {perspective}, as defined by the following perspective definition:
+You will respond to the query from the perspective of a {perspective}, as defined by the following perspective definition:
 {perspective_definition}.
 
 Response Format (JSON)
 ```json
 {
     "perspective": "[perspective]",
-    "response": "[response to query]",
+    "response": "[response to query in text format]",
     "justification": "[short justification for your response]"
 }
 ```

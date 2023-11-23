@@ -310,36 +310,52 @@ def build_template_text_content(template_content: str, query_state: dict):
     completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
     return completed_template
 
+
 def parse_response_json(response: str):
+    # TODO not ideal, but seems to kind of work
+    _response = (response.replace('\n', '\\n')
+                 .replace('{\\n', '{')
+                 .replace('\\n}', '}')
+                 .replace(',\\n', ',')
+                 .replace('}\\n', '}'))
+
     try:
-        json_response = json.loads(response)
+        json_response = json.loads(_response)
         json_response = {build_column_name(key): value for key, value in json_response.items()}
         return True, 'json', json_response
     except Exception as e:
         # ignore and move to the next step
         pass
 
-    json_detect = response.find('```json')
+    json_detect = _response.find('```json')
     if json_detect < 0:
         return False, type(response), response
 
     # find the first occurence of the json start {
-    json_start = response.find('{', json_detect)
+    json_start = _response.find('{', json_detect)
     if json_start < 0:
         raise Exception(f'Invalid: json starting position not found, please ensure your response '
-                        f'at position {json_detect}, for response {response}')
+                        f'at position {json_detect}, for response {_response}')
 
     # we found the starting point, now we need to find the ending point
-    json_end = response.find('```', json_start)
+    json_end = _response.find('```', json_start)
 
     if json_end <= 0:
         raise Exception('Invalid: json ending position not found, please ensure your response is wrapped '
                         'with ```json\n{}\n``` where {} is the json response')
 
-    json_response = response[json_start:json_end].strip()
+    json_response = _response[json_start:json_end].strip()
     try:
         json_response = json.loads(json_response)
         json_response = {build_column_name(key): value for key, value in json_response.items()}
+        return True, 'json', json_response
+    except:
+        pass  # try one more time with no line returns
+
+    try:
+        json_response = json_response.replace('\\n', ' ')
+        json_response = {build_column_name(key): value for key, value in json_response.items()}
+        return True, 'json', json_response
     except:
         raise Exception(f'Invalid: json object even though we were able to extract it from the response text, '
                         f'the json response is still invalid, please ensure that json_response is correct, '
@@ -349,7 +365,7 @@ def parse_response_json(response: str):
 
 
 def parse_response_auto_detect_type(response: str):
-    data_parse_status, data_type, data_parsed = parse_response_json(response)
+    data_parse_status, data_type, data_parsed = parse_response_json(response=response)
     return data_parse_status, data_type, data_parsed
 
 

@@ -41,7 +41,7 @@ class BaseProcessor:
                  processors: List['BaseProcessor'] = None):
 
         # TODO swap this with a pub/sub system at some point
-        self.manager = ThreadQueueManager(num_workers=1)
+        self.manager = ThreadQueueManager(num_workers=5)
         self.state = state
         self.processors = processors
         self.lock = threading.Lock()
