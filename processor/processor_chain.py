@@ -1,28 +1,18 @@
-import logging
-import os
-from enum import Enum
-from typing import List, Dict, Any
-
+import logging as log
 import utils
+
+from typing import List
 from processor.base_processor import BaseProcessor
-from processor.base_question_answer_processor import StateConfigLM
 from processor.processor_state import State, StateConfig, StateDataKeyDefinition
-from processor.processors import anthropic_question_answer, openai_question_answer, \
-    openai_question_answer_multi_persona, openai_question_answer_devtestset
-from processor.question_answer_v2 import OpenAIQuestionAnswerProcessor, AnthropicQuestionAnswerProcessor
+from processor.processor_tests import openai_question_answer_devtestset
 
+logging = log.getLogger(__name__)
 
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG").upper()
-LOG_PATH = os.environ.get("LOG_PATH", "../logs/")
-LOG_FILE = f'{LOG_PATH}/examples.log'
-
-logging.basicConfig(encoding='utf-8', level=LOG_LEVEL)
 
 class ProcessorChain(BaseProcessor):
 
     def __init__(self, state: State, processors: List[BaseProcessor]):
         super().__init__(state=state, processors=processors)
-
 
     def __call__(self, *args, **kwargs):
 
@@ -115,8 +105,6 @@ class ProcessorChainV2(BaseProcessor):
         #  but for now we are simply passing the entire state as an input
         super().process_input_data_entry()
         pass
-
-
 
 
 chain = ProcessorChainV2(

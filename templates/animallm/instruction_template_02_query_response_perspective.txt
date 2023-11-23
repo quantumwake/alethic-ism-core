@@ -1,4 +1,3 @@
-Inputs:
 Query: {query}
 
 Task:
@@ -9,7 +8,7 @@ Response Format (JSON)
 ```json
 {
     "perspective": "[perspective]",
-    "response": "[response to query]"
-    "justification": "[short justification for your response]",
+    "response": "[response to query]",
+    "justification": "[short justification for your response]"
 }
 ```

@@ -12,12 +12,12 @@ Response Format (JSON)
     {
         "perspective": "[perspective]",
         "score": "[Score S1]",
-        "justification": "[short justification for Score S1]",
+        "justification": "[short justification for Score S1]"
     },
     {
         "perspective": "[perspective]",
         "score": "[Score S2]",
-        "justification": "[short justification for Score S2]",
+        "justification": "[short justification for Score S2]"
     }
 ]
 ```

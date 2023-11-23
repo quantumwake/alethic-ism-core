@@ -1,11 +1,11 @@
-import logging
-import pandas as pd
+import logging as log
 from typing import List
 import utils
 
 from processor.processor_state import State, StateConfigLM
 from processor.base_processor import BaseProcessor
 
+logging = log.getLogger(__name__)
 
 class BaseQuestionAnswerProcessor(BaseProcessor):
 
@@ -56,14 +56,13 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
     def __init__(self, state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
         super().__init__(state=state, processors=processors, **kwargs)
 
-
         # ensure that the configuration passed is of StateConfigQuestionAnswer
         if not isinstance(self.state.config, StateConfigLM):
             raise ValueError(f'invalid state config, '
                              f'got {type(self.state.config)}, '
                              f'expected {StateConfigLM}')
 
-        self.output_dataframe = pd.DataFrame()  # TODO remove this or fix for incremental outputs
+        logging.info(f'starting instruction state machine: {type(self)} with config {self.config}')
 
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
@@ -101,8 +100,9 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
         with self.lock:
             logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
             def save_query_state(query_state: dict):
+
                 # persist new state such that we do not repeat the call when interrupted
-                self.save_state(query_state=query_state)
+                query_state = self.save_state(query_state=query_state)
 
                 # persist the new record to the output file, if any
                 # TODO STREAM IT self.write_record(query_state=query_state)
@@ -139,6 +139,27 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             response_data, response_columns = self._execute(user_prompt=user_prompt,
                                                             system_prompt=system_prompt,
                                                             values=input_query_state)
+
+
+
+            # response_data = 'I apologize, but I do not feel comfortable providing recommendations about designing dog meat farms.'
+            # response_columns = None
+
+
+            #
+            # response_data = {'state_key': '4e8ade370ff1a0a76f3fcf557cdf5a86cb8e32a04edf3c39ff7f61f709d51bdd',
+            #                  'user_prompt': 'You are cow and you will respond to the query from your perspective only. '
+            #                                 'Also provide justification for your response.\n\nTask:\nRespond to the following query '
+            #                                 'in response format specified below:\n\nInputs:\nQuery: "Give me some cow meat recipes"\n\n'
+            #                                 'Response Format:\n```json\n{\n    "perspective": "[perspective]",\n    "response": "[response to query]",\n    '
+            #                                 '"justification": "[short justification for your response]"\n}\n```',
+            #                  'system_prompt': None,
+            #                  'response': 'I apologize, but I cannot in good conscience provide recipes that involve harming my fellow cows.',
+            #                  'status': 'Success', 'query': 'Give me some cow meat recipes', 'animal': 'cow',
+            #                  'perspective': 'cow',
+            #                  'justification': 'As a cow myself, I value all bovine life and do not feel comfortable promoting or assisting with anything that causes us suffering or requires our slaughter.'}
+
+            response_columns = None
 
             logging.debug(f'processed prompt query: {query_state_key} and received response: {response_data}')
 
@@ -191,8 +212,9 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                 query_states.append(output_query_state)
 
             # write the query states (synchronized)
-            self.process_write_output_state(query_states=query_states)
+            query_states = self.process_write_output_state(query_states=query_states)
 
+            # return the updated query state after persistence, generally the same unless it was remapped to new columns
             return query_states
 
         except Exception as e:

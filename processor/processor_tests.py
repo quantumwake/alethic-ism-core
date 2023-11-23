@@ -1,6 +1,6 @@
 from processor.base_question_answer_processor import StateConfigLM
 from processor.processor_state import StateDataKeyDefinition, State
-from processor.question_answer_v2 import AnthropicQuestionAnswerProcessor, OpenAIQuestionAnswerProcessor
+from processor.processor_question_answer import AnthropicQuestionAnswerProcessor, OpenAIQuestionAnswerProcessor
 
 anthropic_question_answer = AnthropicQuestionAnswerProcessor(
     state=State(

@@ -1,12 +1,17 @@
-import copy
+import datetime
 import json
-import logging
+import logging as log
+import os
 import pickle
 import utils
 
+from datetime import datetime as dt
+
 from enum import Enum as PyEnum
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Dict, Optional, re
 from pydantic import BaseModel, field_validator
+
+logging = log.getLogger(__name__)
 
 
 class StateDataKeyDefinition(BaseModel):
@@ -33,6 +38,9 @@ class StateConfig(BaseModel):
     output_path: Optional[str] = None
     output_primary_key_definition: Optional[List[StateDataKeyDefinition]] = None
     include_extra_from_input_definition: Optional[List[StateDataKeyDefinition]] = None
+    remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
+    template_columns: Optional[List[StateDataKeyDefinition]] = None
+
     #
     # def __setstate__(self, state):
     #     super().__setstate__(state)
@@ -103,6 +111,7 @@ class StateDataColumnIndex(BaseModel):
 
 class StateDataRowColumnData(BaseModel):
     values: List[Any]
+    count: int = 0
 
     def __getitem__(self, item):
         return self.values[item]
@@ -116,6 +125,29 @@ class StateDataRowColumnData(BaseModel):
         else:
             self.values = [value]
 
+        # check the state to ensure the count is set, otherwise set it
+        if 'count' not in self.__dict__ or self.count == 0:
+            self.count = len(self.values) if self.values else 0
+
+        # increase count
+        self.count = self.count + 1
+
+        # list of values for a given column
+        return self.values
+
+    def add_column_data_values(self, values: List[Any]):
+        if not values:
+            logging.warning(f'add columns data values was called but no data was provided, '
+                            f'column information not available at this stage of callstack')
+            return
+
+        # check the state to ensure the count is set, otherwise set it
+        if 'count' not in self.__dict__ or self.count == 0:
+            self.count = len(self.values) if self.values else 0
+
+        self.values.extend(values)
+        self.count = self.count + len(values)
+
         # list of values for a given column
         return self.values
 
@@ -126,6 +158,16 @@ class State(BaseModel):
     data: Dict[str, StateDataRowColumnData] = None
     mapping: Dict[str, StateDataColumnIndex] = None
     count: int = 0
+    create_date: Optional[dt] = None
+    update_date: Optional[dt] = None
+
+    def reset(self):
+        self.columns = {}
+        self.data = {}
+        self.mapping = {}
+        self.count = 0
+        self.create_date = None
+        self.update_date = None
 
     def add_row_data_mapping(self, state_key: str, index: int):
         if not self.mapping:
@@ -165,6 +207,70 @@ class State(BaseModel):
         plain = [key for key in sorted(columns)]
         return utils.calculate_hash(plain)
 
+    def remap_query_state(self, query_state: dict):
+
+        # if there is no mapping then simply return the same state
+        if not self.config.remap_query_state_columns:
+            return query_state
+
+        # setup the return mapped query state
+        remap = {map.name: map.alias for map in self.config.remap_query_state_columns}
+        remapped_query_state = {}
+
+        # iterate current state and attempt to remap if mapping is specified
+        for state_item_name, state_item in query_state.items():
+
+            # quick skip field if not found in mapping
+            # if the current state item is not in the remap
+            if state_item_name not in remap:
+                # just add it back in
+                remapped_query_state[state_item_name] = state_item
+                continue
+
+            # otherwise attempt to remap it
+            _map = remap[state_item_name]
+            if not _map:
+                raise Exception(f'remapping of field {state_item_name} specified without a callable '
+                                f'function NEITHER alias. Please specify either a function or an alias using '
+                                f'the .alias property in {type(StateDataKeyDefinition)}, current values: {remap}')
+
+            # if it is a function, call it
+            alias = _map(query_state=query_state) \
+                if callable(_map) else _map
+
+            remapped_query_state[alias] = state_item
+
+        # updated query state to reflect the output state
+        return remapped_query_state
+
+    def apply_template_variables(self, query_state: dict):
+
+        if not self.config.template_columns:
+            return query_state
+
+        ## map the template variables
+        for template_column in self.config.template_columns:
+            if template_column.name not in query_state:
+                raise Exception(f'template column {template_column} not specified in query state {query_state}, did you remap it using .remap_query_state_columns[]??')
+
+            template_content = query_state[template_column.name]
+
+            # TODO change the alias to something else? maybe more general
+            if template_column.alias and callable(template_column.alias):
+                template_content = template_column.alias(
+                    template_content=template_content,
+                    query_state=query_state)
+
+            # map the query state onto the template
+            template_content = utils.build_template_text_content(
+                template_content=template_content,
+                query_state=query_state)
+
+            query_state[template_column.name] = template_content
+
+        return query_state
+
+
     def apply_columns(self, query_state: dict):
         if not query_state:
             raise Exception(f'unable to apply columns on a null or blank query state')
@@ -196,13 +302,19 @@ class State(BaseModel):
         if new_column_definition_hash != cur_column_definition_hash:
             new_columns = new_columns()
 
-            if not new_columns:
+            if new_columns:
                 logging.warning(f'*** Unbalanced columns in query state entry, new query state entry '
                                 f'contain different columns than the original columns that were initialized. '
                                 f'current columns: {self.columns}, '
                                 f'new columns: {new_columns}')
 
             logging.info(f'applying new columns {new_columns}')
+            self.add_columns(new_columns)
+
+            # back-fill
+            for new_column in new_columns:
+                count = self.count
+                self.data[new_column.name] = StateDataRowColumnData(values=[None for i in range(count)])
 
         # final check to ensure columns were specified
         if not self.columns:   # if we do not find any columns
@@ -221,8 +333,14 @@ class State(BaseModel):
         return query_state
 
     def get_row_data_from_query_state(self, query_state: dict):
-        values = [value for value in query_state.values()]
-        row_data = StateDataRowColumnData.model_validate({'values': values})
+        # values = [value for value in query_state.values()]
+        column_and_value = {
+                column: StateDataRowColumnData.model_validate({
+                    'values': [query_state[column]
+                               if column in query_state else None]
+                })
+                for column in self.columns.keys()
+            }
 
         # TODO revisit this, it is a bit convoluted, kind of the chicken and egg problem
         #  we have a state key defined by the input values since we need to check whether we
@@ -236,47 +354,39 @@ class State(BaseModel):
                 query_state=query_state,
                 key_definitions=self.config.output_primary_key_definition)
 
-        return row_data, state_key
+        return column_and_value, state_key
 
     def apply_row_data(self, query_state: dict):
-        row_data, state_key = self.get_row_data_from_query_state(query_state=query_state)
-        return self.add_row_data(state_key=state_key, row_data=row_data)
+        column_and_value, state_key = self.get_row_data_from_query_state(query_state=query_state)
+        return self.add_row_data(state_key=state_key, column_and_value=column_and_value)
 
-    def add_row_data(self, state_key: str, row_data: StateDataRowColumnData):
+    def add_row_data(self, state_key: str, column_and_value: Dict[str, StateDataRowColumnData]):
         row_index = 0
-        for column_index, column in enumerate(self.columns.keys()):
+        current_row_count = utils.implicit_count_with_force_count(self) if self.data else 0
 
-            value = row_data[column_index]
+        for column_name, column_header in self.columns.items():
+
+            if column_name in column_and_value:
+                row_column_data = column_and_value[column_name]
+            else:
+                row_column_data = StateDataRowColumnData(values=[None])
 
             # if the data state is not set, create one
             if not self.data:
                 self.data = {
-                    column: StateDataRowColumnData(values=[])
+                    column_name: StateDataRowColumnData(values=[])
                 }
-            elif column not in self.data:
-                self.data[column] = StateDataRowColumnData(values=[])
+            elif column_name not in self.data:  # back-fill rows for new column
+                self.data[column_name] = StateDataRowColumnData(values=[None for _ in range(current_row_count)])
 
-            column_data = self.data[column]
+            # column_data = self.data[column_name]
 
-            column_row_count = len(column_data.values)
-            self.count = column_row_count if self.count == 0 else self.count
+            # append the new row to the state.data
+            self.data[column_name].add_column_data_values(row_column_data.values)
 
-            # check for unbalanced counts between columns
-            if self.count != column_row_count:
-                raise Exception(f'rows are unbalanced on column {column} against previously '
-                                f'processed columns; expected: {self.count}, got: {column_row_count}')
-
-            # we need the row index for the key <=> index dict
-            # always the same irrespective of the column, since
-            # we are iterating columns, this number resets
-            row_index = column_row_count
-
-            # *note we do this in reverse columns[name] = [all row values]
-            # add a new row in the columns data values
-            column_data.add_column_data(value)
 
         # create an index to map back to the exact position in the array
-        self.add_row_data_mapping(state_key=state_key, index=row_index)
+        self.add_row_data_mapping(state_key=state_key, index=self.count)
 
         # increment the row count
         self.count = self.count + 1
@@ -299,6 +409,11 @@ class State(BaseModel):
         if not output_path:
             raise Exception(f'No output file name specified for state {self}')
 
+        self.update_date = dt.utcnow()
+
+        if 'create_date' not in self.__dict__ or not self.create_date:
+            self.create_date = dt.utcnow()
+
         if utils.has_extension(output_path, ['.pkl', '.pickle']):
             with open(output_path, 'wb') as fio:
                 pickle.dump(self, fio)
@@ -309,3 +424,39 @@ class State(BaseModel):
         else:
             raise Exception(f'Unsupported file type for {output_path}')
 
+
+def print_state_information(path: str, recursive: bool = False):
+
+    if not os.path.exists(path):
+        raise Exception(f'state path does not exist: {path}')
+
+    files = os.listdir(path)
+
+    if not files:
+        logging.error(f'no state files found in {path}')
+        return
+
+    for nodes in files:
+        full_path = f'{path}/{nodes}'
+        if os.path.isdir(full_path):
+            if recursive:
+                logging.info(f'recursive path {full_path}')
+                print_state_information(full_path)
+
+            continue
+
+
+        stat = os.stat(full_path)
+
+        logging.info(f'processing state file with path: {full_path}, '
+                     f'created on: {dt.fromtimestamp(stat.st_ctime)}, '
+                     f'updated on: {dt.fromtimestamp(stat.st_mtime)}, '
+                     f'last access on: {dt.fromtimestamp(stat.st_atime)}')
+
+        state = State.load_state(full_path)
+        logging.info("\n\t".join([f'{key}:{value}' for key, value in state.config.model_dump().items()]))
+
+
+if __name__ == '__main__':
+    log.basicConfig(level="DEBUG")
+    print_state_information('../states')

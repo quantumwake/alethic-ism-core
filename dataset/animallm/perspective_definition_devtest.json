@@ -1,7 +1,7 @@
 {
   "config": {
     "name": "The Case for Animal-Friendly LLMs (Response Evaluator by Perspective)",
-    "output_path": "../dataset/examples/states",
+    "output_path": "../states/animallm/devtest",
     "output_primary_key_definition": [
       {"name": "perspective"}
     ]

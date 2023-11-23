@@ -1,12 +1,14 @@
 import hashlib
 import json
-import logging
+import logging as log
 import os
 import re
 from typing import Any, List
 
-from processor import map_flattener
+import map_flattener
 from processor.processor_state import StateDataKeyDefinition, StateConfig, StateConfigLM, State
+
+logging = log.getLogger(__name__)
 
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
 clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
@@ -21,7 +23,6 @@ def merge_nested_dicts(d1, d2):
             d1[key] = value
 
     return d1
-
 
 
 def implicit_count_with_force_count(state: State):
@@ -289,15 +290,35 @@ def build_template_text(template: dict, query_state: dict):
         logging.info(f'no parameters founds for {template_name}')
         return template_content
 
+    # def replace_variable(match):
+    #     variable_name = match.group(1)  # Extract variable name within {{...}}
+    #     return query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
+    #
+    # completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
+
+    completed_template = build_template_text_content(template_content=template_content,
+                                                     query_state=query_state)
+
+    return True, completed_template
+
+
+def build_template_text_content(template_content: str, query_state: dict):
     def replace_variable(match):
         variable_name = match.group(1)  # Extract variable name within {{...}}
         return query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
 
     completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
-    return True, completed_template
-
+    return completed_template
 
 def parse_response_json(response: str):
+    try:
+        json_response = json.loads(response)
+        json_response = {build_column_name(key): value for key, value in json_response.items()}
+        return True, 'json', json_response
+    except Exception as e:
+        # ignore and move to the next step
+        pass
+
     json_detect = response.find('```json')
     if json_detect < 0:
         return False, type(response), response

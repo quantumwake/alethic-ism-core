@@ -49,7 +49,10 @@ def _flatten_by_dict(input: Any, key: str = '', current: dict = None, items: lis
 
 
 def flatten(input: Any):
-    _, items = _flatten_by_dict(input)
+    one, items = _flatten_by_dict(input)
+    if not items:
+        return one
+
     return items
 
 

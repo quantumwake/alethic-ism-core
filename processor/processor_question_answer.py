@@ -1,3 +1,4 @@
+import logging as log
 from typing import List
 
 import os.path
@@ -12,9 +13,12 @@ from processor.base_processor import BaseProcessor
 from processor.base_question_answer_processor import BaseQuestionAnswerProcessor
 from processor.processor_state import State
 
+
 dotenv.load_dotenv()
 openai_api_key = os.environ.get('OPENAI_API_KEY', None)
 openai.api_key = openai_api_key
+
+logging = log.getLogger(__name__)
 
 
 class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
@@ -23,8 +27,9 @@ class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
         super().__init__(state=state, processors=processors, **kwargs)
         self.provider_name = self.config.provider_name if self.config.provider_name else "Anthropic"
         self.model_name = self.config.model_name if self.config.model_name else "claude-2"
-
         self.anthropic = Anthropic(max_retries=5)
+
+        logging.info(f'extended instruction state machine: {type(self)} with config {self.config}')
 
     def batching(self, questions: List[str]):
         raise NotImplementedError()
@@ -63,6 +68,7 @@ class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
         self.provider_name = self.config.provider_name if self.config.provider_name else "OpenAI"
         self.model_name = self.config.model_name if self.config.model_name else "gpt-4-1106-preview"
 
+        logging.info(f'extended instruction state machine: {type(self)} with config {self.config}')
 
     def batching(self, questions: List[str]):
         raise NotImplementedError()

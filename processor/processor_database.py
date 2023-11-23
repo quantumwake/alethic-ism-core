@@ -1,16 +1,14 @@
-import json
-import logging
+import logging as log
 import math
 import os
-from typing import List, Any, Dict
+from typing import List, Any
 
 import psycopg2
 
 import utils
 from embedding import calculate_embeddings
 from processor.base_processor import BaseProcessor
-from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, \
-    StateDataKeyDefinition
+from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, StateDataKeyDefinition
 import dotenv
 
 dotenv.load_dotenv()
@@ -18,6 +16,7 @@ dotenv.load_dotenv()
 # Read database URL from environment variable, defaulting to a local PostgreSQL database
 DATABASE_URL = os.environ.get("OUTPUT_DATABASE_URL", "postgresql://postgres:postgres1@localhost:5432/postgres")
 
+logging = log.getLogger(__name__)
 
 def build_query_state_embedding_from_columns(state: State = None, embedding_columns: dict = None):
     result_columns = {}
@@ -115,13 +114,13 @@ def build_query_state_from_config(state: State):
                 'value': config.model_name,
                 'max_length': 64
             }),
-            'perspective': StateDataColumnDefinition.model_validate({
-                'name': 'perspective',
-                'null': False,
-                'data_type': 'str',
-                'value': 'animal',
-                'max_length': 128
-            })
+            # 'perspective': StateDataColumnDefinition.model_validate({
+            #     'name': 'perspective',
+            #     'null': False,
+            #     'data_type': 'str',
+            #     'value': 'animal',
+            #     'max_length': 128
+            # })
         }
 
     return {}
@@ -392,13 +391,14 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
             self.process_input_data_entry(input_query_state=query_state)
 
 if __name__ == '__main__':
-    # file = '../dataset/examples/states/c3077c5ae86052414f9bd80fc93ed8a2214202285bd8088f9f594d081e9f5149.pickle'
-    file = '../states/archive_20231122/28a313e593d401d92f8b8a99fb40e2c4c6582542d4c0c97fc17bb29c8703d34e.pickle'
+    file = '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle'
+    # file = '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle'
+
     input_state = State.load_state(file)
     p = StateDatabaseProcessor(
         state=State(
             config=StateConfigDB(
-                name="animallm_instruction_template_01_query_response",
+                name="animallm_instruction_template_01_query_response_animal",
                 embedding_columns=['response'],
                 output_primary_key_definition=[
                     StateDataKeyDefinition(name="animal"),
