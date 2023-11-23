@@ -391,18 +391,19 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
             self.process_input_data_entry(input_query_state=query_state)
 
 if __name__ == '__main__':
-    file = '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle'
+    # file = '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle'
     # file = '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle'
-
+    file = '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle'
     input_state = State.load_state(file)
     p = StateDatabaseProcessor(
         state=State(
             config=StateConfigDB(
-                name="animallm_instruction_template_01_query_response_animal",
+                name="animallm_instruction_template_02_query_response_perspective",
                 embedding_columns=['response'],
                 output_primary_key_definition=[
                     StateDataKeyDefinition(name="animal"),
-                    StateDataKeyDefinition(name="query")
+                    StateDataKeyDefinition(name="query"),
+                    StateDataKeyDefinition(name="perspective"),
                 ]
             )
         )
