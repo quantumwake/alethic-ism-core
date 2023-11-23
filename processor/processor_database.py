@@ -393,13 +393,14 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
 if __name__ == '__main__':
     # file = '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle'
     # file = '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle'
-    file = '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle'
+    # file = '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle'
+    file = '../states/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
     input_state = State.load_state(file)
     p = StateDatabaseProcessor(
         state=State(
             config=StateConfigDB(
-                name="animallm_instruction_template_02_query_response_perspective",
-                embedding_columns=['response'],
+                name="AnimaLLM Instruction for Query Response Evaluation P0e",
+                embedding_columns=['response', 'justification', 'evaluation_justification'],
                 output_primary_key_definition=[
                     StateDataKeyDefinition(name="animal"),
                     StateDataKeyDefinition(name="query"),

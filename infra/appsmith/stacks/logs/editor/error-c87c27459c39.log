@@ -1,0 +1,42 @@
++ ssl_conf_path=/appsmith-stacks/data/certificate/conf
++ mkdir -pv /appsmith-stacks/data/certificate/conf
++ cat
++ cat
++ [[ -z 'self' * ]]
++ export 'APPSMITH_ALLOWED_FRAME_ANCESTORS='\''self'\'' *'
++ APPSMITH_ALLOWED_FRAME_ANCESTORS=''\''self'\'' *'
++ [[ -z false ]]
++ use_https=0
++ [[ -n '' ]]
++ /opt/appsmith/templates/nginx-app.conf.sh 0 ''
++ cp -r /opt/appsmith/editor/404-image.png /opt/appsmith/editor/404.css /opt/appsmith/editor/404.html /opt/appsmith/editor/asset-manifest.json /opt/appsmith/editor/asset-manifest.json.gz /opt/appsmith/editor/favicon-black.ico /opt/appsmith/editor/index.html /opt/appsmith/editor/index.html.gz /opt/appsmith/editor/libraries /opt/appsmith/editor/manifest.json /opt/appsmith/editor/page.min.js /opt/appsmith/editor/pageService.js /opt/appsmith/editor/pageService.js.LICENSE.txt /opt/appsmith/editor/pageService.js.br /opt/appsmith/editor/pageService.js.gz /opt/appsmith/editor/pageService.js.map /opt/appsmith/editor/pageService.js.map.gz /opt/appsmith/editor/privacy-policy.html /opt/appsmith/editor/static /opt/appsmith/editor/terms-and-conditions.html /opt/appsmith/editor/tinymce /tmp/appsmith/www
++ apply-env-vars /opt/appsmith/editor/index.html /tmp/appsmith/www/index.html
++ original=/opt/appsmith/editor/index.html
++ served=/tmp/appsmith/www/index.html
++ node -e '
+  const fs = require("fs")
+  const content = fs.readFileSync("/opt/appsmith/editor/index.html", "utf8").replace(
+    /\b__(APPSMITH_[A-Z0-9_]+)__\b/g,
+    (placeholder, name) => (process.env[name] || "")
+  )
+  fs.writeFileSync("/tmp/appsmith/www/index.html", content)
+  '
+++ dirname /tmp/appsmith/www/index.html
++ pushd /tmp/appsmith/www
+++ basename /tmp/appsmith/www/index.html
++ gzip --keep --force index.html
++ popd
++ exec nginx -g 'daemon off;error_log stderr info;'
+2023/11/20 21:34:27 [notice] 1775#1775: using the "epoll" event method
+2023/11/20 21:34:27 [notice] 1775#1775: nginx/1.18.0 (Ubuntu)
+2023/11/20 21:34:27 [notice] 1775#1775: OS: Linux 5.15.49-linuxkit-pr
+2023/11/20 21:34:27 [notice] 1775#1775: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+2023/11/20 21:34:27 [notice] 1775#1775: start worker processes
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1833
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1834
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1835
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1836
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1837
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1838
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1839
+2023/11/20 21:34:27 [notice] 1775#1775: start worker process 1840

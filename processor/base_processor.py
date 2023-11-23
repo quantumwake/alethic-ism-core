@@ -109,6 +109,14 @@ class BaseProcessor:
     def include_extra_from_input_definition(self, value):
         self.config.include_extra_from_input_definition = value
 
+    def add_processor(self, processor: 'BaseProcessor') -> List['BaseProcessor']:
+        if not self.processors:
+            self.processors = [processor]
+            return self.processors
+
+        self.processors.append(processor)
+        return self.processors
+
     def add_output_from_dict(self, query_state: dict):
         if len(self.output_dataframe) > 0:
             _append_query_state = pd.DataFrame([query_state])
@@ -146,6 +154,7 @@ class BaseProcessor:
     def execute_downstream_processor_nodes(self):
         if not self.processors:
             logging.info(f'no downstream processors available for config input {self.config} with input state {self.build_final_output_path()}')
+            return
 
         # iterate each child processor and inject the output state
         # of the current processor into each of the child processor
@@ -159,6 +168,9 @@ class BaseProcessor:
             # downstream / adjacent processors nodes
             process_func = utils.higher_order_routine(self.execute_downstream_processor_node, node=downstream_node)
             self.manager.add_to_queue(process_func)
+
+        # wait for completion on downstream processor nodes
+        self.manager.wait_for_completion()
 
 
     def _be_a_dumb_coder(self):
@@ -247,7 +259,7 @@ class BaseProcessor:
 
 
             # # execute the downstream function to handle state propagation
-            # self.execute_downstream_processor_nodes()
+            self.execute_downstream_processor_nodes()
 
         else:
             error = f'*******INVALID INPUT STATE or INPUT STATE FILE or STREAM*********\n'\

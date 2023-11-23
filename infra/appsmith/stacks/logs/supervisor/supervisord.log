@@ -1,0 +1,31 @@
+2023-11-20 21:34:26,251 CRIT Supervisor is running as root.  Privileges were not dropped because no user is specified in the config file.  If you intend to run as root, you can set user=root in the config file to avoid this message.
+2023-11-20 21:34:26,252 INFO Included extra file "/tmp/appsmith/supervisor-conf.d/backend.conf" during parsing
+2023-11-20 21:34:26,254 INFO Included extra file "/tmp/appsmith/supervisor-conf.d/cron.conf" during parsing
+2023-11-20 21:34:26,256 INFO Included extra file "/tmp/appsmith/supervisor-conf.d/editor.conf" during parsing
+2023-11-20 21:34:26,258 INFO Included extra file "/tmp/appsmith/supervisor-conf.d/mongodb.conf" during parsing
+2023-11-20 21:34:26,260 INFO Included extra file "/tmp/appsmith/supervisor-conf.d/postgres.conf" during parsing
+2023-11-20 21:34:26,261 INFO Included extra file "/tmp/appsmith/supervisor-conf.d/redis.conf" during parsing
+2023-11-20 21:34:26,262 INFO Included extra file "/tmp/appsmith/supervisor-conf.d/rts.conf" during parsing
+2023-11-20 21:34:26,277 INFO RPC interface 'supervisor' initialized
+2023-11-20 21:34:26,279 INFO RPC interface 'supervisor' initialized
+2023-11-20 21:34:26,279 CRIT Server 'unix_http_server' running without any HTTP authentication checking
+2023-11-20 21:34:26,281 INFO supervisord started with pid 1
+2023-11-20 21:34:27,277 INFO spawned: 'stdout' with pid 1766
+2023-11-20 21:34:27,284 INFO spawned: 'redis' with pid 1767
+2023-11-20 21:34:27,290 INFO spawned: 'mongodb' with pid 1768
+2023-11-20 21:34:27,297 INFO spawned: 'rts' with pid 1772
+2023-11-20 21:34:27,306 INFO spawned: 'backend' with pid 1773
+2023-11-20 21:34:27,318 INFO spawned: 'editor' with pid 1775
+2023-11-20 21:34:27,325 INFO spawned: 'cron' with pid 1778
+2023-11-20 21:34:27,333 INFO spawned: 'postgres' with pid 1785
+2023-11-20 21:34:27,336 INFO reaped unknown pid 16
+2023-11-20 21:34:27,459 INFO success: redis entered RUNNING state, process has stayed up for > than 0 seconds (startsecs)
+2023-11-20 21:34:27,460 INFO success: rts entered RUNNING state, process has stayed up for > than 0 seconds (startsecs)
+2023-11-20 21:34:27,462 INFO success: editor entered RUNNING state, process has stayed up for > than 0 seconds (startsecs)
+2023-11-20 21:34:27,464 INFO success: cron entered RUNNING state, process has stayed up for > than 0 seconds (startsecs)
+2023-11-20 21:34:28,369 INFO success: stdout entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-11-20 21:34:28,371 INFO success: postgres entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2023-11-20 21:34:34,491 INFO reaped unknown pid 51
+2023-11-20 21:34:37,819 INFO success: mongodb entered RUNNING state, process has stayed up for > than 10 seconds (startsecs)
+2023-11-20 21:34:47,306 INFO success: backend entered RUNNING state, process has stayed up for > than 20 seconds (startsecs)
+2023-11-21 06:10:41,398 INFO reaped unknown pid 12612

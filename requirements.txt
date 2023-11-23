@@ -5,6 +5,7 @@ annotated-types==0.6.0
 anthropic==0.6.0
 anyio==3.7.1
 async-timeout==4.0.3
+asyncpg==0.29.0
 attrs==23.1.0
 banal==1.0.6
 certifi==2023.7.22

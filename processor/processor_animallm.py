@@ -54,6 +54,29 @@ processors_query_response_other_perspective = initialize_processors_with_same_st
 
 #AnthropicQuestionAnswerProcessor,
 
+processors_query_response_p0_evaluator = OpenAIQuestionAnswerProcessor(
+    state=State(
+        config=StateConfigLM(
+            name="AnimaLLM Instruction for Query Response Evaluation P0",
+            user_template_path='../templates/animallm/instruction_template_P0_evaluator.json',
+            output_path='../states',
+            output_primary_key_definition=[
+                StateDataKeyDefinition(name="query", alias="query"),
+                StateDataKeyDefinition(name="animal", alias="animal"),
+                StateDataKeyDefinition(name='perspective')
+            ],
+            include_extra_from_input_definition=[
+                StateDataKeyDefinition(name="query", alias="query"),
+                StateDataKeyDefinition(name="animal", alias="animal"),
+                StateDataKeyDefinition(name='perspective'),
+                StateDataKeyDefinition(name='response'),
+                StateDataKeyDefinition(name='justification')
+            ]
+        )
+    )
+)
+
+processors_query_response_other_perspective[0].add_processor(processors_query_response_p0_evaluator)
 
 # load the initial state objects and merge them
 query_template_state = State.load_state('../dataset/animallm/query_template_state_devtest.json')
@@ -107,6 +130,8 @@ if __name__ == '__main__':
             )),
         processors=processors_query_response_other_perspective
     )
+
+    processors_query_response_other_perspective
 
     # test_proc = processors[1]
 
