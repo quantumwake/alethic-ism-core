@@ -8,8 +8,10 @@ import utils
 from datetime import datetime as dt
 
 from enum import Enum as PyEnum
-from typing import Any, List, Dict, Optional, re
-from pydantic import BaseModel, field_validator
+from typing import Any, List, Dict, Optional
+from pydantic import BaseModel
+# from pydantic.functional_validators import field_validator
+
 
 logging = log.getLogger(__name__)
 
@@ -32,6 +34,7 @@ class StateStorage(BaseModel):
 class StateConfig(BaseModel):
 
     name: str
+    version: Optional[str] = None  # "Version 0.1"
     input_path: Optional[str] = None
     input_storage: Optional[StateStorage] = None
     output_storage: Optional[StateStorage] = None
@@ -71,12 +74,12 @@ class StateDataColumnDefinition(BaseModel):
     value: Optional[Any] = None
     source_column_name: Optional[str] = None    # The source column this column was derived from
 
-    @field_validator('data_type')
-    def convert_type_to_string(cls, v):
-        if not isinstance(v, str):
-            return 'str'
-
-        return v
+    # @field_validator('data_type')
+    # def convert_type_to_string(cls, v):
+    #     if not isinstance(v, str):
+    #         return 'str'
+    #
+    #     return v
 
     def manual_json(self):
         state = {
@@ -437,6 +440,7 @@ def print_state_information(path: str, recursive: bool = False):
         return
 
     for nodes in files:
+
         full_path = f'{path}/{nodes}'
         if os.path.isdir(full_path):
             if recursive:
@@ -445,17 +449,24 @@ def print_state_information(path: str, recursive: bool = False):
 
             continue
 
+        logging.info(f'----------------------------------------------------------------------')
 
         stat = os.stat(full_path)
 
-        logging.info(f'processing state file with path: {full_path}, '
-                     f'created on: {dt.fromtimestamp(stat.st_ctime)}, '
-                     f'updated on: {dt.fromtimestamp(stat.st_mtime)}, '
-                     f'last access on: {dt.fromtimestamp(stat.st_atime)}')
+        logging.info(f'processing state file with path: {full_path}')
 
         state = State.load_state(full_path)
-        logging.info("\n\t".join([f'{key}:{value}' for key, value in state.config.model_dump().items()]))
 
+        # if isinstance(state.config, StateConfigLM):
+
+        configuration_string = "\n\t".join([f'{key}:{value}' for key, value in state.config.model_dump().items()])
+        columns_string = ", ".join([f'[{key}]' for key in state.columns.keys()])
+        logging.info(f'config: {configuration_string}')
+        logging.info(f'columns: {columns_string}')
+        logging.info(f'state row count: {utils.implicit_count_with_force_count(state)}')
+        logging.info(f'created on: {dt.fromtimestamp(stat.st_ctime)}, '
+                     f'updated on: {dt.fromtimestamp(stat.st_mtime)}, '
+                     f'last access on: {dt.fromtimestamp(stat.st_atime)}')
 
 if __name__ == '__main__':
     log.basicConfig(level="DEBUG")

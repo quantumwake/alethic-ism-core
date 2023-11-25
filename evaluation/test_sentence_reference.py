@@ -39,10 +39,10 @@ print(f"Calculated BLEU, METEOR and TER scores from reference sentence: {referen
 for idx, sentence in enumerate(other_sentences):
     bleu_score = calculate_bleu(reference_sentence, sentence)
     meteor_score = calculate_meteor(reference_sentence, sentence)
-    ter_score = calculate_ter(reference_sentence, sentence)
+    # ter_score = calculate_ter(reference_sentence, sentence)
 
     formatted_bleu = "{:.2e}".format(bleu_score)  # Scientific notation with 2 decimal places
     formatted_meteor = "{:.4f}".format(meteor_score)  # Standard decimal with 4 decimal places
-    formatted_ter = "{:.4f}".format(ter_score)  # Standard decimal with 4 decimal places
-
+    # formatted_ter = "{:.4f}".format(ter_score)  # Standard decimal with 4 decimal places
+    formatted_ter = "N/A"
     print(f' - blue: {formatted_bleu}\t meteor: {formatted_meteor}\t ter: {formatted_ter}\t\t{other_sentences[idx]}')

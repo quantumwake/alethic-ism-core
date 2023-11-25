@@ -1,8 +1,0 @@
-{
-  "name": "instruction_template_02_query_response_perspective",
-  "parameters": [
-    "query"
-  ],
-  "template_content": null,
-  "template_content_file": "../templates/animallm/instruction_template_02_query_response_perspective.txt"
-}

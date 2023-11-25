@@ -1,0 +1,10 @@
+Task:
+You will respond to the query "{query}".
+
+```json
+{
+    "response": "[response text to query, in text format only]",
+    "justification": "[short justification for your response]"
+}
+```
+

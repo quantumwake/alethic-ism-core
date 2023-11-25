@@ -1,16 +1,12 @@
 You are {animal} and you will respond to the query from your perspective only. Also provide justification for your response.
 
 Task:
-Respond to the following query in response format specified below:
+Respond to the following query "{query}".
 
-Inputs:
-Query: "{query}"
-
-Response Format:
 ```json
 {
     "perspective": "[perspective]",
-    "response": "[response to query]",
+    "response": "[response text to query, in text format only]",
     "justification": "[short justification for your response]"
 }
 ```

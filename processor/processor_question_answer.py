@@ -6,10 +6,10 @@ import openai
 import dotenv
 
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
-from tenacity import retry, wait_exponential, wait_random
+from tenacity import retry, wait_exponential, wait_random, retry_if_not_exception_type
 
 import utils
-from processor.base_processor import BaseProcessor
+from processor.base_processor import BaseProcessor, ThreadQueueManager
 from processor.base_question_answer_processor import BaseQuestionAnswerProcessor
 from processor.processor_state import State
 
@@ -28,13 +28,14 @@ class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
         self.provider_name = self.config.provider_name if self.config.provider_name else "Anthropic"
         self.model_name = self.config.model_name if self.config.model_name else "claude-2"
         self.anthropic = Anthropic(max_retries=5)
-
+        self.manager = ThreadQueueManager(num_workers=3)
         logging.info(f'extended instruction state machine: {type(self)} with config {self.config}')
 
     def batching(self, questions: List[str]):
         raise NotImplementedError()
 
-    @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
+    @retry(retry=retry_if_not_exception_type(SyntaxError),
+           wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         # add a system message if one exists
         final_prompt = f"{HUMAN_PROMPT} {user_prompt} {AI_PROMPT}"
@@ -110,9 +111,11 @@ class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
 
 class OpenAIQuestionAnswerProcessor(OpenAIBaseProcessor):
 
-    @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
+    @retry(
+        retry=retry_if_not_exception_type(SyntaxError),
+        wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-
         return utils.parse_response(response=response)
+
 

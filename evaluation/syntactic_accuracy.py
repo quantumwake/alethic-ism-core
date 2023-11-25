@@ -1,8 +1,9 @@
-import pyter
 import nltk
 from nltk.translate.meteor_score import meteor_score
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
+nltk.download('punkt')
+nltk.download('wordnet')
 
 def calculate_bleu(reference, candidate, ):
     reference_tokens = nltk.word_tokenize(reference)
@@ -21,5 +22,6 @@ def calculate_meteor(reference, candidate):
 def calculate_ter(reference, candidate):
     reference_tokens = nltk.word_tokenize(reference)
     candidate_tokens = nltk.word_tokenize(candidate)
-    return pyter.ter(candidate_tokens, reference_tokens)
+    # return pyter.ter(candidate_tokens, reference_tokens)
+    raise NotImplementedError()
 

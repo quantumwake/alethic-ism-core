@@ -27,35 +27,6 @@ def build_query_state_embedding_from_columns(state: State = None, embedding_colu
     #
     def process(source_column_name: str):
 
-        # ensure to clean up the naming convention such that we have accurate matches
-        # target_column_name = utils.build_column_name(target_column_name)
-
-        # warning if the column is not available at the current data entry row
-        # if target_column_name not in search_key_mapping:
-        #     logging.warning(
-        #         f"""Target column '{target_column_name}' not found in source data.
-        #         Using search key mapping: build_column_name( .. {search_key_mapping} .. )
-        #
-        #         1. Ensure the original key exists in the input state.
-        #         2. This warning can be ignored if the column data is not needed, otherwise, check for typos.
-        #         3. Ensure to use the build_column_name(name) function as it is required for correct column naming."""
-        #     )
-        #     return
-
-        # we need the value since the source state only contains such said key
-        #source_column_name = search_key_mapping[target_column_name]
-
-        # # fetch the source column value for embedding
-        # source_column_value = input_query_state[source_column_name]
-        #
-        # # skip if the input column does not exist
-        # if not source_column_value:
-        #     logging.warning(f'unable to create data embedding for null or empty value on'
-        #                     f'source column: {source_column_name}, '
-        #                     f'target column: {target_column_name}, '
-        #                     f'data entry state: {input_query_state}')
-        #     return
-
         # otherwise create a new column derived from the target column name + prefixed with _embedding
         target_column_embedding_name = f'{source_column_name}_embedding'
 
@@ -63,7 +34,16 @@ def build_query_state_embedding_from_columns(state: State = None, embedding_colu
             if not query_state:
                 raise Exception(f'invalid query state input, must be a valid key value pairing')
 
+            if source_column_name not in query_state:
+                logging.warning(f'unable to find source column {source_column_name} '
+                                f'when creating source text embedding column')
+                return None
+
             text_value = query_state[source_column_name]
+            if not text_value:
+                logging.warning(f'no value found for source column {source_column_name} in query state {query_state}')
+                return None
+
             return calculate_embeddings(text_value)
 
         # create a new embedding function call
@@ -113,14 +93,7 @@ def build_query_state_from_config(state: State):
                 'data_type': 'str',
                 'value': config.model_name,
                 'max_length': 64
-            }),
-            # 'perspective': StateDataColumnDefinition.model_validate({
-            #     'name': 'perspective',
-            #     'null': False,
-            #     'data_type': 'str',
-            #     'value': 'animal',
-            #     'max_length': 128
-            # })
+            })
         }
 
     return {}
@@ -232,7 +205,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
 
         try:
             with conn.cursor() as cursor:
-                cursor.execute(f'TRUNCATE TABLE "{table_name}"')
+                cursor.execute(f'TRUNCATE TABLE {table_name}')
             conn.commit()
         except Exception as e:
             logging.error(e)
@@ -270,7 +243,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         conn = self.create_connection()
         try:
             with conn.cursor() as cursor:
-                result = cursor.execute(f'select count(*) as cnt from "{table_name}"')
+                result = cursor.execute(f'select count(*) as cnt from {table_name}')
 
             data = result
             return data['cnt']
@@ -279,28 +252,16 @@ class BaseStateDatabaseProcessor(BaseProcessor):
             return None
 
     def write_state(self, input_query_state):
-        #
-        # # check for any additional columns by invoking the higher order function
-        # # which should return a map of columns and constant values or a coroutine
-        # if self.additional_values_func:
-        #     additional_columns = self.additional_values_func(
-        #         input_query_state=input_query_state
-        #     )
-        #
-        #     additional_column_values = {
-        #         column: header['value'] for column, header in additional_columns.items()}
-        #
-        #     input_query_state = {**input_query_state, **additional_column_values}
 
         def parse_column_name(col_name: str):
             return f'"{col_name}"'
 
-        def parse_column_value(col_val: Any):
+        def parse_column_value(col_name: str, col_val: Any):
             # if not isinstance(col_val, str):
             col_val = utils.get_column_state_value(col_val, query_state=input_query_state)
 
             if not col_val:
-                return ''
+                return None
 
             return f"{col_val}"
 
@@ -308,7 +269,9 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         column_names = ','.join([parse_column_name(column_name) for column_name in input_query_state.keys()])
 
         # generate the tuple(.., ..) of values by iterating through the list of columns
-        column_values = tuple(parse_column_value(value) for value in input_query_state.values())
+        column_values = tuple(parse_column_value(column_name, column_value)
+                              for column_name, column_value
+                              in input_query_state.items())
 
         # create column parameter indexes such that we can parameterize the inserts
         column_params = ','.join([f'%s' for idx in range(1, len(input_query_state.keys()) + 1)])
@@ -340,6 +303,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
 
 
 class StateDatabaseProcessor(BaseStateDatabaseProcessor):
+
     def __call__(self, state: State, *args, **kwargs):
 
         # initialize common information from the header (TODO this should be more generalized)
@@ -369,7 +333,7 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
         additional_columns_function = utils.higher_order_routine(func=combined)
 
         # append all additional columns such that we can build the table definition
-        combined_columns = additional_columns_function(state=input_state)
+        combined_columns = additional_columns_function(state=state)
 
         # TODO this should be injected here not at the insertion/selector function
         state.columns = {**state.columns, **combined_columns}
@@ -390,13 +354,12 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
             query_state = state.get_query_state_from_row_index(index)
             self.process_input_data_entry(input_query_state=query_state)
 
-if __name__ == '__main__':
-    # file = '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle'
-    # file = '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle'
-    # file = '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle'
-    file = '../states/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
+def process_files(files: [str]):
+    return [process_file(file) for file in files]
+
+def process_file(file: str):
     input_state = State.load_state(file)
-    p = StateDatabaseProcessor(
+    processor = StateDatabaseProcessor(
         state=State(
             config=StateConfigDB(
                 name="AnimaLLM Instruction for Query Response Evaluation P0e",
@@ -409,6 +372,19 @@ if __name__ == '__main__':
             )
         )
     )
-    p(state=input_state)
+    processor(state=input_state)
+    return processor
 
+if __name__ == '__main__':
+
+    files = [
+        '../states/animallm/prod/441da549424d1243072613741c4e51bcfaa6bfdf436a72ee90da6f31b6bb5f19.pickle'
+        # '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle',    # anthropic claude-2 animal reponse 25 responses (devtest)
+        # '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle',    # openai gpt4 animal response 25 responses (devtest)
+        # '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle',    # openai gpt4 other perspectives 150 responses (devtest)
+        # '../states/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'     # openai gpt4 p0 evaluation 300 responses (devtest)
+    ]
+
+    processors = process_files(files)
+    print(f'list of processors: {processors}')
 

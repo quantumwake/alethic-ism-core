@@ -7,8 +7,16 @@
     ]
   },
   "columns": {
+    "perspective_index": {
+      "name": "perspective_index",
+      "data_type": "str"
+    },
     "perspective": {
       "name": "perspective",
+      "data_type": "str"
+    },
+    "perspective_ism": {
+      "name": "perspective_ism",
       "data_type": "str"
     },
     "perspective_definition": {
@@ -17,6 +25,16 @@
     }
   },
   "data": {
+    "perspective_index": {
+      "values": [
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7"
+      ]
+    },
     "perspective": {
       "values": [
         "Utilitarian",

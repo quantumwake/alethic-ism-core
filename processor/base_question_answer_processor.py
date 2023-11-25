@@ -7,6 +7,7 @@ from processor.base_processor import BaseProcessor
 
 logging = log.getLogger(__name__)
 
+
 class BaseQuestionAnswerProcessor(BaseProcessor):
 
     @property
@@ -75,25 +76,6 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
         # return super().build_final_output_path(prefix=f'{provider}_{model_name}')
         return super().build_final_output_path(prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
-
-        #
-        # # if there is a system template file used, then the state file should include a suffix
-        # # this is useful if we want to change the persona of the system to respond from a specific perspective
-        # # such as the entities perspective or from another perspective such as Utilitarian Thinker.
-        # state_file_to_hash = f'{provider}_{model_name}'
-        #
-        # if self.system_template:
-        #     _system_template_file = self.system_template_filename
-        #     state_file_to_hash = f'{state_file_to_hash}_{_system_template_file}'
-        #
-        # if self.user_template:
-        #     _user_template_file = self.user_template_filename
-        #     state_file_to_hash = f'{state_file_to_hash}_{_user_template_file}'
-        #
-        # state_file_to_hash = f"[{self.name if self.name else '[Default]'}]/[{state_file_to_hash}]"
-        # state_file_hashed = utils.get_hash_from_string(state_file_to_hash)
-        # state_file = f'{self.output_path}/{state_file_hashed}.json'
-        # return state_file
 
 
     def process_write_output_state(self, query_states: [dict]):
@@ -217,19 +199,13 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             # return the updated query state after persistence, generally the same unless it was remapped to new columns
             return query_states
 
+        except SyntaxError as e:
+            logging.error(f'unable to parse response, skipping question {input_query_state} on {self.config}')
         except Exception as e:
-            raise e
-            # # save it as an error such that we can track it
-            # self.save_state(key=input_state_key,
-            #                 query_state={
-            #                     'inputs': str(input_query_state),
-            #                     'user_prompt': user_prompt,
-            #                     'system_prompt': system_prompt,
-            #                     'response': f'error {e}',  # write the error to the answer for review purposes
-            #                     'status': 'Failed'
-            #                 })
+            logging.error(f'critical error handling question {input_query_state} on {self.config} client gave up')
 
-            logging.error(f'critical error handling question {input_query_state} on {self.config}')
+
+
 
 
 

@@ -1,4 +1,20 @@
-# Initial Python with virtualenv 
+# Requirements
+
+- Conda or equivalent
+
+# Initialize your conda environment
+conda create --env alethic-processor
+conda activate alethic-processor
+
+conda install pytorch torchvision torchaudio -c pytorch-nightly
+conda install huggingface nltk pyter3
+conda install psycopg2
+conda install python-dotenv
+
+
+
+
+# Initial Python with virtual
 
 ## this might not be correct, but it is something similar to this.
 
