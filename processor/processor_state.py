@@ -10,6 +10,7 @@ from datetime import datetime as dt
 from enum import Enum as PyEnum
 from typing import Any, List, Dict, Optional
 from pydantic import BaseModel
+
 # from pydantic.functional_validators import field_validator
 
 
@@ -426,48 +427,3 @@ class State(BaseModel):
 
         else:
             raise Exception(f'Unsupported file type for {output_path}')
-
-
-def print_state_information(path: str, recursive: bool = False):
-
-    if not os.path.exists(path):
-        raise Exception(f'state path does not exist: {path}')
-
-    files = os.listdir(path)
-
-    if not files:
-        logging.error(f'no state files found in {path}')
-        return
-
-    for nodes in files:
-
-        full_path = f'{path}/{nodes}'
-        if os.path.isdir(full_path):
-            if recursive:
-                logging.info(f'recursive path {full_path}')
-                print_state_information(full_path)
-
-            continue
-
-        logging.info(f'----------------------------------------------------------------------')
-
-        stat = os.stat(full_path)
-
-        logging.info(f'processing state file with path: {full_path}')
-
-        state = State.load_state(full_path)
-
-        # if isinstance(state.config, StateConfigLM):
-
-        configuration_string = "\n\t".join([f'{key}:{value}' for key, value in state.config.model_dump().items()])
-        columns_string = ", ".join([f'[{key}]' for key in state.columns.keys()])
-        logging.info(f'config: {configuration_string}')
-        logging.info(f'columns: {columns_string}')
-        logging.info(f'state row count: {utils.implicit_count_with_force_count(state)}')
-        logging.info(f'created on: {dt.fromtimestamp(stat.st_ctime)}, '
-                     f'updated on: {dt.fromtimestamp(stat.st_mtime)}, '
-                     f'last access on: {dt.fromtimestamp(stat.st_atime)}')
-
-if __name__ == '__main__':
-    log.basicConfig(level="DEBUG")
-    print_state_information('../states')

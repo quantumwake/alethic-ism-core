@@ -4,7 +4,7 @@ import os
 from processor.base_processor import initialize_processors_with_same_state_config
 from processor.base_question_answer_processor import StateConfigLM
 from processor.processor_full_join import FullJoinStateProcessor
-from processor.processor_state import StateDataKeyDefinition, State, StateConfig, print_state_information
+from processor.processor_state import StateDataKeyDefinition, State, StateConfig
 from processor.processor_question_answer import AnthropicQuestionAnswerProcessor, OpenAIQuestionAnswerProcessor
 
 
@@ -60,7 +60,7 @@ instruction_template_P1_query_response_default = initialize_processors_with_same
 # initialize a list of processors with the same initial configuration
 instruction_template_Pn_query_response_perspectives = initialize_processors_with_same_state_config(
     config=StateConfigLM(
-        name="AnimaLLM Instruction for ",
+        name="AnimaLLM Instruction for Query Response Perspective P(n)",
         version="Draft Version 0.1",
         # system_template_path='../templates/animallm/instruct.json',
         user_template_path='../templates/animallm/instruction_template_P(n)_query_response_perspective.json',
@@ -81,9 +81,7 @@ instruction_template_Pn_query_response_perspectives = initialize_processors_with
     processor_types=[OpenAIQuestionAnswerProcessor, AnthropicQuestionAnswerProcessor])
 
 
-#AnthropicQuestionAnswerProcessor,
-
-processors_query_response_p0_evaluator = OpenAIQuestionAnswerProcessor(
+processors_query_response_p0_evaluator_openai = OpenAIQuestionAnswerProcessor(
     state=State(
         config=StateConfigLM(
             version="Draft Version 0.1",
@@ -101,7 +99,8 @@ processors_query_response_p0_evaluator = OpenAIQuestionAnswerProcessor(
                 StateDataKeyDefinition(name='perspective'),
                 StateDataKeyDefinition(name='perspective_index'),
                 StateDataKeyDefinition(name='response'),
-                StateDataKeyDefinition(name='justification')
+                StateDataKeyDefinition(name='justification'),
+                StateDataKeyDefinition(name="query_template_id", alias="query_template_id")
             ]
         )
     )
@@ -114,8 +113,6 @@ processors_query_response_p0_evaluator = OpenAIQuestionAnswerProcessor(
 # ⇛ generates S1[Model{InputTemplate#→PerspectiveN[OutputResponse]}]
 #   and S2[Model{InputTemplate#→PerspectiveN[OutputResponse]}].
 
-# processors_query_response_other_perspective[0].add_processor(processors_query_response_p0_evaluator)
-
 # load the initial state objects and merge them
 perspective_definitions = State.load_state('../dataset/animallm/perspective_definition.json')
 query_template_state = State.load_state('../dataset/animallm/query_template_state.json')
@@ -124,6 +121,10 @@ animal_state = State.load_state('../dataset/animallm/animal_state.json')
 net_new = []
 net_new.extend(instruction_template_P1_query_response_default)
 net_new.extend(instruction_template_P0_query_response_animal)
+
+for instruction_processors in net_new:
+    instruction_processors.add_processor(processors_query_response_p0_evaluator_openai)
+
 
 # Query Response P0 and P1 processor
 # the initial state to inject into the next processors (for template 01 question and answering)
@@ -183,6 +184,8 @@ if __name__ == '__main__':
 
     # process P0 and P1 query responses
     p0_and_p1_response_processor(states=[query_template_state, animal_state])
+    pN_response_processor(states=[animal_state, query_template_state, perspective_definitions])
+
 
     # merge the animal + query template + perspective datasets
     # process Pn perspective responses
@@ -198,7 +201,6 @@ if __name__ == '__main__':
     # query_template_state = State.load_state('../dataset/animallm/query_template_state_devtest.json')
     # animal_state = State.load_state('../dataset/animallm/animal_state_devtest.json')
 
-    pN_response_processor(states=[animal_state, query_template_state, perspective_definitions])
 
 
     pass

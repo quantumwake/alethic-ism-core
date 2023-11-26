@@ -377,14 +377,15 @@ def process_file(file: str):
 
 if __name__ == '__main__':
 
-    files = [
-        '../states/animallm/prod/441da549424d1243072613741c4e51bcfaa6bfdf436a72ee90da6f31b6bb5f19.pickle'
-        # '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle',    # anthropic claude-2 animal reponse 25 responses (devtest)
-        # '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle',    # openai gpt4 animal response 25 responses (devtest)
-        # '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle',    # openai gpt4 other perspectives 150 responses (devtest)
-        # '../states/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'     # openai gpt4 p0 evaluation 300 responses (devtest)
-    ]
+    # files = [
+    #     '../states/animallm/prod/441da549424d1243072613741c4e51bcfaa6bfdf436a72ee90da6f31b6bb5f19.pickle'
+    #     # '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle',    # anthropic claude-2 animal reponse 25 responses (devtest)
+    #     # '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle',    # openai gpt4 animal response 25 responses (devtest)
+    #     # '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle',    # openai gpt4 other perspectives 150 responses (devtest)
+    #     # '../states/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'     # openai gpt4 p0 evaluation 300 responses (devtest)
+    # ]
 
+    files = [f'../states/animallm/prod/{file}' for file in os.listdir('../states/animallm/prod/')]
     processors = process_files(files)
     print(f'list of processors: {processors}')
 
