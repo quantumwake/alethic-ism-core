@@ -91,13 +91,17 @@ processors_query_response_p0_evaluator_openai = OpenAIQuestionAnswerProcessor(
             output_primary_key_definition=[
                 StateDataKeyDefinition(name="query", alias="query"),
                 StateDataKeyDefinition(name="animal", alias="animal"),
-                StateDataKeyDefinition(name='perspective')
+                StateDataKeyDefinition(name="perspective_index", alias="perspective_index"),
+                StateDataKeyDefinition(name='response_provider_name'),
+                StateDataKeyDefinition(name='response_model_name')
             ],
             include_extra_from_input_definition=[
                 StateDataKeyDefinition(name="query", alias="query"),
                 StateDataKeyDefinition(name="animal", alias="animal"),
                 StateDataKeyDefinition(name='perspective'),
                 StateDataKeyDefinition(name='perspective_index'),
+                StateDataKeyDefinition(name='response_provider_name'),
+                StateDataKeyDefinition(name='response_model_name'),
                 StateDataKeyDefinition(name='response'),
                 StateDataKeyDefinition(name='justification'),
                 StateDataKeyDefinition(name="query_template_id", alias="query_template_id")
