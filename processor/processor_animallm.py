@@ -40,9 +40,9 @@ instruction_template_P0_query_response_animal = initialize_processors_with_same_
 instruction_template_P1_query_response_default = initialize_processors_with_same_state_config(
     config=StateConfigLM(
         name="AnimaLLM Instruction for P1 response",
-        version="Draft Version 0.1",
-        # system_template_path='../templates/animallm/instruct.json',
-        user_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective.json',
+        version="Draft Version 0.2",
+        system_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective_system_v2.json',
+        user_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective_v2.json',
         output_path='../states/animallm/prod',
         output_primary_key_definition=[
             StateDataKeyDefinition(name="query", alias="query"),
@@ -54,7 +54,7 @@ instruction_template_P1_query_response_default = initialize_processors_with_same
             StateDataKeyDefinition(name="query_template_id", alias="query_template_id")
         ]
     ),
-    processor_types=[OpenAIQuestionAnswerProcessor, AnthropicQuestionAnswerProcessor])
+    processor_types=[AnthropicQuestionAnswerProcessor]) ## TODO OpenAIQuestionAnswerProcessor
 
 
 # initialize a list of processors with the same initial configuration
@@ -126,8 +126,9 @@ net_new = []
 net_new.extend(instruction_template_P1_query_response_default)
 net_new.extend(instruction_template_P0_query_response_animal)
 
-for instruction_processors in net_new:
-    instruction_processors.add_processor(processors_query_response_p0_evaluator_openai)
+## TODO EVALUATOR of P0 and P1
+# for instruction_processors in net_new:
+#     instruction_processors.add_processor(processors_query_response_p0_evaluator_openai)
 
 
 # Query Response P0 and P1 processor
@@ -183,8 +184,9 @@ pN_response_processor = FullJoinStateProcessor(
     processors=instruction_template_Pn_query_response_perspectives
 )
 
-for instruction_processors in instruction_template_Pn_query_response_perspectives:
-    instruction_processors.add_processor(processors_query_response_p0_evaluator_openai)
+## TODO Evalutor of P(n)
+# for instruction_processors in instruction_template_Pn_query_response_perspectives:
+#     instruction_processors.add_processor(processors_query_response_p0_evaluator_openai)
 
 
 

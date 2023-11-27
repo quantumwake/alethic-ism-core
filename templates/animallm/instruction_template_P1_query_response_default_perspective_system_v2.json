@@ -1,8 +1,7 @@
 {
-  "name": "instruction_template_P1_query_response_default_perspective",
+  "name": "instruction_template_P1_query_response_default_perspective_system_v2",
   "parameters": [
     "query"
   ],
-  "template_content": null,
-  "template_content_file": "../templates/animallm/instruction_template_P1_query_response_default_perspective.txt"
+  "template_content": "Only respond in json with field: response, justification."
 }
