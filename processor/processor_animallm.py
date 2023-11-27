@@ -183,6 +183,11 @@ pN_response_processor = FullJoinStateProcessor(
     processors=instruction_template_Pn_query_response_perspectives
 )
 
+for instruction_processors in instruction_template_Pn_query_response_perspectives:
+    instruction_processors.add_processor(processors_query_response_p0_evaluator_openai)
+
+
+
 # test function
 if __name__ == '__main__':
 
@@ -190,6 +195,7 @@ if __name__ == '__main__':
     p0_and_p1_response_processor(states=[query_template_state, animal_state])
     pN_response_processor(states=[animal_state, query_template_state, perspective_definitions])
 
+    exit(0)
 
     # merge the animal + query template + perspective datasets
     # process Pn perspective responses

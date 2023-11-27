@@ -33,11 +33,8 @@ def print_state_information(path: str, recursive: bool = False, name_filter: str
         logging.info(f'----------------------------------------------------------------------')
 
         stat = os.stat(full_path)
-
-        logging.info(f'processing state file with path: {full_path}')
-
+        logging.debug(f'loading state file with path: {full_path}')
         state = State.load_state(full_path)
-
         show = not name_filter or name_filter.lower() in state.config.name.lower()
 
         if not show:
@@ -77,22 +74,63 @@ if __name__ == '__main__':
     log.basicConfig(level="DEBUG")
     print_state_information('../states/animallm/prod', name_filter="P0")
 
-    # exit(0)
+    exit(0)
+### **** IMPORTANT p(n)
+    #anthropic
+    state = State.load_state('../states/animallm/prod/570fb94c8609ef5d6915b6580041bc5afcefd460ac7f50da601600c07613048a.pickle')
+    state = add_column_value_constant_to_state(
+        state=state,
+        column=StateDataColumnDefinition(
+            name="response_provider_name",
+            value=state.config.provider_name,
+            data_type="str"
+        ))
 
-### ****** IMPORTANT
+    state = add_column_value_constant_to_state(
+        state=state,
+        column=StateDataColumnDefinition(
+            name="response_model_name",
+            value=state.config.model_name,
+            data_type="str"
+        ))
+    state.save_state(state.config.output_path) ## persist the state again
+
+    # openai
+    state = State.load_state('../states/animallm/prod/49717023a01b090af5315b23ed38bef5143acb3887b54d9fd2155da18bd2144e.pickle')
+    state = add_column_value_constant_to_state(
+        state=state,
+        column=StateDataColumnDefinition(
+            name="response_provider_name",
+            value=state.config.provider_name,
+            data_type="str"
+        ))
+
+    state = add_column_value_constant_to_state(
+        state=state,
+        column=StateDataColumnDefinition(
+            name="response_model_name",
+            value=state.config.model_name,
+            data_type="str"
+        ))
+    state.save_state(state.config.output_path) ## persist the state again
+
+    exit(0)
+
+
+### ****** IMPORTANT (P0)
     ## need to aadd the following additional columns to the datasets
 
     # for all Model Names with ~ P0 (all model sources)
     # -- add perspective_index (P0)
     # anthropic
-    state = State.load_state('../states/animallm/prod/7c382cd88e9f4d3637fe301db76d8d93e1b86e2638b20d681de8171d703b3471.pickle')
-    state = add_column_value_constant_to_state(
-        state=state,
-        column=StateDataColumnDefinition(
-            name="perspective_index",
-            value="P0",
-            data_type="str"
-        ))
+    # state = State.load_state('../states/animallm/prod/7c382cd88e9f4d3637fe301db76d8d93e1b86e2638b20d681de8171d703b3471.pickle')
+    # state = add_column_value_constant_to_state(
+    #     state=state,
+    #     column=StateDataColumnDefinition(
+    #         name="perspective_index",
+    #         value="P0",
+    #         data_type="str"
+    #     ))
 
     # state = add_column_value_constant_to_state(
     #     state=state,
@@ -142,7 +180,7 @@ if __name__ == '__main__':
     #
     # state.save_state(state.config.output_path) ## persist the state again
 
-### ****** IMPORTANT
+### ****** IMPORTANT (P1)
     # for P1 (all model sources)
     # -- perspective (default)
     # -- perspective_index (P1)

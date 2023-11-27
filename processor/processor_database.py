@@ -19,6 +19,8 @@ DATABASE_URL = os.environ.get("OUTPUT_DATABASE_URL", "postgresql://postgres:post
 logging = log.getLogger(__name__)
 
 def build_query_state_embedding_from_columns(state: State = None, embedding_columns: dict = None):
+
+
     result_columns = {}
 
     # fetch a list of keys "column names" from the current data entry (row)
@@ -64,6 +66,9 @@ def build_query_state_embedding_from_columns(state: State = None, embedding_colu
     # TODO pass in state information such that the function can create embedding columns (if needed)
     if callable(embedding_columns):
         embedding_columns = embedding_columns()
+
+    if not embedding_columns:
+        return result_columns
 
     # iterate list of columns to embed and create an embedding equivalent column
     for source_column_embedding_name in embedding_columns:
@@ -314,7 +319,8 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
         if self.embedding_columns:
             additional_columns_function_embeddings = utils.higher_order_routine(
                 build_query_state_embedding_from_columns,
-                state=state, embedding_columns=self.embedding_columns)
+                state=state,
+                embedding_columns=self.embedding_columns)
 
         # combine the additional columns added to the table
         def combined(*args, **kwargs):
@@ -363,7 +369,7 @@ def process_file(file: str):
         state=State(
             config=StateConfigDB(
                 name="AnimaLLM Instruction for Query Response Evaluation P0e",
-                embedding_columns=['response', 'justification', 'evaluation_justification'],
+                #embedding_columns=['response', 'justification', 'evaluation_justification'],
                 output_primary_key_definition=[
                     StateDataKeyDefinition(name="animal"),
                     StateDataKeyDefinition(name="query"),
@@ -377,15 +383,13 @@ def process_file(file: str):
 
 if __name__ == '__main__':
 
-    # files = [
-    #     '../states/animallm/prod/441da549424d1243072613741c4e51bcfaa6bfdf436a72ee90da6f31b6bb5f19.pickle'
-    #     # '../states/ca6ab341ed74909b7e17e404426e8f277f5df3a247e2d1549391a809e5d08c2a.pickle',    # anthropic claude-2 animal reponse 25 responses (devtest)
-    #     # '../states/7c28e491dda0119078e4a1e928e941e9455dbcb196b8543d6fc9151d44229bc2.pickle',    # openai gpt4 animal response 25 responses (devtest)
-    #     # '../states/27f5bc21f19a229ec1b2267ddd73e89d778400ec4339289bc6e6c8ae04bf877d.pickle',    # openai gpt4 other perspectives 150 responses (devtest)
-    #     # '../states/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'     # openai gpt4 p0 evaluation 300 responses (devtest)
-    # ]
+    files = [
+        # '../states/animallm/prod/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
+
+    ]
 
     files = [f'../states/animallm/prod/{file}' for file in os.listdir('../states/animallm/prod/')]
     processors = process_files(files)
+    processors = process_files(files=files)
     print(f'list of processors: {processors}')
 
