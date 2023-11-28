@@ -19,10 +19,10 @@ log.basicConfig(encoding='utf-8', level=LOG_LEVEL)
 instruction_template_P0_query_response_animal = initialize_processors_with_same_state_config(
     config=StateConfigLM(
         name="AnimaLLM Instruction for P0 response",
-        version="Draft Version 0.1",
-        # system_template_path='../templates/animallm/instruct.json',
-        user_template_path='../templates/animallm/instruction_template_P0_query_response_animal.json',
-        output_path='../states/animallm/prod',
+        version="Draft Version 0.2",
+        system_template_path='../templates/animallm/instruction_template_P0_query_response_animal_system_v2.json',
+        user_template_path='../templates/animallm/instruction_template_P0_query_response_animal_user_v2.json',
+        output_path='../states/animallm/prod/version0_2',
         output_primary_key_definition=[
             StateDataKeyDefinition(name="query", alias="query"),
             StateDataKeyDefinition(name="animal", alias="animal")
@@ -35,7 +35,6 @@ instruction_template_P0_query_response_animal = initialize_processors_with_same_
     ),
     processor_types=[OpenAIQuestionAnswerProcessor, AnthropicQuestionAnswerProcessor])
 
-#### *# AnthropicQuestionAnswerProcessor
 
 instruction_template_P1_query_response_default = initialize_processors_with_same_state_config(
     config=StateConfigLM(
@@ -43,7 +42,7 @@ instruction_template_P1_query_response_default = initialize_processors_with_same
         version="Draft Version 0.2",
         system_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective_system_v2.json',
         user_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective_v2.json',
-        output_path='../states/animallm/prod',
+        output_path='../states/animallm/prod/version0_2',
         output_primary_key_definition=[
             StateDataKeyDefinition(name="query", alias="query"),
             StateDataKeyDefinition(name="animal", alias="animal")
@@ -54,17 +53,17 @@ instruction_template_P1_query_response_default = initialize_processors_with_same
             StateDataKeyDefinition(name="query_template_id", alias="query_template_id")
         ]
     ),
-    processor_types=[AnthropicQuestionAnswerProcessor]) ## TODO OpenAIQuestionAnswerProcessor
+    processor_types=[AnthropicQuestionAnswerProcessor, OpenAIQuestionAnswerProcessor])
 
 
 # initialize a list of processors with the same initial configuration
 instruction_template_Pn_query_response_perspectives = initialize_processors_with_same_state_config(
     config=StateConfigLM(
         name="AnimaLLM Instruction for Query Response Perspective P(n)",
-        version="Draft Version 0.1",
+        version="Draft Version 0.2",
         # system_template_path='../templates/animallm/instruct.json',
         user_template_path='../templates/animallm/instruction_template_P(n)_query_response_perspective.json',
-        output_path='../states/animallm/prod',
+        output_path='../states/animallm/prod/version0_2',
         output_primary_key_definition=[
             StateDataKeyDefinition(name="query", alias="query"),
             StateDataKeyDefinition(name="animal", alias="animal"),
@@ -84,10 +83,11 @@ instruction_template_Pn_query_response_perspectives = initialize_processors_with
 processors_query_response_p0_evaluator_openai = OpenAIQuestionAnswerProcessor(
     state=State(
         config=StateConfigLM(
-            version="Draft Version 0.1",
-            name="AnimaLLM Instruction for Query Response Evaluation P0",
-            user_template_path='../templates/animallm/instruction_template_P0_evaluator.json',
-            output_path='../states/animallm/prod',
+            version="Draft Version 0.3",
+            name="AnimaLLM Instruction for Query Response Evaluation P0 (versioned)",
+            system_template_path='../templates/animallm/instruction_template_P0_evaluator_user_v3.json',
+            user_template_path='../templates/animallm/instruction_template_P0_evaluator_user_v3.json',
+            output_path='../states/animallm/prod/version0_2',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name="query", alias="query"),
                 StateDataKeyDefinition(name="animal", alias="animal"),
@@ -136,9 +136,9 @@ net_new.extend(instruction_template_P0_query_response_animal)
 p0_and_p1_response_processor = FullJoinStateProcessor(
     state=State(
         config=StateConfig(
-            ersion="Draft Version 0.1",
+            ersion="Draft Version 0.2",
             name="merged state animal query state template",
-            output_path='../states/animallm/prod',
+            output_path='../states/animallm/prod/version0_2',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name='animal'),
                 StateDataKeyDefinition(name='query')
@@ -163,9 +163,9 @@ pN_response_processor = FullJoinStateProcessor(
     state=State(
 
         config=StateConfig(
-            version="Draft Version 0.1",
+            version="Draft Version 0.2",
             name="merged state 2",
-            output_path='../states/animallm/prod',
+            output_path='../states/animallm/prod/version0_2',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name='animal'),
                 StateDataKeyDefinition(name='query')
@@ -195,7 +195,7 @@ if __name__ == '__main__':
 
     # process P0 and P1 query responses
     p0_and_p1_response_processor(states=[query_template_state, animal_state])
-    pN_response_processor(states=[animal_state, query_template_state, perspective_definitions])
+    # pN_response_processor(states=[animal_state, query_template_state, perspective_definitions])
 
     exit(0)
 

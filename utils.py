@@ -379,37 +379,43 @@ def parse_response_auto_detect_type(response: str):
     return data_parse_status, data_type, data_parsed
 
 
-def parse_response(response: str):
+def parse_response(raw_response: str):
+
+    if raw_response:
+        raw_response = raw_response.strip()
+
     # try and identify and parse the response
-    data_parse_status, data_type, data_parsed = parse_response_auto_detect_type(response)
+    data_parse_status, data_type, data_parsed = parse_response_auto_detect_type(raw_response)
 
     # if the parsed data is
     if data_parse_status:
         if 'json' == data_type:
             flattened = map_flattener.flatten(data_parsed)
-            return flattened, data_type  # TODO extract the list of column names
+            return flattened, data_type, raw_response  # TODO extract the list of column names
         elif 'csv' == data_type:
             raise Exception(f'unsupported csv format, need to fix the _parse_response_csv(.) function')
 
-    return response.strip(), data_type
+    return raw_response, data_type, raw_response
 
 
-def parse_response_strip_assistant_message(response: str):
-    response, data_type = parse_response(response)
+def parse_response_strip_assistant_message(raw_response: str):
+    response, data_type, raw_response = parse_response(raw_response)
+
+    # TODO clean this up?
 
     if data_type is not str:
-        return response, data_type
+        return response, data_type, raw_response
 
     remark_pos = response.find(':\n\n')
     if remark_pos >= 0:
         remark_pos = remark_pos + 3  # move forward 3 positions since thats what we searched for
         if remark_pos >= len(response):
-            return response
+            return response, data_type, raw_response
 
         # else return characters after the has position
-        return response[remark_pos:], data_type
+        return response[remark_pos:], data_type, raw_response
 
-    return response, data_type
+    return response, data_type, raw_response
 
 
 def higher_order_routine_v2(func, **fixed_kwargs):

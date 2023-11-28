@@ -27,7 +27,7 @@ class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
         super().__init__(state=state, processors=processors, **kwargs)
         self.provider_name = self.config.provider_name if self.config.provider_name else "Anthropic"
         self.model_name = self.config.model_name if self.config.model_name else "claude-2"
-        self.anthropic = Anthropic(max_retries=5)
+
         self.manager = ThreadQueueManager(num_workers=3)
         logging.info(f'extended instruction state machine: {type(self)} with config {self.config}')
 
@@ -38,16 +38,19 @@ class AnthropicBaseProcessor(BaseQuestionAnswerProcessor):
            wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         # add a system message if one exists
+        anthropic = Anthropic(max_retries=5)
+
         final_prompt = f"{HUMAN_PROMPT} {user_prompt} {AI_PROMPT}"
         if system_prompt:
             final_prompt = f'{system_prompt} {final_prompt}'
 
         # strip out any white spaces and execute the final prompt
         final_prompt = final_prompt.strip()
-        completion = self.anthropic.completions.create(
-            model="claude-2",
+        completion = anthropic.completions.create(
+            model=self.config.model_name,
             max_tokens_to_sample=4096,
             prompt=final_prompt,
+            temperature=0.1
         )
 
         response = completion.completion
@@ -58,8 +61,8 @@ class AnthropicQuestionAnswerProcessor(AnthropicBaseProcessor):
 
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
-        response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-        return utils.parse_response_strip_assistant_message(response=response)
+        raw_response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
+        return utils.parse_response_strip_assistant_message(raw_response=raw_response)
 
 
 class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
@@ -74,7 +77,7 @@ class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
     def batching(self, questions: List[str]):
         raise NotImplementedError()
 
-    @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
+    # @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         # otherwise process the question
         messages_dict = []
@@ -115,7 +118,7 @@ class OpenAIQuestionAnswerProcessor(OpenAIBaseProcessor):
         retry=retry_if_not_exception_type(SyntaxError),
         wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
-        response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-        return utils.parse_response(response=response)
+        raw_response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
+        return utils.parse_response(raw_response=raw_response)
 
 

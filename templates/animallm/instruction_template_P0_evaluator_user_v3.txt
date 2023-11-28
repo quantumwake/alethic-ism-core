@@ -1,0 +1,21 @@
+Response: "{response}"
+Response Reasoning: "{justification}"
+
+Evaluation Format (JSON):
+```json
+{
+    "evaluation_perspective": "[perspective of the evaluator]",
+    "evaluation": [
+        {
+            "score_type": "S1",
+            "score": "[0-100]",
+            "justification": "[short justification for the evaluation Score S1, in text format]"
+        },
+        {
+            "score_type": "S2",
+            "score": "[0-100]",
+            "justification": "[short justification for the evaluation Score S2, in text format]"
+        }
+    ]
+}
+```

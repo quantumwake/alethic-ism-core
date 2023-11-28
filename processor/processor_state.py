@@ -123,6 +123,13 @@ class StateDataRowColumnData(BaseModel):
     def __setitem__(self, key, value):
         self.values[key] = value
 
+    def add_column_data_by_row_index(self, value: Any, row_index: int):
+        if not self.values:
+            raise IndexError(f'no values are specified for this column, column needs to be initialized using the state add_column method')
+
+        self.values[row_index] = value
+        return value
+
     def add_column_data(self, value: Any):
         if self.values:
             self.values.append(value)
@@ -275,6 +282,24 @@ class State(BaseModel):
         return query_state
 
 
+    def expand_columns(self, column: StateDataColumnDefinition, value_func: Any):
+
+        if column.name in self.columns:
+            raise Exception(f'column {column.name} already exists')
+
+        logging.info(f'applying new column {column.name}')
+        self.add_column(column)
+
+        # ensure we get a consistent count
+        count = utils.implicit_count_with_force_count(self)
+
+        # back-fill using the value_func
+        self.data[column.name] = StateDataRowColumnData(
+            values=[value_func(row_index)
+                    for row_index in range(count)])
+
+
+
     def apply_columns(self, query_state: dict):
         if not query_state:
             raise Exception(f'unable to apply columns on a null or blank query state')
@@ -326,7 +351,7 @@ class State(BaseModel):
                           f'it must be a dictionary of key/value pairs, where each key is a '
                           f'column name and the value is the data for the record name:value')
 
-    def get_query_state_from_row_index(self, index: str):
+    def get_query_state_from_row_index(self, index: int):
         # state = state if state else self
 
         query_state = {
@@ -335,6 +360,12 @@ class State(BaseModel):
             for column_name, column_header in self.columns.items()
         }
         return query_state
+
+    def get_column_data_from_row_index(self, column_name, index: int):
+        return self.data[column_name][index]
+
+    def get_column_data(self, column_name):
+        return self.data[column_name]
 
     def get_row_data_from_query_state(self, query_state: dict):
         # values = [value for value in query_state.values()]

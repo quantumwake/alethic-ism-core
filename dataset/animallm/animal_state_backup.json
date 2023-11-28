@@ -1,0 +1,38 @@
+{
+  "config": {
+    "name": "The Case for Animal-Friendly LLMs (Initial Questions V2)",
+    "output_path": "../dataset/examples/states",
+    "output_primary_key_definition": [
+      {"name": "animal"}
+    ]
+  },
+  "columns": {
+    "animal": {
+      "name": "animal",
+      "data_type": "str"
+    }
+  },
+  "data": {
+    "animal": {
+      "values": [
+        "dog",
+        "cat",
+        "rabbit",
+        "horse",
+        "cow",
+        "chicken",
+        "pig",
+        "fish",
+        "mouse",
+        "dolphin",
+        "duck",
+        "monkey",
+        "lobster",
+        "crab",
+        "shrimp",
+        "spider",
+        "ant"
+      ]
+    }
+  }
+}

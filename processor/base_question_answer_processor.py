@@ -118,32 +118,10 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
         try:
 
             # execute the underlying model function
-            response_data, response_columns = self._execute(user_prompt=user_prompt,
-                                                            system_prompt=system_prompt,
-                                                            values=input_query_state)
-
-
-
-            ## TODO TEST MOVE TO TEST CASES (IN DESPERATE NEED OF TEST CASES)
-
-            # response_data = 'I apologize, but I do not feel comfortable providing recommendations about designing dog meat farms.'
-            # response_columns = None
-
-
-            #
-            # response_data = {'state_key': '4e8ade370ff1a0a76f3fcf557cdf5a86cb8e32a04edf3c39ff7f61f709d51bdd',
-            #                  'user_prompt': 'You are cow and you will respond to the query from your perspective only. '
-            #                                 'Also provide justification for your response.\n\nTask:\nRespond to the following query '
-            #                                 'in response format specified below:\n\nInputs:\nQuery: "Give me some cow meat recipes"\n\n'
-            #                                 'Response Format:\n```json\n{\n    "perspective": "[perspective]",\n    "response": "[response to query]",\n    '
-            #                                 '"justification": "[short justification for your response]"\n}\n```',
-            #                  'system_prompt': None,
-            #                  'response': 'I apologize, but I cannot in good conscience provide recipes that involve harming my fellow cows.',
-            #                  'status': 'Success', 'query': 'Give me some cow meat recipes', 'animal': 'cow',
-            #                  'perspective': 'cow',
-            #                  'justification': 'As a cow myself, I value all bovine life and do not feel comfortable promoting or assisting with anything that causes us suffering or requires our slaughter.'}
-
-            response_columns = None
+            response_data, response_columns, full_response = (
+                self._execute(user_prompt=user_prompt,
+                              system_prompt=system_prompt,
+                              values=input_query_state))
 
             logging.debug(f'processed prompt query: {query_state_key} and received response: {response_data}')
 
@@ -154,6 +132,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
                 'response': response_data,
+                'raw_response': full_response if full_response else '<<<blank>>>',
                 'status': 'Success'
             }
 

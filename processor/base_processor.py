@@ -16,6 +16,10 @@ DEFAULT_OUTPUT_PATH = '/tmp/states'
 logging = log.getLogger(__name__)
 
 class ThreadQueueManager:
+
+    count: int = 0
+    remainder: int = 0
+
     def __init__(self, num_workers):
         self.queue = queue.Queue()
         self.workers = [threading.Thread(target=self.worker) for _ in range(num_workers)]
@@ -26,10 +30,20 @@ class ThreadQueueManager:
     def worker(self):
         while True:
             function = self.queue.get()
-            function()
-            self.queue.task_done()
+            try:
+                 function()
+                 self.remainder -= 1
+                 logging.info(f'completed worker task {function}, remainder: {self.remainder}')
+            except Exception as e:
+                logging.error(f'severe exception on worker function {e} for function: {function}')
+                raise e
+            finally:
+                self.queue.task_done()
 
     def add_to_queue(self, item):
+        logging.info(f'added worker task {item} to queue at position {self.count}')
+        self.count += 1
+        self.remainder += 1
         self.queue.put(item)
 
     def wait_for_completion(self):
@@ -41,7 +55,7 @@ class BaseProcessor:
                  processors: List['BaseProcessor'] = None):
 
         # TODO swap this with a pub/sub system at some point
-        self.manager = ThreadQueueManager(num_workers=6)
+        self.manager = ThreadQueueManager(num_workers=10)
         self.state = state
         self.processors = processors
         self.lock = threading.Lock()
@@ -193,6 +207,48 @@ class BaseProcessor:
         # if dump_on_every_call:
         #     self.dump_dataframe_csv(dump_on_every_call_output_filename)
 
+    def load_previous_state(self, force: bool = False):
+
+        # overwrite the state
+        if force:
+            return None
+
+        # first lets try and load the stored state from the storage
+        current_stored_state_filename = self.build_final_output_path()
+        logging.info(f'searching for current state file {current_stored_state_filename}, use force argument to overwrite')
+
+        # the output state is derived from the input state parameters load the
+        # current output state to ensure we do not reprocess the input state
+        if os.path.exists(current_stored_state_filename):
+            self.state = State.load_state(current_stored_state_filename)
+            logging.info(f'loaded current state file {current_stored_state_filename} into processor {self.config}')
+
+        return self.state
+
+    def process_by_query_states(self, query_states: List[dict]):
+
+        if not query_states:
+            error = f'*******INVALID INPUT QUERY STATE *********'
+            logging.error(error)
+            raise Exception(error)
+
+        # iterate query_states and add them to the worker queue
+        for query_state in query_states:
+
+            # setup a function call used to execute the processing of the actual entry
+            process_func = utils.higher_order_routine(self.process_input_data_entry,
+                                                      input_query_state=query_state)
+
+            # add the entry to the queue for processing
+            self.manager.add_to_queue(process_func)
+
+        # wait on workers until the task is completed
+        self.manager.wait_for_completion()
+
+        # execute the downstream function to handle state propagation
+        self.execute_downstream_processor_nodes()
+
+
     def __call__(self,
                  input_file: str = None,
                  input_state: State = None,
@@ -204,16 +260,21 @@ class BaseProcessor:
                             f'load the state prior and pass it as a parameter, or specify the input state '
                             f'file')
 
-        # first lets try and load the stored state from the storage
-        current_stored_state_filename = self.build_final_output_path()
+        # reload the state, if any
+        self.load_previous_state(force=force_state_overwrite)
 
-        logging.info(f'found current state file {current_stored_state_filename}, you can force a overwrite by specifying the force_state_overwrite argument')
-
-        # the output state is derived from the input state parameters load the
-        # current output state to ensure we do not reprocess the input state
-        if os.path.exists(current_stored_state_filename):
-            self.state = State.load_state(current_stored_state_filename)
-            logging.info(f'loaded current state file {current_stored_state_filename} into processor {self.config}')
+        #
+        # # first lets try and load the stored state from the storage
+        # current_stored_state_filename = self.build_final_output_path()
+        #
+        # #
+        # logging.info(f'found current state file {current_stored_state_filename}, you can force a overwrite by specifying the force_state_overwrite argument')
+        #
+        # # the output state is derived from the input state parameters load the
+        # # current output state to ensure we do not reprocess the input state
+        # if os.path.exists(current_stored_state_filename):
+        #     self.state = State.load_state(current_stored_state_filename)
+        #     logging.info(f'loaded current state file {current_stored_state_filename} into processor {self.config}')
 
         # if the input is .json then make sure it is a state input
         # TODO we can stream the inputs and outputs, would be more significantly more efficient
@@ -235,30 +296,24 @@ class BaseProcessor:
                          f'(aka input_query_state, essentially a single record used to as '
                          f'part of the template injection')
 
+            # iterate through the list of queries to be made and add them to a worker queue
             for index in range(count):
                 logging.info(f'processing query state index {index} from {count}')
 
-                # replaced in favor of common mehod
-                # query_state = {
-                #     # column_name: derived from the list of columns
-                #     # column_value: derived from all columns but for a specific column->index
-                #     column_name: input_state.data[column_name][index]
-                #     for column_name, column_header
-                #     in input_state.columns.items()
-                # }
-
+                # get the query_state for the current execution call
                 query_state = input_state.get_query_state_from_row_index(index)
 
+                # setup a function call used to execute the processing of the actual entry
                 process_func = utils.higher_order_routine(self.process_input_data_entry,
                                                           input_query_state=query_state)
 
+                # add the entry to the queue for processing
                 self.manager.add_to_queue(process_func)
 
             # wait on workers until the task is completed
             self.manager.wait_for_completion()
 
-
-            # # execute the downstream function to handle state propagation
+            # execute the downstream function to handle state propagation
             self.execute_downstream_processor_nodes()
 
         else:
@@ -404,46 +459,6 @@ class BaseProcessor:
         # otherwise return the full path
         return self.output_path
 
-
-    def _process_input_data_entry_pre(self, input_query_state: dict, force: bool = False):
-        if not input_query_state:
-            return False
-
-        # create the query data row primary key hash
-        # the individual state values of the input file
-        input_state_key, query_state_key = utils.build_state_data_row_key(
-            # we need the input query to create the primary key
-            query_state=input_query_state,
-
-            # we use the primary key definition because we are creating a primary key
-            key_definitions=self.state.config.output_primary_key_definition
-        )
-
-        # if it already exists, then skip it, unless forced
-        if self.has_query_state(query_state_key=input_state_key, force=force):
-
-
-            # if self.model_name == 'claude-2w':
-            #     return False
-
-            # TOOD quick hack to fix previous datasets
-            # indexes = self.mapping[input_state_key]
-            # for index in indexes.values:
-            #
-            #     pass
-            #
-            # for index in indexes.values:
-            #     for column, _ in self.columns.items():
-            #         self.data[column][index]
-
-                # data fixes
-                # fix_response = self.data['response'][index]
-                # fix_response, data_type = utils.parse_response_strip_assistant_message(fix_response)
-                # self.data['response'][index] = fix_response
-
-            return False
-
-        return True
     #
     # def process_input_data_entry_post(self, input_state_key, input_query_state: dict, force: bool = False):
     #

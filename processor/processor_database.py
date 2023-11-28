@@ -7,7 +7,7 @@ import psycopg2
 
 import utils
 from embedding import calculate_embeddings
-from processor.base_processor import BaseProcessor
+from processor.base_processor import BaseProcessor, ThreadQueueManager
 from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, StateDataKeyDefinition
 import dotenv
 
@@ -98,6 +98,13 @@ def build_query_state_from_config(state: State):
                 'data_type': 'str',
                 'value': config.model_name,
                 'max_length': 64
+            }),
+            'version': StateDataColumnDefinition.model_validate({
+                'name': 'version',
+                'null': False,
+                'data_type': 'str',
+                'value': config.version,
+                'max_length': 64
             })
         }
 
@@ -124,6 +131,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
                  additional_values_func=None, *args, **kwargs):
 
         super().__init__(state=state, processors=processors, **kwargs)
+        self.manager = ThreadQueueManager(num_workers=10)
         self.additional_values_func = additional_values_func
 
     class SqlStatement:
@@ -358,7 +366,20 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
         # we need to generate the state keys
         for index in range(count):
             query_state = state.get_query_state_from_row_index(index)
-            self.process_input_data_entry(input_query_state=query_state)
+            # self.process_input_data_entry(input_query_state=query_state)
+
+            # setup a function call used to execute the processing of the actual entry
+            process_func = utils.higher_order_routine(self.process_input_data_entry,
+                                                      input_query_state=query_state)
+
+            # add the entry to the queue for processing
+            self.manager.add_to_queue(process_func)
+
+        # wait on workers until the task is completed
+        self.manager.wait_for_completion()
+
+        # execute the downstream function to handle state propagation
+        self.execute_downstream_processor_nodes()
 
 def process_files(files: [str]):
     return [process_file(file) for file in files]
@@ -368,12 +389,14 @@ def process_file(file: str):
     processor = StateDatabaseProcessor(
         state=State(
             config=StateConfigDB(
-                name="AnimaLLM Instruction for Query Response Evaluation P0e",
-                #embedding_columns=['response', 'justification', 'evaluation_justification'],
+                name="AnimaLLM Instruction for Query Response Evaluation P0 (simulation)",
+                embedding_columns=['response', 'justification', 'evaluation_justification'],
                 output_primary_key_definition=[
                     StateDataKeyDefinition(name="animal"),
                     StateDataKeyDefinition(name="query"),
-                    StateDataKeyDefinition(name="perspective"),
+                    StateDataKeyDefinition(name="perspective_index"),
+                    StateDataKeyDefinition(name="query_template_index"),
+                    StateDataKeyDefinition(name="sample_no_run_no")
                 ]
             )
         )
@@ -385,10 +408,11 @@ if __name__ == '__main__':
 
     files = [
         # '../states/animallm/prod/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
-
+        # '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle',
+        '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle'
     ]
 
-    files = [f'../states/animallm/prod/{file}' for file in os.listdir('../states/animallm/prod/')]
+    # files = [f'../states/animallm/prod/{file}' for file in os.listdir('../states/animallm/prod/')]
     processors = process_files(files)
     processors = process_files(files=files)
     print(f'list of processors: {processors}')

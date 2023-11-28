@@ -9,7 +9,7 @@ from datetime import datetime as dt
 logging = log.getLogger(__name__)
 
 
-def print_state_information(path: str, recursive: bool = False, name_filter: str = None):
+def display_state_information(path: str, recursive: bool = False, name_filter: str = None):
 
     if not os.path.exists(path):
         raise Exception(f'state path does not exist: {path}')
@@ -26,7 +26,7 @@ def print_state_information(path: str, recursive: bool = False, name_filter: str
         if os.path.isdir(full_path):
             if recursive:
                 logging.info(f'recursive path {full_path}')
-                print_state_information(full_path)
+                display_state_information(full_path)
 
             continue
 
@@ -72,7 +72,7 @@ def add_column_value_constant_to_state(column: StateDataColumnDefinition,
 
 if __name__ == '__main__':
     log.basicConfig(level="DEBUG")
-    print_state_information('../states/animallm/prod', name_filter="P0")
+    display_state_information('../states/animallm/prod', name_filter="P1")
 
     exit(0)
 ### **** IMPORTANT p(n)
@@ -147,7 +147,7 @@ if __name__ == '__main__':
     #         value=state.config.model_name,
     #         data_type="str"
     #     ))
-    #
+
     state.save_state(state.config.output_path) ## persist the state again
 
     exit(0)
