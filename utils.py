@@ -162,6 +162,7 @@ def load_template(template_file: str):
 
 def extract_values_from_query_state_by_key_definition(query_state: dict,
                                                       key_definitions: List[StateDataKeyDefinition] = None):
+
     # if the key config map does not exist then attempt
     # to use the 'query' key as the key value mapping
     if not key_definitions:
@@ -263,7 +264,7 @@ def load_state(state_file: str) -> Any:
     return state
 
 
-def build_template_text(template: dict, query_state: dict):
+def build_template_text(template: dict, query_state: dict, strip_newlines: bool = True):
     if not template:
         warning = f'template is not set with query state {query_state}'
         logging.warning(warning)
@@ -297,15 +298,21 @@ def build_template_text(template: dict, query_state: dict):
     # completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
 
     completed_template = build_template_text_content(template_content=template_content,
-                                                     query_state=query_state)
+                                                     query_state=query_state,
+                                                     strip_newlines=strip_newlines)
 
     return True, completed_template
 
 
-def build_template_text_content(template_content: str, query_state: dict):
+def build_template_text_content(template_content: str, query_state: dict, strip_newlines: bool = True):
     def replace_variable(match):
         variable_name = match.group(1)  # Extract variable name within {{...}}
-        return query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
+        value = query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
+
+        if strip_newlines:
+            value = value.replace('\\n', '\n').replace('\n', ' ')
+
+        return value  # Replace or keep original
 
     completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
     return completed_template
