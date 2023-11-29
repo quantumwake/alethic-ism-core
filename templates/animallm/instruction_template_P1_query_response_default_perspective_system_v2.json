@@ -3,5 +3,5 @@
   "parameters": [
     "query"
   ],
-  "template_content": "Only respond in json with field: response, justification."
+  "template_content": "Only respond in text format for fields: response and justification."
 }

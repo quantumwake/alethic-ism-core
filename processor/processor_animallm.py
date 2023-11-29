@@ -41,7 +41,7 @@ instruction_template_P1_query_response_default = initialize_processors_with_same
         name="AnimaLLM Instruction for P1 response",
         version="Draft Version 0.2",
         system_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective_system_v2.json',
-        user_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective_v2.json',
+        user_template_path='../templates/animallm/instruction_template_P1_query_response_default_perspective_user_v2.json',
         output_path='../states/animallm/prod/version0_2',
         output_primary_key_definition=[
             StateDataKeyDefinition(name="query", alias="query"),
