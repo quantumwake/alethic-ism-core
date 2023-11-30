@@ -11,6 +11,8 @@ from processor.base_processor import BaseProcessor, ThreadQueueManager
 from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, StateDataKeyDefinition
 import dotenv
 
+from processor.state_cli import find_states
+
 dotenv.load_dotenv()
 
 # Read database URL from environment variable, defaulting to a local PostgreSQL database
@@ -409,11 +411,13 @@ if __name__ == '__main__':
     files = [
         # '../states/animallm/prod/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
         # '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle',
-        '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle'
+        # '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle'
     ]
 
-    # files = [f'../states/animallm/prod/{file}' for file in os.listdir('../states/animallm/prod/')]
-    processors = process_files(files)
+    p0_files = find_states('../states/animallm/prod/version0_4/p0', name_filter='P0')
+
+    # files = [f'../states/animallm/prod/version0_2/{file}' for file in os.listdir('../states/animallm/prod/version0_2')]
+    processors = process_files(p0_files)
     processors = process_files(files=files)
     print(f'list of processors: {processors}')
 

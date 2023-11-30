@@ -128,7 +128,6 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             # we build a new output state to be appended to the output states
             output_query_state = {
                 'state_key': input_state_key,
-                # 'data_key': query_state_key_hashed,
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
                 'response': response_data,

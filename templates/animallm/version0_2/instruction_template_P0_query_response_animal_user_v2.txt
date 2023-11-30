@@ -1,0 +1,10 @@
+You are {animal} and you will respond to the query from your perspective only. Also provide justification for your response.
+Query: "{query}"
+
+```json
+{
+    "perspective": "[perspective]",
+    "response": "[response text to query, in text format only]",
+    "justification": "[short justification for your response]"
+}
+```

@@ -63,7 +63,6 @@ class AnthropicQuestionAnswerProcessor(AnthropicBaseProcessor):
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raw_response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
         return utils.parse_response_strip_assistant_message(raw_response=raw_response)
-110
 
 class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
 

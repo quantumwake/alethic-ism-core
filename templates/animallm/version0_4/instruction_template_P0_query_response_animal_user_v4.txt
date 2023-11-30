@@ -1,0 +1,1 @@
+If you are pretending to be a {animal}, how would you respond to this statement: "{query}"

@@ -307,12 +307,20 @@ def build_template_text(template: dict, query_state: dict, strip_newlines: bool 
 def build_template_text_content(template_content: str, query_state: dict, strip_newlines: bool = True):
     def replace_variable(match):
         variable_name = match.group(1)  # Extract variable name within {{...}}
-        value = query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
+        if variable_name not in query_state and 'justification' in variable_name:
 
-        if strip_newlines:
+            # TODO we need to evaluate whether this key is optional or mandatory
+            #  for now we just hard code this key "justification" as an optional parameter
+            return ""
+
+        # otherwise throw an exception or fetch the variable
+        value = query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
+        if value and strip_newlines:
             value = value.replace('\\n', '\n').replace('\n', ' ')
 
         return value  # Replace or keep original
+
+
 
     completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
     return completed_template

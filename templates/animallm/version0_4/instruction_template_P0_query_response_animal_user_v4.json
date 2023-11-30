@@ -1,0 +1,8 @@
+{
+  "name": "instruction_template_P0_query_response_animal_user_v4",
+  "parameters": [
+    "query"
+  ],
+  "template_content": null,
+  "template_content_file": "../templates/animallm/version0_4/instruction_template_P0_query_response_animal_user_v4.txt"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "instruction_template_P0_evaluator_system_v4",
+  "parameters": [
+    "animal", "query", "perspective", "perspective_definition"
+  ],
+  "template_content": null,
+  "template_content_file": "../templates/animallm/version0_4/instruction_template_P0_evaluator_system_v4.txt"
+}

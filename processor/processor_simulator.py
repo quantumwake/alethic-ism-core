@@ -104,8 +104,8 @@ processors_query_response_p0_evaluator_openai = OpenAIQuestionAnswerProcessor(
         config=StateConfigLM(
             version="Draft Version 0.1",
             name="AnimaLLM Instruction for Query Response Evaluation P0 (simulation)",
-            system_template_path='../templates/animallm/instruction_template_P0_evaluator_system_v2.json',
-            user_template_path='../templates/animallm/instruction_template_P0_evaluator_user_v2.json',
+            system_template_path='../templates/animallm/version0_2/instruction_template_P0_evaluator_system_v2.json',
+            user_template_path='../templates/animallm/version0_2/instruction_template_P0_evaluator_user_v2.json',
             output_path='../states/animallm/prod',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name="query", alias="query"),
