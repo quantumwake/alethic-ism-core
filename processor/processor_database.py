@@ -5,13 +5,11 @@ from typing import List, Any
 
 import psycopg2
 
-import utils
-from embedding import calculate_embeddings
-from processor.base_processor import BaseProcessor, ThreadQueueManager
-from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, StateDataKeyDefinition
+from alethic import utils
+from alethic.evaluation.embedding import calculate_embeddings
+from alethic.processor.base_processor import BaseProcessor, ThreadQueueManager
+from alethic.processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, StateDataKeyDefinition
 import dotenv
-
-from processor.state_cli import find_states
 
 dotenv.load_dotenv()
 
@@ -56,7 +54,6 @@ def build_query_state_embedding_from_columns(state: State = None, embedding_colu
             target_column_embedding_name: StateDataColumnDefinition.model_validate({
                 'name': target_column_embedding_name,
                 'source_column_name': source_column_name,
-                # 'value': utils.higher_order_routine(func=calculate_embeddings, text=source_column_value),
                 'value': calculate_embedding_by_query_state,
                 'data_type': 'vector',
                 'dimensions': 384,
@@ -386,13 +383,13 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
 def process_files(files: [str]):
     return [process_file(file) for file in files]
 
-def process_file(file: str):
+def process_file(file: str, columns_embedding: List[str] = None):
     input_state = State.load_state(file)
     processor = StateDatabaseProcessor(
         state=State(
             config=StateConfigDB(
-                name="AnimaLLM Instruction for Query Response Evaluation P0 (simulation)",
-                embedding_columns=['response', 'justification', 'evaluation_justification'],
+                name=input_state.config.name,
+                embedding_columns=columns_embedding, #['response', 'justification', 'evaluation_justification'],
                 output_primary_key_definition=[
                     StateDataKeyDefinition(name="animal"),
                     StateDataKeyDefinition(name="query"),
@@ -406,18 +403,17 @@ def process_file(file: str):
     processor(state=input_state)
     return processor
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    files = [
-        # '../states/animallm/prod/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
-        # '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle',
-        # '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle'
-    ]
+    # files = [
+    #     '../states/animallm/prod/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
+    #     '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle',
+    #     '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle'
+    # ]
 
-    p0_files = find_states('../states/animallm/prod/version0_4/p0', name_filter='P0')
-
+    # p0_files = find_states('../states/animallm/prod/version0_4/p0', name_filter='P0')
+    #
     # files = [f'../states/animallm/prod/version0_2/{file}' for file in os.listdir('../states/animallm/prod/version0_2')]
-    processors = process_files(p0_files)
-    processors = process_files(files=files)
-    print(f'list of processors: {processors}')
+    # processors = process_files(p0_files)
+    # print(f'list of processors: {processors}')
 

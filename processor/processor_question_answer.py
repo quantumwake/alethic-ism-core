@@ -8,10 +8,10 @@ import dotenv
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 from tenacity import retry, wait_exponential, wait_random, retry_if_not_exception_type
 
-import utils
-from processor.base_processor import BaseProcessor, ThreadQueueManager
-from processor.base_question_answer_processor import BaseQuestionAnswerProcessor
-from processor.processor_state import State
+from alethic import utils
+from alethic.processor.base_processor import BaseProcessor, ThreadQueueManager
+from alethic.processor.base_question_answer_processor import BaseQuestionAnswerProcessor
+from alethic.processor.processor_state import State
 
 
 dotenv.load_dotenv()

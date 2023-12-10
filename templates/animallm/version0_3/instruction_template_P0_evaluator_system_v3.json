@@ -4,5 +4,5 @@
     "animal", "query", "perspective", "perspective_definition"
   ],
   "template_content": null,
-  "template_content_file": "../templates/animallm/instruction_template_P0_evaluator_system_v3.txt"
+  "template_content_file": "../templates/animallm/version0_3/instruction_template_P0_evaluator_system_v3.txt"
 }

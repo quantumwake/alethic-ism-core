@@ -2,9 +2,9 @@ import copy
 import logging as log
 from typing import List
 
-import utils
-from processor.base_processor import BaseProcessor
-from processor.processor_state import State
+from alethic import utils
+from alethic.processor.base_processor import BaseProcessor
+from alethic.processor.processor_state import State
 
 logging = log.getLogger(__name__)
 

@@ -1,18 +1,13 @@
-import datetime
 import json
 import logging as log
-import os
 import pickle
-import utils
+
+from alethic import utils
 
 from datetime import datetime as dt
-
 from enum import Enum as PyEnum
 from typing import Any, List, Dict, Optional
 from pydantic import BaseModel
-
-# from pydantic.functional_validators import field_validator
-
 
 logging = log.getLogger(__name__)
 

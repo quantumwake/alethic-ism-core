@@ -1,5 +1,5 @@
-from evaluation.semantic_distance import BasicSemanticSearch
-from evaluation.syntactic_accuracy import calculate_bleu, calculate_meteor, calculate_ter
+from alethic.evaluation.semantic_distance import BasicSemanticSearch
+from alethic.evaluation.syntactic_accuracy import calculate_bleu, calculate_meteor
 
 # Sentences we want sentence embeddings for
 # reference_sentence = 'Cows are domesticated farm animals primarily used for their meat, leather and milk'

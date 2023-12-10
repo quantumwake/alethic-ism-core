@@ -1,26 +1,16 @@
 import os
-from typing import List, Any
 
-import utils
-from processor.processor_question_answer import AnthropicQuestionAnswerProcessor
-from processor.processor_state import State, StateDataColumnDefinition
+import pandas as pd
 import logging as log
+
+from typing import List, Any, Dict
+
+from processor.utils.general_utils import implicit_count_with_force_count
+from processor.processor_state import State, StateDataColumnDefinition
+
 from datetime import datetime as dt
 
 logging = log.getLogger(__name__)
-
-
-def search_state(path: str, filter_func: Any):
-
-    # TODO terrible way to search the state but it will have to do for now,
-    #  basically a linear search since it has to open the entire state file
-    #  and iterate through it.
-
-    state = State.load_state(path)
-
-    query_states = [state.get_query_state_from_row_index(x) for x in range(state.count)]
-
-    for se
 
 
 def find_states(path: str, recursive: bool = False, name_filter: str = None):
@@ -53,6 +43,25 @@ def find_states(path: str, recursive: bool = False, name_filter: str = None):
         result_files.append(full_path)
 
     return result_files
+
+def search_state(path: str, filter_func: Any):
+
+    # TODO terrible way to search the state but it will have to do for now,
+    #  basically a linear search since it has to open the entire state file
+    #  and iterate through it.
+    state = State.load_state(path)
+    query_states = [state.get_query_state_from_row_index(x) for x in range(state.count)]
+    return [query_state for query_state in query_states if filter_func(query_state)]
+
+def query_states_to_excel(output_excel_path: str,
+                          query_states: List[Dict]):
+    # Convert query states to a dataframe and then save it as an excel file
+    df = pd.DataFrame(query_states)
+    path = os.path.dirname(output_excel_path)
+    os.makedirs(path, exist_ok=True)    # create dir recursively
+    df.to_excel(output_excel_path, index=False)
+    return df
+
 
 def display_state_information(path: str, recursive: bool = False, name_filter: str = None):
 
@@ -92,7 +101,7 @@ def display_state_information(path: str, recursive: bool = False, name_filter: s
         columns_string = ", ".join([f'[{key}]' for key in state.columns.keys()])
         logging.info(f'config: {configuration_string}')
         logging.info(f'columns: {columns_string}')
-        logging.info(f'state row count: {utils.implicit_count_with_force_count(state)}')
+        logging.info(f'state row count: {implicit_count_with_force_count(state)}')
         logging.info(f'created on: {dt.fromtimestamp(stat.st_ctime)}, '
                      f'updated on: {dt.fromtimestamp(stat.st_mtime)}, '
                      f'last access on: {dt.fromtimestamp(stat.st_atime)}')
@@ -124,7 +133,7 @@ def anthropic_columns_pN2_8():
     ### **** IMPORTANT p(n)
     # anthropic
     state = State.load_state(
-        '../states/animallm/prod/version0_1/570fb94c8609ef5d6915b6580041bc5afcefd460ac7f50da601600c07613048a.pickle')
+        '../../states/animallm/prod/version0_1/570fb94c8609ef5d6915b6580041bc5afcefd460ac7f50da601600c07613048a.pickle')
     state = add_column_value_constant_to_state(
         state=state,
         column=StateDataColumnDefinition(
@@ -145,7 +154,8 @@ def anthropic_columns_pN2_8():
 def openai_columns_pN2_8():
 
     # openai
-    state = State.load_state('../states/animallm/prod/version0_1/49717023a01b090af5315b23ed38bef5143acb3887b54d9fd2155da18bd2144e.pickle')
+    state = State.load_state(
+        '../../states/animallm/prod/version0_1/49717023a01b090af5315b23ed38bef5143acb3887b54d9fd2155da18bd2144e.pickle')
     state = add_column_value_constant_to_state(
         state=state,
         column=StateDataColumnDefinition(
@@ -274,12 +284,22 @@ def p1_columns(files: List[str]):
 
         state.save_state(state.config.output_path)  ## persist the state again
 
+
+## TEST
 if __name__ == '__main__':
     log.basicConfig(level="DEBUG")
-    display_state_information('../states/animallm/prod/version0_4/p0', name_filter="P0")
+    display_state_information('../../states/animallm/prod/version0_4/p0', name_filter="P0")
 
-    p0_files = find_states('../states/animallm/prod/version0_4/p0', name_filter="P0")
+    p0_files = find_states('../../states/animallm/prod/version0_4/p0', name_filter="P0")
     p0_columns(p0_files)
+
+    # search
+    found = find_states('../../states/animallm/prod/version0_2', name_filter='P(n)')
+    found_state_data = search_state(found[0], filter_func=lambda x: x)
+    found_state_data_df = query_states_to_excel(output_excel_path='../../excel/test_data/test.xlsx',
+                                                query_states=found_state_data)
+
+    print(found)
 
     # print(p0_files)
     # anthropic_columns_pN2_8()     # ran it already on the p0_files

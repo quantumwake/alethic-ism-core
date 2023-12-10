@@ -6,9 +6,9 @@ import queue
 import threading
 from typing import List
 import pandas as pd
-import utils
+from alethic import utils
 
-from processor.processor_state import State, StateDataRowColumnData, StateDataColumnDefinition, StateDataKeyDefinition, \
+from alethic.processor.processor_state import State, StateDataRowColumnData, StateDataColumnDefinition, StateDataKeyDefinition, \
     StateConfig, StateDataColumnIndex
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
@@ -527,7 +527,7 @@ if __name__ == '__main__':
         config=StateConfig(
             name='test state 1',
             input_path='../states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
-            output_path='../states/',
+            output_path='../../states/',
             # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name='query'),
