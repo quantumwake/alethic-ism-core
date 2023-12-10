@@ -2,9 +2,9 @@ import copy
 import logging as log
 from typing import List
 
-from alethic import utils
-from alethic.processor.base_processor import BaseProcessor
-from alethic.processor.processor_state import State
+from processor.base_processor import BaseProcessor
+from processor.general_utils import higher_order_routine
+from processor.processor_state import State, implicit_count_with_force_count
 
 logging = log.getLogger(__name__)
 
@@ -18,8 +18,8 @@ class DualStateProcessor(BaseProcessor):
                  *args, **kwargs):
 
         # TODO need to fix this loading issue where default values are not being initalized
-        state_1_count = utils.implicit_count_with_force_count(state=state_one)
-        state_2_count = utils.implicit_count_with_force_count(state=state_two)
+        state_1_count = implicit_count_with_force_count(state=state_one)
+        state_2_count = implicit_count_with_force_count(state=state_two)
 
         logging.info(f'starting full merge of state 1: {state_1_count}, and state 2: {state_2_count}')
 
@@ -50,9 +50,10 @@ class FullJoinStateProcessor(BaseProcessor):
 
         for processor_node in self.processors:
             logging.debug(f'processing input state {input_state.config}')
-            func = utils.higher_order_routine(self.handle,
-                                              processor=processor_node,
-                                              input_state=input_state)
+            func = higher_order_routine(self.handle,
+                                        processor=processor_node,
+                                        input_state=input_state)
+
             self.manager.add_to_queue(func)
 
         # wait for the completion of all processors or some exit code?

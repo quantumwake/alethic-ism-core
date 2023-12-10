@@ -1,0 +1,16 @@
+python procli.py state -tu ".*v5.*" -r true -s ./states/animallm/prod config show
+python procli.py state -r true -s ./states/animallm/prod/version0_5 config show
+python procli.py state -s ./states/animallm/prod -r true -tu ".*P0.*" -v 0.5 config show
+
+
+python procli.py state config -tu ".*v5.*" -r true -s ./states/animallm/prod modify -v "Draft Version 0.5"
+
+python procli.py state
+# import states into database
+python procli.py state export --config-file ./test-database-config-import.json database
+
+
+## adding columns with fixed value to the state dataset
+python procli.py state -s ./states/animallm/prod -r true -tu ".*P0.*" -v 0.5 data column add --column-name=perspective_index --column-value=P0
+python procli.py state -s ./states/animallm/prod -r true -tu ".*P0.*" data column add --column-name=response_provider_name --column-value-func=state.config.provider_name
+python procli.py state -s ./states/animallm/prod -r true -tu ".*P0.*" data column add --column-name=response_model_name --column-value-func=state.config.model_name

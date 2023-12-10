@@ -4,10 +4,9 @@ import math
 
 import asyncpg
 
-from alethic.utils import *
 import dotenv
 
-from alethic.evaluation.semantic_distance import BasicSemanticSearch
+from evaluation.semantic_distance import BasicSemanticSearch
 
 # load environment variables if any from .env
 dotenv.load_dotenv()
@@ -508,7 +507,7 @@ async def run_me_state_file(state_input_file: str=None,
 
 async def run_me(drop_tables: bool = False):
     # input_file = '../../dataset/examples/states/715f9bb6ea0cbff9b81a384d879edcc5bc3c04fac8617cf6ae51e32ed976810c.json'
-    base_path = '../../../states/'
+    base_path = '../../states/'
 
     state_filenames = [
         '5593f05e38e6f276dcf95c0640dbe7082c0804674a7118f5d782059c5875084f.pickle'

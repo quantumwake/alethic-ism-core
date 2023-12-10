@@ -1,10 +1,10 @@
 import logging as log
-from alethic import utils
+from processor import utils
 
 from typing import List
-from alethic.processor.base_processor import BaseProcessor
-from alethic.processor.processor_state import State, StateConfig, StateDataKeyDefinition
-from alethic.processor.processor_tests import openai_question_answer_devtestset
+from processor.base_processor import BaseProcessor
+from processor.processor_state import State, StateConfig, StateDataKeyDefinition
+from processor.processor_tests import openai_question_answer_devtestset
 
 logging = log.getLogger(__name__)
 
@@ -111,7 +111,7 @@ chain = ProcessorChainV2(
     state=State(
         config=StateConfig(
             name="AnimaLLM Evaluation Processor Chain",
-            output_path='../../states',
+            output_path='../states',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name="query"),
                 StateDataKeyDefinition(name="context")
@@ -130,7 +130,7 @@ chain = ProcessorChainV2(
 
 
 if __name__ == '__main__':
-    initial_input_state_file = '../../dataset/examples/processor/vetted/questions/qa_4gs_v2_devtestset.json'
+    initial_input_state_file = '../dataset/examples/processor/vetted/questions/qa_4gs_v2_devtestset.json'
     initial_input_state = State.load_state(initial_input_state_file)
 
     chain(input_state=initial_input_state)

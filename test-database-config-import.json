@@ -1,0 +1,25 @@
+{
+  "sources": [
+    {
+      "recursive": true,
+      "state_path_match": ".*\/version[0-9]_[0-9]\/p0\/",
+      "path": "./states/animallm/prod"
+    }
+  ],
+  "state_files": [
+    "./states/animallm/prod/version0_7/p0/9bb1839b79f76158c4335d83212d77f53b8d33e3ed2b14ca8928cea0f2e3c26f.pickle",
+    "./states/animallm/prod/version0_7/p0/0168be349de26ff89824a814b28818a9035cfaf1911f743bceff079c9fbd6036.pickle"
+  ],
+  "key_definitions": [
+    "animal",
+    "query",
+    "perspective_index",
+    "query_template_index",
+    "sample_no_run_no"
+
+  ],
+  "embedding_columns": [
+    "response",
+    "justification"
+  ]
+}

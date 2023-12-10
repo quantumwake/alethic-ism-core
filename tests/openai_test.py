@@ -3,8 +3,6 @@ import os
 import openai
 import dotenv
 
-import utils
-
 dotenv.load_dotenv()
 
 openai.api_key = os.environ.get("OPENAI_API_KEY")
@@ -69,7 +67,7 @@ for i in range(20):
     # final raw response, without stripping or splitting
     response = response.choices[0]['message']['content']
 
-    with open('./output.txt', 'a') as fio:
+    with open('../output.txt', 'a') as fio:
         fio.write(response)
 
     print(response)

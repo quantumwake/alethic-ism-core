@@ -4,12 +4,13 @@ import logging as log
 import os
 import queue
 import threading
-from typing import List
 import pandas as pd
-from alethic import utils
 
-from alethic.processor.processor_state import State, StateDataRowColumnData, StateDataColumnDefinition, StateDataKeyDefinition, \
-    StateConfig, StateDataColumnIndex
+from typing import List
+
+from processor.general_utils import higher_order_routine, calculate_hash, has_extension
+from processor.processor_state import State, StateDataRowColumnData, StateDataColumnDefinition, StateDataKeyDefinition, \
+    StateConfig, StateDataColumnIndex, implicit_count_with_force_count
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
 
@@ -180,7 +181,7 @@ class BaseProcessor:
             #  abstraction probably required
 
             # downstream / adjacent processors nodes
-            process_func = utils.higher_order_routine(self.execute_downstream_processor_node, node=downstream_node)
+            process_func = higher_order_routine(self.execute_downstream_processor_node, node=downstream_node)
             self.manager.add_to_queue(process_func)
 
         # wait for completion on downstream processor nodes
@@ -236,7 +237,7 @@ class BaseProcessor:
         for query_state in query_states:
 
             # setup a function call used to execute the processing of the actual entry
-            process_func = utils.higher_order_routine(self.process_input_data_entry,
+            process_func = higher_order_routine(self.process_input_data_entry,
                                                       input_query_state=query_state)
 
             # add the entry to the queue for processing
@@ -288,7 +289,7 @@ class BaseProcessor:
         # only if the input state has data do we iterate the content
         if input_state and input_state.data:
             # we pass the input state otherwise we get the self.state count
-            count = utils.implicit_count_with_force_count(state=input_state)
+            count = implicit_count_with_force_count(state=input_state)
             logging.info(f'starting processing loop with size {count} for state config {input_state.config}')
 
             # initialize a thread pool
@@ -304,8 +305,8 @@ class BaseProcessor:
                 query_state = input_state.get_query_state_from_row_index(index)
 
                 # setup a function call used to execute the processing of the actual entry
-                process_func = utils.higher_order_routine(self.process_input_data_entry,
-                                                          input_query_state=query_state)
+                process_func = higher_order_routine(self.process_input_data_entry,
+                                                    input_query_state=query_state)
 
                 # add the entry to the queue for processing
                 self.manager.add_to_queue(process_func)
@@ -436,7 +437,7 @@ class BaseProcessor:
             raise Exception(
                 f'Processor name not defined, please ensure to define a unique processor name as part, otherwise your states might get overwritten or worse, merged.')
 
-        if utils.has_extension(self.output_path, ['pkl', 'pickle', 'json', 'csv', 'xlsx']):
+        if has_extension(self.output_path, ['pkl', 'pickle', 'json', 'csv', 'xlsx']):
             return self.output_path
 
         # create temporary state storage area : if the output path is not set and does not exists already
@@ -451,7 +452,7 @@ class BaseProcessor:
             if prefix:
                 to_be_hashed = f'[{prefix}]/[{to_be_hashed}]'
 
-            state_file_hashed = utils.calculate_hash(to_be_hashed)
+            state_file_hashed = calculate_hash(to_be_hashed)
             state_file = f'{self.output_path}/{state_file_hashed}.{output_extension}'
             self.output_path = state_file
             return state_file
@@ -527,7 +528,7 @@ if __name__ == '__main__':
         config=StateConfig(
             name='test state 1',
             input_path='../states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
-            output_path='../../states/',
+            output_path='../states/',
             # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
             output_primary_key_definition=[
                 StateDataKeyDefinition(name='query'),

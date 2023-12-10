@@ -3,10 +3,8 @@ import json
 import logging as log
 import os
 import re
-from typing import Any, List
 
-import map_flattener
-from processor.processor_state import StateDataKeyDefinition, StateConfig, StateConfigLM, State
+from processor.map_utils import flatten
 
 logging = log.getLogger(__name__)
 
@@ -23,54 +21,6 @@ def merge_nested_dicts(d1, d2):
             d1[key] = value
 
     return d1
-
-
-def implicit_count_with_force_count(state: State):
-    if not state:
-        raise Exception(f'invalid state input, cannot be empty or undefined')
-
-    if not isinstance(state, State):
-        raise Exception(f'invalid state type, expected {type(State)}, got {type(state)}')
-
-    count = state.count
-    logging.info(f'current state data count: {count} for state config {state.config}')
-
-    if count == 0:
-        # force derive the count to see if there are rows
-        first_column = list(state.columns.keys())[0]
-        count = len(state.data[first_column].values)
-        state.count = count
-        logging.info(f'force update count of state values: {count}, '
-                     f'no count found but data exists,for  {state.config}')
-
-    return count
-
-
-def build_column_name(name: str):
-    return clean_string_for_ddl_naming(name).lower()
-
-
-def build_table_name(config: StateConfig):
-    unique_name = config.name if config.name else None
-
-    def prefix(name):
-        _prefix = config.name.strip() if name else None
-
-        if _prefix:
-            return clean_string_for_ddl_naming(_prefix).lower()
-
-        return str()
-
-    if not unique_name and isinstance(config, StateConfigLM):
-        provider = prefix(config.provider_name)
-        model_name = prefix(config.model_name)
-        user_template = prefix(config.user_template_path)
-        system_template = prefix(config.system_template_path)
-
-        table_name_appender_list = f"STATE_{provider} {model_name} {user_template} {system_template}".split()
-        unique_name = "_".join([x for x in table_name_appender_list if x])
-
-    return clean_string_for_ddl_naming(unique_name).lower()
 
 
 def identify_and_return_value_by_type(value):
@@ -94,30 +44,6 @@ def identify_and_return_value_by_type(value):
         except ValueError:
             # Return as string if all else fails
             return value
-
-
-# This function is designed to augment the input dataset with additional data. It offers two methods:
-# First, you can add static column/value pairs to each row.
-# Second, you can use a function to generate column/value pairs dynamically.
-#
-# Example Applications:
-#   1. Create an embedding from a column in the input dataset for a specific row.
-#   2. Add a fixed value to every row, like a header for input state, such as:
-#       - provider_name
-#       - model_name
-#       - etc.
-def get_column_state_value(value: Any, *args, **kwargs):
-    if not value:
-        return None
-
-    if isinstance(value, str):
-        return value
-
-    elif callable(value):
-        value = value(*args, **kwargs)
-        return value
-
-    return value
 
 
 def has_extension(filename: str, extensions: [str]):
@@ -160,40 +86,6 @@ def load_template(template_file: str):
     return template_dict
 
 
-def extract_values_from_query_state_by_key_definition(query_state: dict,
-                                                      key_definitions: List[StateDataKeyDefinition] = None):
-
-    # if the key config map does not exist then attempt
-    # to use the 'query' key as the key value mapping
-    if not key_definitions:
-        if "query" not in query_state:
-            raise Exception(f'query does not exist in query state {query_state}')
-
-        return query_state['query']
-
-    # iterate each parameter name and look it up in the state object
-    results = {}
-    for key in key_definitions:
-        key_name = key.name
-        alias = key.alias
-
-        # if it does not exist, throw an exception to warn the user that the state input is incorrect.
-        if key_name not in query_state:
-            raise Exception(f'Invalid state input for parameter: {key_name}, '
-                            f'query_state: {query_state}, '
-                            f'key definition: {key}')
-
-        if not alias:
-            alias = key.name
-
-        # add a new key state value pair,
-        # constructing a key defined by values from the query_state
-        # given that the key exists and is defined in the config_name mapping
-        results[alias] = query_state[key_name]
-
-    return results
-
-
 def calculate_hash(input_string: str):
     # Create a SHA-256 hash object
     hash_object = hashlib.sha256()
@@ -213,56 +105,6 @@ def calculate_string_list_hash(names: [str]):
 def calculate_string_dict_hash(item: dict):
     plain = ",".join([f'({key}:{value})' for key, value in item.items()])
     return calculate_hash(plain)
-
-
-def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataKeyDefinition]):
-    try:
-        # this will be used as the primary key
-        state_key_values = extract_values_from_query_state_by_key_definition(
-            key_definitions=key_definitions,
-            query_state=query_state)
-
-        # iterate each primary key value pair and create a tuple for hashing
-        keys = [(name, value) for name, value in state_key_values.items()]
-
-        # hash the keys as a string in sha256
-        return calculate_hash(str(keys)), keys
-    except Exception as e:
-        error = (f'error in trying to build state data row key for key definition {key_definitions} '
-                 f'and query_state {query_state}. Ensure that the output include keys and query state '
-                 f'keys you are trying to use with this key definition are reflective of both the input '
-                 f'query state and the response query state. Not that aliases could also cause key match '
-                 f'errors, ensure that key combinations are correct. Exception: {e}')
-
-        logging.error(error)
-        raise Exception(error)
-
-
-def load_state(state_file: str) -> Any:
-    state = {}
-    if not os.path.exists(state_file):
-        raise FileNotFoundError(
-            f'state file {state_file} not found, please use the ensure to use the state template to create the input state file.')
-
-    with open(state_file, 'r') as fio:
-        state = json.load(fio)
-
-        if 'config' not in state:
-            raise Exception(f'Invalid state input, please make sure you define '
-                            f'a basic header for the input state')
-
-        if 'data' not in state:
-            raise Exception(f'Invalid state input, please make sure a data field exists '
-                            f'in the root of the input state')
-
-        data = state['data']
-
-        if not isinstance(data, list):
-            raise Exception('Invalid data input states, the data input must be a list of dictionaries '
-                            'List[dict] where each dictionary is FLAT record of key/value pairs')
-
-    return state
-
 
 def build_template_text(template: dict, query_state: dict, strip_newlines: bool = True):
     if not template:
@@ -345,7 +187,7 @@ def parse_response_json(response: str):
 
     try:
         json_response = json.loads(_response)
-        json_response = {build_column_name(key): value for key, value in json_response.items()}
+        json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
         return True, 'json', json_response
     except Exception as e:
         # ignore and move to the next step
@@ -371,7 +213,7 @@ def parse_response_json(response: str):
     json_response = _response[json_start:json_end].strip()
     try:
         json_response = json.loads(json_response)
-        json_response = {build_column_name(key): value for key, value in json_response.items()}
+        json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
         return True, 'json', json_response
     except:
         pass  # try one more time with no line returns
@@ -379,15 +221,15 @@ def parse_response_json(response: str):
     try:
         json_response = json_response.replace('\\n', ' ')
         json_response = json.loads(json_response)
-        json_response = {build_column_name(key): value for key, value in json_response.items()}
+        json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
         return True, 'json', json_response
     except:
         raise SyntaxError(f'Invalid: json object even though we were able to extract it from the response text, '
                           f'the json response is still invalid, please ensure that json_response is correct, '
                           f'here is what we tried to parse into a json dictionary:\n{json_response}')
 
-    return True, 'json', json_response
-
+    # json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
+    # return True, 'json', json_response
 
 def parse_response_auto_detect_type(response: str):
     data_parse_status, data_type, data_parsed = parse_response_json(response=response)
@@ -405,7 +247,7 @@ def parse_response(raw_response: str):
     # if the parsed data is
     if data_parse_status:
         if 'json' == data_type:
-            flattened = map_flattener.flatten(data_parsed)
+            flattened = flatten(data_parsed)
             return flattened, data_type, raw_response  # TODO extract the list of column names
         elif 'csv' == data_type:
             raise Exception(f'unsupported csv format, need to fix the _parse_response_csv(.) function')

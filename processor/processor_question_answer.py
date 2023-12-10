@@ -8,10 +8,10 @@ import dotenv
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 from tenacity import retry, wait_exponential, wait_random, retry_if_not_exception_type
 
-from alethic import utils
-from alethic.processor.base_processor import BaseProcessor, ThreadQueueManager
-from alethic.processor.base_question_answer_processor import BaseQuestionAnswerProcessor
-from alethic.processor.processor_state import State
+from processor.general_utils import parse_response, parse_response_strip_assistant_message
+from processor.base_processor import BaseProcessor, ThreadQueueManager
+from processor.base_question_answer_processor import BaseQuestionAnswerProcessor
+from processor.processor_state import State
 
 
 dotenv.load_dotenv()
@@ -62,7 +62,7 @@ class AnthropicQuestionAnswerProcessor(AnthropicBaseProcessor):
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raw_response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-        return utils.parse_response_strip_assistant_message(raw_response=raw_response)
+        return parse_response_strip_assistant_message(raw_response=raw_response)
 
 class OpenAIBaseProcessor(BaseQuestionAnswerProcessor):
 
@@ -118,6 +118,6 @@ class OpenAIQuestionAnswerProcessor(OpenAIBaseProcessor):
         wait=wait_exponential(multiplier=1, min=4, max=10) + wait_random(0, 2))
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raw_response = super()._execute(user_prompt=user_prompt, system_prompt=system_prompt, values=values)
-        return utils.parse_response(raw_response=raw_response)
+        return parse_response(raw_response=raw_response)
 
 

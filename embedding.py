@@ -1,6 +1,6 @@
 import json
 
-from alethic.evaluation.semantic_distance import BasicSemanticSearch
+from evaluation.semantic_distance import BasicSemanticSearch
 
 embeddings_models = {
     "bert": BasicSemanticSearch(model_name="bert-base-uncased"),

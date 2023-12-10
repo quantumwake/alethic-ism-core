@@ -1,9 +1,11 @@
 import logging as log
 from typing import List
-from alethic import utils
 
-from alethic.processor.processor_state import State, StateConfigLM
-from alethic.processor.base_processor import BaseProcessor
+from processor.processor_database import build_column_name
+from processor.processor_state import State, StateConfigLM, build_state_data_row_key, \
+    extract_values_from_query_state_by_key_definition
+from processor.base_processor import BaseProcessor
+from processor.general_utils import load_template, build_template_text, calculate_string_dict_hash
 
 logging = log.getLogger(__name__)
 
@@ -32,11 +34,11 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
     @property
     def user_template(self):
-        return utils.load_template(self.user_template_filename)
+        return load_template(self.user_template_filename)
 
     @property
     def system_template(self):
-        return utils.load_template(self.system_template_filename)
+        return load_template(self.system_template_filename)
 
     @property
     def user_template_filename(self):
@@ -99,7 +101,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
         # create the query data row primary key hash
         # the individual state values of the input file
-        input_state_key, query_state_key = utils.build_state_data_row_key(
+        input_state_key, query_state_key = build_state_data_row_key(
             # we need the input query to create the primary key
             query_state=input_query_state,
 
@@ -112,8 +114,8 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             return
 
         # build out the final prompts with appropriate data injected
-        status, user_prompt = utils.build_template_text(self.user_template, input_query_state)
-        status, system_prompt = utils.build_template_text(self.system_template, input_query_state)
+        status, user_prompt = build_template_text(self.user_template, input_query_state)
+        status, system_prompt = build_template_text(self.system_template, input_query_state)
 
         try:
 
@@ -137,7 +139,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
             # fetch any additional state from the input states, provided that the config_name parameter is set
             # otherwise it will default to the only parameter it knows of named 'query' within the input states
-            additional_query_state = utils.extract_values_from_query_state_by_key_definition(
+            additional_query_state = extract_values_from_query_state_by_key_definition(
                 key_definitions=self.include_extra_from_input_definition,
                 query_state=input_query_state)
 
@@ -157,8 +159,9 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                     if not isinstance(item, dict):
                         raise Exception(f'item in response list of rows must be in of type dict.')
 
-                    state_item_key = utils.calculate_string_dict_hash(item)
+                    state_item_key = calculate_string_dict_hash(item)
 
+                    #
                     output_query_state = {**{
                         'state_key': input_state_key,
                         'state_item_key': state_item_key,
@@ -168,7 +171,10 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                     }, **item, **additional_query_state}
 
                     # format the keys, stripping the key name to something more generalized
-                    output_query_state = {utils.build_column_name(key): value for key, value in output_query_state.items()}
+                    output_query_state = {build_column_name(key): value
+                                          for key, value
+                                          in output_query_state.items()}
+
                     query_states.append(output_query_state)
             else:
                 query_states.append(output_query_state)

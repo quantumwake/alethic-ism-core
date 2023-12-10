@@ -1,15 +1,18 @@
 import logging as log
 import math
 import os
+import json
 from typing import List, Any
 
 import psycopg2
 
-from alethic import utils
-from alethic.evaluation.embedding import calculate_embeddings
-from alethic.processor.base_processor import BaseProcessor, ThreadQueueManager
-from alethic.processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, StateDataKeyDefinition
+from embedding import calculate_embeddings
+from processor.base_processor import BaseProcessor, ThreadQueueManager
+from processor.general_utils import clean_string_for_ddl_naming, higher_order_routine
+from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, \
+    StateDataKeyDefinition, StateConfig, get_column_state_value, implicit_count_with_force_count, find_state_files
 import dotenv
+
 
 dotenv.load_dotenv()
 
@@ -20,11 +23,10 @@ logging = log.getLogger(__name__)
 
 def build_query_state_embedding_from_columns(state: State = None, embedding_columns: dict = None):
 
-
     result_columns = {}
 
-    # fetch a list of keys "column names" from the current data entry (row)
-    search_key_mapping = {utils.build_column_name(key): key for key in state.columns.keys()}
+    # # fetch a list of keys "column names" from the current data entry (row)
+    # search_key_mapping = {utils.build_column_name(key): key for key in state.columns.keys()}
 
     #
     def process(source_column_name: str):
@@ -77,6 +79,33 @@ def build_query_state_embedding_from_columns(state: State = None, embedding_colu
             result_columns = {**result_columns, **new_column}
 
     return result_columns
+
+
+def build_column_name(name: str):
+    return clean_string_for_ddl_naming(name).lower()
+
+
+def build_table_name(config: StateConfig):
+    unique_name = config.name if config.name else None
+
+    def prefix(name):
+        _prefix = config.name.strip() if name else None
+
+        if _prefix:
+            return clean_string_for_ddl_naming(_prefix).lower()
+
+        return str()
+
+    if not unique_name and isinstance(config, StateConfigLM):
+        provider = prefix(config.provider_name)
+        model_name = prefix(config.model_name)
+        user_template = prefix(config.user_template_path)
+        system_template = prefix(config.system_template_path)
+
+        table_name_appender_list = f"STATE_{provider} {model_name} {user_template} {system_template}".split()
+        unique_name = "_".join([x for x in table_name_appender_list if x])
+
+    return clean_string_for_ddl_naming(unique_name).lower()
 
 
 def build_query_state_from_config(state: State):
@@ -184,7 +213,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         else:  # column_type is str:
             column_type = 'TEXT'
 
-        column_name = utils.clean_string_for_ddl_naming(column_name)
+        column_name = clean_string_for_ddl_naming(column_name)
 
         return f'"{column_name}" {column_type} {"NULL" if column_nullable else "NOT NULL"}'
 
@@ -192,7 +221,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
 
         # build the ddl for column
         columns = self.columns
-        table_name = utils.build_table_name(config=self.config)
+        table_name = build_table_name(config=self.config)
 
         # create the column definitions based on the header column information
         # for each column header, invoke the create_column_ddl and returns a
@@ -238,7 +267,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
             # raise e
 
     def drop_table(self, ddl: str = None):
-        table_name = utils.build_table_name(self.config)
+        table_name = build_table_name(self.config)
         ddl = ddl if ddl else f'DROP TABLE IF EXISTS {table_name} '
 
         logging.debug(f'drop table: {ddl}')
@@ -270,7 +299,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
 
         def parse_column_value(col_name: str, col_val: Any):
             # if not isinstance(col_val, str):
-            col_val = utils.get_column_state_value(col_val, query_state=input_query_state)
+            col_val = get_column_state_value(col_val, query_state=input_query_state)
 
             if not col_val:
                 return None
@@ -292,7 +321,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         # column_params = ','.join([f'${idx}' for idx in range(1, len(input_query_state.keys()) + 1)])
 
         # build table name from the current processor state
-        table_name = f'"{utils.build_table_name(self.config)}"'
+        table_name = f'"{build_table_name(self.config)}"'
 
         return self.SqlStatement(
             sql=f'INSERT INTO {table_name} ({column_names}) VALUES ({column_params})',
@@ -319,12 +348,12 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
     def __call__(self, state: State, *args, **kwargs):
 
         # initialize common information from the header (TODO this should be more generalized)
-        additional_columns_function_constants = utils.higher_order_routine(
+        additional_columns_function_constants = higher_order_routine(
             build_query_state_from_config,
             state=state)
 
         if self.embedding_columns:
-            additional_columns_function_embeddings = utils.higher_order_routine(
+            additional_columns_function_embeddings = higher_order_routine(
                 build_query_state_embedding_from_columns,
                 state=state,
                 embedding_columns=self.embedding_columns)
@@ -343,7 +372,7 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
             return additional_header_columns
 
         # step into the room of functions, said the "unfireable math guy".
-        additional_columns_function = utils.higher_order_routine(func=combined)
+        additional_columns_function = higher_order_routine(func=combined)
 
         # append all additional columns such that we can build the table definition
         combined_columns = additional_columns_function(state=state)
@@ -359,7 +388,8 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
         self.create_table()
 
         # write the data to the db.
-        count = utils.implicit_count_with_force_count(state=state)
+        # TODO fix this count issue ? maybe centralize it in the state only
+        count = implicit_count_with_force_count(state=state)
         logging.info(f'starting processing loop with size {count} for state config {state.config}')
 
         # we need to generate the state keys
@@ -368,8 +398,8 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
             # self.process_input_data_entry(input_query_state=query_state)
 
             # setup a function call used to execute the processing of the actual entry
-            process_func = utils.higher_order_routine(self.process_input_data_entry,
-                                                      input_query_state=query_state)
+            process_func = higher_order_routine(self.process_input_data_entry,
+                                                input_query_state=query_state)
 
             # add the entry to the queue for processing
             self.manager.add_to_queue(process_func)
@@ -380,40 +410,103 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
         # execute the downstream function to handle state propagation
         self.execute_downstream_processor_nodes()
 
-def process_files(files: [str]):
-    return [process_file(file) for file in files]
 
-def process_file(file: str, columns_embedding: List[str] = None):
-    input_state = State.load_state(file)
+def process_file(state_file: str,
+                 columns_embedding: List[str] = None,
+                 key_definitions: List[str] = None):
+
+    input_state = State.load_state(state_file)
     processor = StateDatabaseProcessor(
         state=State(
             config=StateConfigDB(
                 name=input_state.config.name,
-                embedding_columns=columns_embedding, #['response', 'justification', 'evaluation_justification'],
+                embedding_columns=columns_embedding,
                 output_primary_key_definition=[
-                    StateDataKeyDefinition(name="animal"),
-                    StateDataKeyDefinition(name="query"),
-                    StateDataKeyDefinition(name="perspective_index"),
-                    StateDataKeyDefinition(name="query_template_index"),
-                    StateDataKeyDefinition(name="sample_no_run_no")
+                    StateDataKeyDefinition(name=name) for name in key_definitions
                 ]
             )
         )
     )
+
     processor(state=input_state)
     return processor
 
-# if __name__ == '__main__':
 
-    # files = [
-    #     '../states/animallm/prod/acd69eb740857c6c4b7ec9ec48504b854370e28237b74d28928e41df5ed7cc73.pickle'
-    #     '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle',
-    #     '../states/animallm/prod/7be48694791e467b0a4f13affdbc817d10bb329c75c8811f7c493558c7216884.pickle'
-    # ]
+def process_files(files: [str],
+                  column_embedding: List[str] = None,
+                  key_definitions: List[str] = None):
 
-    # p0_files = find_states('../states/animallm/prod/version0_4/p0', name_filter='P0')
+    return [process_file(state_file=file,
+                         columns_embedding=column_embedding,
+                         key_definitions=key_definitions)
+            for file in files]
+
+
+def process_file_by_config(config_file: str):
+
+    if not os.path.exists(config_file):
+        raise FileExistsError(f'unable to load configuration file {config_file}, file does not exist')
+
+    if os.path.isdir(config_file):
+        raise ImportError(f'unable to load configuration {config_file}, import directory, config-file must be a file not a directory')
+
+    with open(config_file, 'r') as fio:
+        config = json.load(fio)
+
+    # fetch configuration source columns to generate embedding vectors
+    embedding_columns = config['embedding_columns'] if 'embedding_columns' in config else None
+
+    # extract the columns used for generating keys, if any
+    key_definitions = config['key_definitions'] if 'key_definitions' in config else None
+
+    # identify the state files to load
+    state_sources = config['sources'] if 'sources' in config else None
+
+    # iterate each state source
+    for state_source in state_sources:
+
+        logging.debug(f'processing state source: {state_source}')
+
+        # recursive configured?
+        recursive = state_source['recursive'] if 'recursive' in state_source else False
+
+        # whether we should search for specific state names, within the state configuration header
+        state_name_match = state_source['state_name_match'] if 'state_name_match' in state_source else None
+
+        # whether we should look for a specific matching directory and or file names
+        state_path_match = state_source['state_path_match'] if 'state_path_match' in state_source else None
+
+        # fetch the path to search
+        path = state_source['path'] if 'path' in state_source else None
+
+        if not path:
+            raise ImportError(f'path not specified in state source: {state_source}')
+
+        state_files = find_state_files(search_path=path,
+                                       search_recursive=recursive,
+                                       state_name_match=state_name_match,
+                                       state_path_match=state_path_match)
+
+        if not state_files:
+            logging.info(f'No state files found in path {path} using state source config {state_source}')
+            continue
+
+        # process individual files as defined in the configuration file
+        return process_files(files=state_files,
+                             column_embedding=embedding_columns,
+                             key_definitions=key_definitions)
+
+        #logging.debug(f'found state files: {state_files}')
+
+    # find_states(state_source, recursive=recursive)
+    # if not state_source:
+    #     raise ImportError(f'state_files not specified in configuration file')
     #
-    # files = [f'../states/animallm/prod/version0_2/{file}' for file in os.listdir('../states/animallm/prod/version0_2')]
-    # processors = process_files(p0_files)
-    # print(f'list of processors: {processors}')
+    #
+    # #
+    # #
+    # # # state-files
+    # # state_files = config['state_files'] if 'state_files' in config else None
+    #
+
 
