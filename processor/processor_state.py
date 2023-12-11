@@ -4,8 +4,6 @@ import os
 import pickle
 import re
 
-import pandas as pd
-
 from processor.general_utils import (
     calculate_hash,
     build_template_text_content,
@@ -583,16 +581,6 @@ def search_state(path: str, filter_func: Any):
     state = State.load_state(path)
     query_states = [state.get_query_state_from_row_index(x) for x in range(state.count)]
     return [query_state for query_state in query_states if filter_func(query_state)]
-
-
-def query_states_to_excel(output_excel_path: str,
-                          query_states: List[Dict]):
-    # Convert query states to a dataframe and then save it as an excel file
-    df = pd.DataFrame(query_states)
-    path = os.path.dirname(output_excel_path)
-    os.makedirs(path, exist_ok=True)  # create dir recursively
-    df.to_excel(output_excel_path, index=False)
-    return df
 
 
 def show_state_config_modification_info(
