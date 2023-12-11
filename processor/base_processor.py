@@ -52,11 +52,12 @@ class ThreadQueueManager:
 
 class BaseProcessor:
 
-    def __init__(self, state: State,
+    def __init__(self,
+                 state: State,
                  processors: List['BaseProcessor'] = None):
 
         # TODO swap this with a pub/sub system at some point
-        self.manager = ThreadQueueManager(num_workers=10)
+        self.manager = ThreadQueueManager(num_workers=1)
         self.state = state
         self.processors = processors
         self.lock = threading.Lock()

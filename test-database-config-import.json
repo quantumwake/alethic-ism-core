@@ -18,7 +18,7 @@
     "sample_no_run_no"
 
   ],
-  "embedding_columns": [
+  "columns_embedding": [
     "response",
     "justification"
   ]

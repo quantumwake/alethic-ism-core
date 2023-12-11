@@ -3,6 +3,7 @@ import json
 import logging as log
 import os
 import re
+import yaml
 
 from processor.map_utils import flatten
 
@@ -11,6 +12,13 @@ logging = log.getLogger(__name__)
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
 clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
 clean_string_for_ddl_naming = lambda s: "_".join(''.join([clean_char_for_ddl_naming(c) for c in s]).split(' '))
+
+
+def load_yaml(file_path):
+    with open(file_path, 'r') as file:
+        data = yaml.safe_load(file)
+    return data
+
 
 
 def merge_nested_dicts(d1, d2):

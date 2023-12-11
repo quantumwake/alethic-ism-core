@@ -2,13 +2,14 @@ import logging as log
 import math
 import os
 import json
-from typing import List, Any
+from argparse import Namespace
+from typing import List, Any, Dict
 
 import psycopg2
 
 from embedding import calculate_embeddings
 from processor.base_processor import BaseProcessor, ThreadQueueManager
-from processor.general_utils import clean_string_for_ddl_naming, higher_order_routine
+from processor.general_utils import clean_string_for_ddl_naming, higher_order_routine, load_yaml
 from processor.processor_state import State, StateDataColumnDefinition, StateConfigLM, StateConfigDB, \
     StateDataKeyDefinition, StateConfig, get_column_state_value, implicit_count_with_force_count, find_state_files
 import dotenv
@@ -17,7 +18,7 @@ import dotenv
 dotenv.load_dotenv()
 
 # Read database URL from environment variable, defaulting to a local PostgreSQL database
-DATABASE_URL = os.environ.get("OUTPUT_DATABASE_URL", "postgresql://postgres:postgres1@localhost:5432/postgres")
+# DATABASE_URL = os.environ.get("OUTPUT_DATABASE_URL", "postgresql://postgres:postgres1@localhost:5432/postgres")
 
 logging = log.getLogger(__name__)
 
@@ -29,10 +30,20 @@ def build_query_state_embedding_from_columns(state: State = None, embedding_colu
     # search_key_mapping = {utils.build_column_name(key): key for key in state.columns.keys()}
 
     #
-    def process(source_column_name: str):
+    def process(column_object: dict):
+
+        if 'column' not in column_object:
+            raise ValueError(f'column not defined as part of the column configuration setting '
+                             f'specify both a column and name, where the column is the source '
+                             f'column and the name is the target column')
 
         # otherwise create a new column derived from the target column name + prefixed with _embedding
-        target_column_embedding_name = f'{source_column_name}_embedding'
+        source_column_name = column_object['column']
+
+        if 'name' not in column_object:
+            target_column_embedding_name = f'{source_column_name}_embedding'
+        else:
+            target_column_embedding_name = column_object['name']
 
         def calculate_embedding_by_query_state(query_state: dict):
             if not query_state:
@@ -108,38 +119,30 @@ def build_table_name(config: StateConfig):
     return clean_string_for_ddl_naming(unique_name).lower()
 
 
-def build_query_state_from_config(state: State):
+def build_query_state_from_config(state: State, function_columns: callable):
+    """
+
+    :param state:
+    :type function_columns: callable
+    """
+
     config = state.config
 
-    if isinstance(config, StateConfigLM):
-        return {
-            'provider_name': StateDataColumnDefinition.model_validate({
-                'name': 'provider_name',
-                'null': False,
-                'data_type': 'str',
-                'value': config.provider_name,
-                'max_length': 64
-            }),
-            'model_name': StateDataColumnDefinition.model_validate({
-                'name': 'model_name',
-                'null': False,
-                'data_type': 'str',
-                'value': config.model_name,
-                'max_length': 64
-            }),
-            'version': StateDataColumnDefinition.model_validate({
-                'name': 'version',
-                'null': False,
-                'data_type': 'str',
-                'value': config.version,
-                'max_length': 64
-            })
-        }
+    columns = {
+        column_definition['name']: StateDataColumnDefinition.model_validate(
+            column_definition
+        )
+        for column_definition in function_columns()
+    }
 
-    return {}
+    for column, column_definition in columns.items():
+        column_definition.value = eval(column_definition.value)
+
+    return columns
 
 
 class BaseStateDatabaseProcessor(BaseProcessor):
+
 
     @property
     def config(self) -> StateConfigDB:
@@ -152,15 +155,23 @@ class BaseStateDatabaseProcessor(BaseProcessor):
     def embedding_columns(self):
         return self.config.embedding_columns
 
+    def function_columns(self):
+        return self.config.function_columns
+
+    def constant_columns(self):
+        return self.config.constant_columns
     # additional_values_func = None
 
     def __init__(self, state: State,
+                 database_url: str,
                  processors: List[BaseProcessor] = None,
-                 additional_values_func=None, *args, **kwargs):
+                 additional_values_func=None,
+                 *args, **kwargs):
 
         super().__init__(state=state, processors=processors, **kwargs)
         self.manager = ThreadQueueManager(num_workers=10)
         self.additional_values_func = additional_values_func
+        self.database_url = database_url
 
     class SqlStatement:
 
@@ -239,7 +250,7 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         """.strip()
 
     def create_connection(self):
-        return psycopg2.connect(DATABASE_URL)
+        return psycopg2.connect(self.database_url)
 
     def truncate_table(self, table_name: str):
         conn = self.create_connection()
@@ -317,9 +328,6 @@ class BaseStateDatabaseProcessor(BaseProcessor):
         # create column parameter indexes such that we can parameterize the inserts
         column_params = ','.join([f'%s' for idx in range(1, len(input_query_state.keys()) + 1)])
 
-        # create column parameter indexes such that we can parameterize the inserts
-        # column_params = ','.join([f'${idx}' for idx in range(1, len(input_query_state.keys()) + 1)])
-
         # build table name from the current processor state
         table_name = f'"{build_table_name(self.config)}"'
 
@@ -345,12 +353,24 @@ class BaseStateDatabaseProcessor(BaseProcessor):
 
 class StateDatabaseProcessor(BaseStateDatabaseProcessor):
 
-    def __call__(self, state: State, *args, **kwargs):
+    def __call__(self,
+                 state: State,
+                 *args,
+                 **kwargs):
 
         # initialize common information from the header (TODO this should be more generalized)
-        additional_columns_function_constants = higher_order_routine(
-            build_query_state_from_config,
-            state=state)
+        if self.function_columns:
+            additional_columns_function_higher_order_function = higher_order_routine(
+                build_query_state_from_config,
+                state=state,
+                function_columns=self.function_columns)
+
+        if self.constant_columns:
+            logging.error(f'Constants are not implemented yet, I guess it should be easy to do? just copy the same thing from the functions and instead of evaluating with a higher level functiuon, just set the value. probably could have done it by now given the amount of typing here')
+            # additional_columns_function_constants = higher_order_routine(
+            #     build_query_state_from_config,
+            #     state=state,
+            #     function_columns=self.function_columns)
 
         if self.embedding_columns:
             additional_columns_function_embeddings = higher_order_routine(
@@ -361,7 +381,7 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
         # combine the additional columns added to the table
         def combined(*args, **kwargs):
             # NOTE: column response must return the value as well, it can also be a callable function
-            additional_header_columns = additional_columns_function_constants(**kwargs)
+            additional_header_columns = additional_columns_function_higher_order_function(**kwargs)
             if self.embedding_columns:
                 # when creating the embeddings, the value of the column is returned as function
                 # this function takes the query_state and searches for columns specified in the config.embeddings_columns
@@ -411,16 +431,59 @@ class StateDatabaseProcessor(BaseStateDatabaseProcessor):
         self.execute_downstream_processor_nodes()
 
 
-def process_file(state_file: str,
-                 columns_embedding: List[str] = None,
-                 key_definitions: List[str] = None):
+def process_file(config: dict,
+                 state: State = None,
+                 state_file: str = None):
 
-    input_state = State.load_state(state_file)
+    if not state and not state_file:
+        raise FileNotFoundError(f'Must specify either a state_file or a state input argument')
+    elif state and state_file:
+        raise AssertionError(f'Cannot specify state and state_file simultaneously')
+
+    if state_file:
+        state = State.load_state(state_file)
+
+    database = config['database'] if 'database' in config else None
+    if not database:
+        raise KeyError(f'must specify database key and url in configuration or pass it in as an argument of db_url')
+
+    # set the target database url (either from the config or as passed in argument, latter taking precedence)
+    database_url = database['url']
+
+    additional_columns = config["additional_columns"]
+
+    #
+    if additional_columns:
+
+        # fetch configuration source columns to generate embedding vectors
+        embedding_columns = additional_columns['embedding'] \
+            if 'embedding' in additional_columns else None
+
+        # fetch configuration source columns to generate values from functions
+        function_columns = additional_columns['function'] \
+            if 'function' in additional_columns else None
+
+        # fetch configuration source columns to generate values from functions
+        constant_columns = additional_columns['constant'] \
+            if 'constant' in additional_columns else None
+
+    else:
+        embedding_columns = None
+        function_columns = None
+        constant_columns = None
+
+    # extract the columns used for generating keys, if any
+    key_definitions = config['key_definitions'] \
+        if 'key_definitions' in config else None
+
     processor = StateDatabaseProcessor(
+        database_url=database_url,
         state=State(
             config=StateConfigDB(
-                name=input_state.config.name,
-                embedding_columns=columns_embedding,
+                name=state.config.name,
+                embedding_columns=embedding_columns,
+                function_columns=function_columns,
+                constant_columns=constant_columns,
                 output_primary_key_definition=[
                     StateDataKeyDefinition(name=name) for name in key_definitions
                 ]
@@ -428,7 +491,7 @@ def process_file(state_file: str,
         )
     )
 
-    processor(state=input_state)
+    processor(state=state)
     return processor
 
 
@@ -496,17 +559,26 @@ def process_file_by_config(config_file: str):
                              column_embedding=embedding_columns,
                              key_definitions=key_definitions)
 
-        #logging.debug(f'found state files: {state_files}')
 
-    # find_states(state_source, recursive=recursive)
-    # if not state_source:
-    #     raise ImportError(f'state_files not specified in configuration file')
-    #
-    #
-    # #
-    # #
-    # # # state-files
-    # # state_files = config['state_files'] if 'state_files' in config else None
-    #
+
+def process_file_by_config(
+        states: Dict[str, State],
+        config_file: str,
+        database_url: str = None):
+
+    if not os.path.exists(config_file):
+        raise FileExistsError(f'unable to load configuration file {config_file}, file does not exist')
+
+    if os.path.isdir(config_file):
+        raise ImportError(f'unable to load configuration {config_file}, import directory, config-file must be a file not a directory')
+
+    config = load_yaml(config_file)
+
+    # iterate each state source
+    for state_file, state in states.items():
+        logging.debug(f'processing state: {state_file}')
+
+        # process individual files as defined in the configuration file
+        return process_file(state=state, config=config)
 
 

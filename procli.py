@@ -53,12 +53,19 @@ def setup_state_data_commands(state_subparsers):
     column_add_parser = column_subparsers.add_parser('add', help="Add a column to the state data set")
     column_add_parser.add_argument('-c', '--column-name', required=True, help='name of the column to add')
     column_add_parser.add_argument('-v', '--column-value', required=False, help='value constant')
-    column_add_parser.add_argument('-vf', '--column-value-func', required=False, help="value function to evaluate")
+    column_add_parser.add_argument('-f', '--column-value-func', required=False, help="value function to evaluate")
 
     # Add column add command under column commands
     column_add_parser = column_subparsers.add_parser('delete', help="Delete a column to the state data set")
     column_add_parser.add_argument('-c', '--column-name')
 
+    # Add column add command under column commands
+    column_add_parser = column_subparsers.add_parser('rename', help="Rename a column in the state data set")
+    column_add_parser.add_argument('-old', '--column-name')
+    column_add_parser.add_argument('-new', '--new-column-name')
+
+    # Add column add command under column commands
+    column_add_parser = column_subparsers.add_parser('show', help="Show columns of the state data set")
 
 def setup_state_config_commands(state_subparsers):
     # Adding 'config' subparser under 'state'
@@ -121,7 +128,7 @@ def setup_state_cli_commands(subparsers):
         ('n', 'state-name-match'),
         ('p', 'state-path-match'),
         ('v', 'state-version-match'),
-        ('mp' 'state-provider-match'),
+        ('mp', 'state-provider-match'),
         ('mn', 'state-model-match'),
         ('ts', 'state-system_template-match'),
         ('tu', 'state-user_template-match')
@@ -156,9 +163,95 @@ def find_state_files_by_search_arguments(args):
                             state_user_template_match=state_user_template_match)
 
 
+def column_action_show(args: argparse.Namespace) -> Dict[str, State]:
+    files = find_state_files_by_search_arguments(args=args)
+    force_yes = args.force_yes if 'force_yes' in args else False
+
+    for state_file, state in files.items():
+        # display state configuration information
+        show_state_info({state_file: state})
+        show_state_column_info(state=state)
+
+    return files
+
+def column_action_rename(args: argparse.Namespace) -> Dict[str, State]:
+    files = find_state_files_by_search_arguments(args=args)
+    force_yes = args.force_yes if 'force_yes' in args else False
+
+    for state_file, state in files.items():
+
+        column_name = args.column_name if 'column_name' in args else None
+        new_column_name = args.new_column_name if 'new_column_name' in args else None
+
+        if not column_name:
+            raise ValueError(f'column name must be defined')
+
+        if not new_column_name :
+            raise ValueError(f'new column name must be defined')
+
+        # display state configuration information
+        show_state_info({state_file: state})
+
+        # if columns exist and not empty
+        if force_yes:
+            args.assume = "YES"
+        else:
+            args.assume = input(
+                f'Rename column: {column_name}, new column: {new_column_name}, '
+                f'type YES, otherwise enter to skip.')
+
+        if args.assume != 'YES':
+            continue
+
+        state.columns[new_column_name] = state.columns.pop(column_name)
+        if state.data and column_name in state.data:
+            state.data[new_column_name] = state.data.pop(column_name)
+
+        logging.info(f'renamed column {column_name} -> {new_column_name}')
+        state.save_state(state_file)
+        files[state_file] = state
+
+    return files
+
+
+def column_action_delete(args: argparse.Namespace) -> Dict[str, State]:
+    files = find_state_files_by_search_arguments(args=args)
+    force_yes = args.force_yes if 'force_yes' in args else False
+
+    for state_file, state in files.items():
+
+        column_name = args.column_name if 'column_name' in args else None
+
+        if not column_name:
+            raise ValueError(f'column name must be defined')
+
+        # display state configuration information
+        show_state_info({state_file: state})
+
+        # if columns exist and not empty
+        if force_yes:
+            args.assume = "YES"
+        else:
+            args.assume = input(
+                f'Delete column: {column_name}, '
+                f'type YES, otherwise enter to skip.')
+
+        if args.assume != 'YES':
+            continue
+
+        state.columns.pop(column_name)
+        if column_name in state.data:
+            state.data.pop(column_name)
+
+        logging.info(f'deleted column {column_name}')
+        state.save_state(state_file)
+        files[state_file] = state
+
+    return files
+
+
 def column_action_add(args: argparse.Namespace) -> Dict[str, State]:
     files = find_state_files_by_search_arguments(args=args)
-
     force_yes = args.force_yes if 'force_yes' in args else False
 
     for state_file, state in files.items():
@@ -175,7 +268,6 @@ def column_action_add(args: argparse.Namespace) -> Dict[str, State]:
 
         # display state configuration information
         show_state_info({state_file: state})
-        # show_state_column_info(state)
 
         # if columns exist and not empty
         if force_yes:
@@ -210,6 +302,7 @@ def column_action_add(args: argparse.Namespace) -> Dict[str, State]:
 
         # persist the new state
         state.save_state(state_file)
+        files[state_file] = state
 
     return files
 
@@ -217,8 +310,6 @@ def column_action_add(args: argparse.Namespace) -> Dict[str, State]:
 def main():
     main_parser = argparse.ArgumentParser(description="Processor Command Line Interface (CLI)")
     main_command_parsers = main_parser.add_subparsers(dest='command')
-
-    # main_parser.add_argument('--debug')
 
     # setup state command line
     setup_state_cli_commands(main_command_parsers)
@@ -262,14 +353,24 @@ def main():
                 if 'add' in args.column_action:
                     column_action_add(args=args)
                 elif 'delete' in args.column_action:
-                    pass
+                    column_action_delete(args=args)
+                elif 'rename' in args.column_action:
+                    column_action_rename(args=args)
+                elif 'show' in args.column_action:
+                    column_action_show(args=args)
                 else:
                     raise NotImplementedError(args.data_command)
 
         elif 'export' == args.state_command:
 
+            files = find_state_files_by_search_arguments(args=args)
+
             if 'config_file' in args:
-                process_file_by_config(config_file=args.config_file)
+                database_url = args.db_url if 'db_url' in args else None
+
+                process_file_by_config(states=files,
+                                       config_file=args.config_file,
+                                       database_url=database_url)
             else:
                 raise NotImplementedError(f'Not Implemented, please use a configuration '
                                           f'file either in json or yaml format')
@@ -277,36 +378,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    #
-    # # State command
-    # state_parser = subparsers.add_parser('state', help='State-related operations')
-    # state_subparsers = state_parser.add_subparsers(dest='state_command')
-    #
-    # # State subcommands
-    # display_parser = state_subparsers.add_parser('display', help='Display state info')
-    # display_parser.set_defaults(func=display_state_information())
-    #
-    # column_parser = state_subparsers.add_parser('column', help='Column-related operations')
-    # column_parser.add_subparsers()
-    # column_parser.set_defaults(func=add_column_to_file())
-    #
-    # # data_parser = state_subparsers.add_parser('data', help='Data operations')
-    # # data_parser.set_defaults(func=show_data)
-    #
-    #
-    # # Parse Directory Path or Filename and Filter
-    # parse_cmd = subparsers.add_parser('state', help='Parse a file or directory with a filter')
-    # parse_cmd.add_argument('path', type=str, help='Path to the file or directory')
-    # parse_cmd.add_argument('filter', type=str, help='Filter to apply')
-    #
-    # # Add Column and Value to an Existing File
-    # add_col_cmd = subparsers.add_parser('addcolumn', help='Add a column to a file')
-    # add_col_cmd.add_argument('file', type=str, help='Path to the file')
-    # add_col_cmd.add_argument('column', type=str, help='Column name')
-    # add_col_cmd.add_argument('value', type=str, help='Value for the column')
-    #
-    # # Process File into a Database or Another Source
-    # process_cmd = subparsers.add_parser('process', help='Process a file into a database or another source')
-    # process_cmd.add_argument('source_file', type=str, help='Source file path')
-    # process_cmd.add_argument('destination', type=str, help='Destination database or source')

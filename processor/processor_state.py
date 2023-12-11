@@ -50,14 +50,6 @@ class StateConfig(BaseModel):
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
     template_columns: Optional[List[StateDataKeyDefinition]] = None
 
-    #
-    # def __setstate__(self, state):
-    #     super().__setstate__(state)
-    #
-    #     # missing values
-    #     self.copy_to_children = self.copy_to_children \
-    #         if 'copy_to_children' in state['__dict__'] else False
-
 
 class StateConfigLM(StateConfig):
     system_template_path: Optional[str] = None
@@ -65,9 +57,13 @@ class StateConfigLM(StateConfig):
     provider_name: str = None
     model_name: str = None
 
+# class StateDataColumnInclude():
+
 
 class StateConfigDB(StateConfig):
-    embedding_columns: Optional[List[str]] = None
+    embedding_columns: Optional[List[dict]] = None
+    function_columns: Optional[List[dict]] = None
+    constant_columns: Optional[List[dict]] = None
 
 
 class StateDataColumnDefinition(BaseModel):
@@ -679,14 +675,27 @@ def implicit_count_with_force_count(state: State):
     if count == 0:
         # force derive the count to see if there are rows
         if not state.columns:
-            logging.warn(f'no columns found for state {state.config}, returning zero count results')
+            logging.warning(f'no columns found for state {state.config}, returning zero count results')
             state.count = 0
         else:
-            first_column = list(state.columns.keys())[0]
-            count = len(state.data[first_column].values)
-            state.count = count
-            logging.info(f'force update count of state values: {count}, '
-                         f'no count found but data exists,for  {state.config}')
+            # if the data is blank then return zero count
+            if not state.data:
+                state.count = 0
+            else:
+                # otherwise iterate through each column name and look for associated data
+                for search_column in state.columns.keys():
+
+                    # if the column is not found in the state data then iterate
+                    # until we find a column that has data, such that we can count
+                    # otherwise we return zero
+                    if search_column not in state.data:
+                        pass
+                    else:
+                        count = len(state.data[search_column].values)
+                        state.count = count
+                        logging.info(f'force update count of state values: {count}, '
+                                     f'no count found but data exists,for  {state.config}')
+                        break
 
     return count
 

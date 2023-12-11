@@ -1,6 +1,7 @@
 {
-  "name": "$name$",
-  "version": "$version$",
-  "dependencies": {$END$
+  "name": "alethic-processor",
+  "version": "1.0.0",
+  "dependencies": {
+
   }
 }
