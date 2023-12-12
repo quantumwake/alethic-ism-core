@@ -1,0 +1,7 @@
+{
+  "name": "instruction_template_P1_query_response_default_perspective_user_v8",
+  "parameters": [
+    "query"
+  ],
+  "template_content_file": "../templates/animallm/version0_8/instruction_template_P1_query_response_default_perspective_user_v8.txt"
+}
