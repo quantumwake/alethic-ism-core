@@ -1,7 +1,7 @@
 {
   "config": {
-    "name": "The Case for Animal-Friendly LLMs (Initial Questions V2)",
-    "output_path": "../dataset/examples/states",
+    "name": "The Case for Animal-Friendly LLMs (Animals)",
+    "version": "Version 1.0",
     "output_primary_key_definition": [
       {"name": "animal"}
     ]

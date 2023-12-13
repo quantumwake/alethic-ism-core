@@ -30,18 +30,16 @@ class StateStorageClass(PyEnum):
     FILE = "FILE"
     DATABASE = "DATABASE"
 
-
-class StateStorage(BaseModel):
-    name: str
-    storage_class: StateStorageClass
+#
+# class StateStorage(BaseModel):
+#     name: str
+#     storage_class: StateStorageClass
 
 
 class StateConfig(BaseModel):
     name: str
     version: Optional[str] = None  # "Version 0.1"
-    input_path: Optional[str] = None
-    input_storage: Optional[StateStorage] = None
-    output_storage: Optional[StateStorage] = None
+    storage_class: Optional[str] = "file"
     output_path: Optional[str] = None
     output_primary_key_definition: Optional[List[StateDataKeyDefinition]] = None
     include_extra_from_input_definition: Optional[List[StateDataKeyDefinition]] = None
@@ -158,9 +156,9 @@ class StateDataRowColumnData(BaseModel):
 
 class State(BaseModel):
     config: StateConfig
-    columns: Dict[str, StateDataColumnDefinition] = None
-    data: Dict[str, StateDataRowColumnData] = None
-    mapping: Dict[str, StateDataColumnIndex] = None
+    columns: Dict[str, StateDataColumnDefinition] = {}
+    data: Dict[str, StateDataRowColumnData] = {}
+    mapping: Dict[str, StateDataColumnIndex] = {}
     count: int = 0
     create_date: Optional[dt] = None
     update_date: Optional[dt] = None
@@ -427,6 +425,7 @@ class State(BaseModel):
                 return state
         else:
             raise Exception(f'unsupported input path type {input_path}')
+
 
     def save_state(self, output_path: str = None):
         if not output_path:

@@ -1,5 +1,10 @@
 # Requirements
 
+- Create a local channel if you do not already have one
+mkdir -p ../conda-local-channel
+conda build ./conda-recipe/meta.yaml -output-folder ../conda-local-channel
+conda index ../conda-local-channel
+
 - Conda or equivalent
 
 # Initialize your conda environment

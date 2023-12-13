@@ -95,14 +95,6 @@ class BaseProcessor:
         return self.state.mapping
 
     @property
-    def input_path(self):
-        return self.config.input_path
-
-    @input_path.setter
-    def input_path(self, value):
-        self.config.input_path = value
-
-    @property
     def output_path(self):
         return self.config.output_path
 
@@ -114,6 +106,7 @@ class BaseProcessor:
     def output_primary_key_definition(self):
         return self.config.output_primary_key_definition
 
+    @output_primary_key_definition.setter
     def output_primary_key_definition(self, value):
         self.config.output_primary_key_definition = value
 
