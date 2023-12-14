@@ -2,9 +2,9 @@ import copy
 import logging as log
 from typing import List
 
-from ism.core.processor_state import State, implicit_count_with_force_count
-from ism.core.base_processor import BaseProcessor
-from ism.utils.general_utils import higher_order_routine
+from alethic_ism_core.core.processor_state import State, implicit_count_with_force_count
+from alethic_ism_core.core.base_processor import BaseProcessor
+from alethic_ism_core.utils.general_utils import higher_order_routine
 
 logging = log.getLogger(__name__)
 

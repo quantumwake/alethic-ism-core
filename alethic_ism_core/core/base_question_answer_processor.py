@@ -2,14 +2,14 @@ import logging as log
 from typing import List
 
 from processor.processor_database import build_column_name
-from ism.core.processor_state import (
+from alethic_ism_core.core.processor_state import (
     State,
     StateConfigLM,
     build_state_data_row_key,
     extract_values_from_query_state_by_key_definition)
 
-from ism.core.base_processor import BaseProcessor
-from ism.utils.general_utils import load_template, build_template_text, calculate_string_dict_hash
+from alethic_ism_core.core.base_processor import BaseProcessor
+from alethic_ism_core.utils.general_utils import load_template, build_template_text, calculate_string_dict_hash
 
 logging = log.getLogger(__name__)
 

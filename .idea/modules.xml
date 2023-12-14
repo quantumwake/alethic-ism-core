@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/alethic-mock-qa-generator.iml" filepath="$PROJECT_DIR$/.idea/alethic-mock-qa-generator.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../alethic-ism-core/.idea/alethic-ism-core.iml" filepath="$PROJECT_DIR$/../alethic-ism-core/.idea/alethic-ism-core.iml" />
     </modules>
   </component>
 </project>

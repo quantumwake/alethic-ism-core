@@ -5,7 +5,7 @@ import os
 import re
 import yaml
 
-from ism.utils.map_utils import flatten
+from alethic_ism_core.utils.map_utils import flatten
 
 logging = log.getLogger(__name__)
 
