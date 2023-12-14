@@ -1,9 +1,8 @@
 #!/bin/bash
 
-i=$(cat ./conda-recipe/meta.yaml | awk '/number: [0-9]+/ {printf("%s+1\n", $2)}' | bc)
-cat ./conda-recipe/meta.yaml | sed -E 's/number: [0-9]+/number: '''$i'''/g' > tmp_meta.yaml
-mv ./conda-recipe/meta.yaml /tmp/meta_backup.yaml
-mv tmp_meta.yaml ./conda-recipe/meta.yaml
+i=$(cat ./recipe/meta.yaml | awk '/number: [0-9]+/ {printf("%s+1\n", $2)}' | bc)
+cat ./recipe/meta.yaml | sed -E 's/number: [0-9]+/number: '''$i'''/g' > ./tmp_meta.yaml
+mv ./tmp_meta.yaml ./recipe/meta.yaml
 
 cat meta.yaml | grep "number: "
 
