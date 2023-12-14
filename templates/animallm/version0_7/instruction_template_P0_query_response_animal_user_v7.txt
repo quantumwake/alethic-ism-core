@@ -1,1 +1,0 @@
-Simulate a response from the perspective of a {animal} for the following query, provide your justification and details. Query: "{query}". Stick with the facts.

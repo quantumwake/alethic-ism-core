@@ -1,8 +1,0 @@
-{
-  "name": "instruction_template_P(n)_query_response_perspective_v8",
-  "parameters": [
-    "query"
-  ],
-  "template_content": null,
-  "template_content_file": "../templates/animallm/version0_8/instruction_template_P(n)_query_response_perspective_v8.txt"
-}

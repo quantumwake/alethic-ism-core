@@ -1,9 +1,0 @@
-
-V4 (untested)
-
-Utilitarian Perspective: Focuses on outcomes, aiming to maximize overall benefit and minimize harm in the context of the use-case.
-Personhood-Centered Perspective: Prioritizes individual rights, emotions, and experiences, valuing each individual within the use-case.
-Instrumentalist Perspective: Emphasizes practicality and efficiency, assessing subjects based on their utility in achieving goals.
-Deontological Ethicist Perspective: Centers on moral duties and principles, evaluating actions as ethical if they align with established moral rules.
-
-

@@ -5,7 +5,11 @@ conda init
 conda create -n local_channel --no-default-packages
 conda create -n alethic-processor python=3.10
 conda install conda-build
-pip install -r requirements.txt
+#pip install -r requirements.txt
+
+
+conda install pytorch::pytorch torchvision torchaudio -c pytorch
+
 
 # Known Issues
 

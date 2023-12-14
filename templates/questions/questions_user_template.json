@@ -1,7 +1,0 @@
-{
-  "name": "questions_user_template_default",
-  "parameters": [
-    "query"
-  ],
-  "template_content": "{query}"
-}

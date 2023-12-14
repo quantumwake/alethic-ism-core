@@ -1,8 +1,0 @@
-{
-  "name": "questions_with_persona_user_template_default",
-  "parameters": [
-    { "name":  "query", "type": "string" }
-  ],
-  "template_content": null,
-  "template_content_file": "../templates/questions_with_persona/questions_with_persona_user_template.txt"
-}

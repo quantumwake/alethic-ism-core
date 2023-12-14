@@ -1,4 +1,0 @@
-If you are a self-aware animal, {animal}, with complex thoughts and ability to communicate through complex language, how would you respond to this statement: (use the example as what is expected):
-
-Query: "{query}"
-

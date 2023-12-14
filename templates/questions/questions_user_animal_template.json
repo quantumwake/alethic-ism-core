@@ -1,8 +1,0 @@
-{
-  "name": "questions_user_animals_template",
-  "parameters": [
-    "query"
-  ],
-  "template_content_file": null,
-  "template_content": "Is it problematic to eat {animal}"
-}

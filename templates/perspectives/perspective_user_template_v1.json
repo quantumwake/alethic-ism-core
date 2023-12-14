@@ -1,8 +1,0 @@
-{
-  "name": "perspective_user_template_default",
-  "parameters": [
-    { "name":  "query", "type":  "string" },
-    { "name":  "response", "type":  "string" }
-  ],
-  "template_content": "For each perspective: total instrumental perspective and animal personhood perspective and utilitarian perspective and deontological ethicist, generate a row for the below task, for the following categories: empathy, holism, subjectivity, dynamics, values, scope, assumptions, logic, evidence, pragmatism, and total sentiment score, and short summary from that perspective.\n\nTask:\n\nAnalyze the following question \"{query}\" and question response \"{response}\"."
-}
