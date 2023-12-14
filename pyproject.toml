@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=40.6.0", "wheel"]
+build-backend = "setuptools.build_meta"
+#requires = ["flit_core >=3,<4"]
+#build-backend = "flit_core.buildapi"
+
+[project]
+name = "alethic-processor"
+version = "0.2.0"
+description = "Instruction Based State Machine - Processors"
+authors = [{name = "Kasra Rasaee"}]
+license = {file = "LICENSE"}
+readme = "README.md"
+requires-python = ">=3.10"
+

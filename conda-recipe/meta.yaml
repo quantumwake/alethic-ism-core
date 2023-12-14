@@ -1,6 +1,6 @@
 package:
   name: alethic-processor
-  version: "0.1.0"
+  version: "0.2.0"
 
 source:
   #url: https://github.com/quantumwake/alethic-processor/v0.1.0.tar.gz
@@ -9,7 +9,7 @@ source:
   git_rev: main
 
 build:
-  number: 12
+  number: 13
   script: "{{ PYTHON }} -m pip install . --no-deps -vv"
 
 requirements:
