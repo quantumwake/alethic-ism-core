@@ -1,15 +1,20 @@
 import logging as log
 from typing import List
 
-from processor.processor_database import build_column_name
-from alethic_ism_core.core.processor_state import (
+from .processor_state import (
     State,
     StateConfigLM,
     build_state_data_row_key,
     extract_values_from_query_state_by_key_definition)
 
-from alethic_ism_core.core.base_processor import BaseProcessor
-from alethic_ism_core.utils.general_utils import load_template, build_template_text, calculate_string_dict_hash
+from .base_processor import BaseProcessor
+
+from .utils.general_utils import (
+    load_template,
+    build_template_text,
+    calculate_string_dict_hash,
+    clean_string_for_ddl_naming
+)
 
 logging = log.getLogger(__name__)
 
@@ -175,7 +180,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                     }, **item, **additional_query_state}
 
                     # format the keys, stripping the key name to something more generalized
-                    output_query_state = {build_column_name(key): value
+                    output_query_state = {clean_string_for_ddl_naming(key): value
                                           for key, value
                                           in output_query_state.items()}
 

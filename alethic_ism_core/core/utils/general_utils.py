@@ -5,12 +5,12 @@ import os
 import re
 import yaml
 
-from alethic_ism_core.utils.map_utils import flatten
+from .map_utils import flatten
 
 logging = log.getLogger(__name__)
 
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
-clean_char_for_ddl_naming = lambda x: (x if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
+clean_char_for_ddl_naming = lambda x: (x.lower() if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')
 clean_string_for_ddl_naming = lambda s: "_".join(''.join([clean_char_for_ddl_naming(c) for c in s]).split(' '))
 
 
@@ -59,11 +59,11 @@ def has_extension(filename: str, extensions: [str]):
     return any(filename.endswith(ext) for ext in extensions)
 
 
-def load_template(template_file: str):
-    if not template_file or not os.path.exists(template_file):
+def load_template(template_config_file: str):
+    if not template_config_file or not os.path.exists(template_config_file):
         return None
 
-    with open(template_file, 'r') as fio:
+    with open(template_config_file, 'r') as fio:
         template_dict = json.load(fio)
 
     # if template content exists then set it, it can be overwritten by a file
@@ -78,18 +78,37 @@ def load_template(template_file: str):
         # throw an exception if both the template_file and template keys are set
         if template_content:
             raise Exception(f'Cannot define a template_content and a template_content_file in the same '
-                            f'template configuration {template_file}. For example, if you define the key '
+                            f'template configuration {template_config_file}. For example, if you define the key '
                             f'"template_content" with some text content, you cannot also define a '
                             f'"template_content_file" which points to a different content from a file"')
 
         # otherwise load the template
-        template_file = template_dict['template_content_file']
-        with open(template_file, 'r') as fio_tc:
+        template_content_file = template_dict['template_content_file']
+
+        if not os.path.exists(template_content_file):
+            logging.debug(f'unable to find content file with path {template_content_file}, attempting to use configuration path {template_config_file}')
+            # extract relative or absolute path
+            path = os.path.dirname(template_config_file)
+            template_content_file = f'{path}/{template_content_file}'
+
+            # second attempt, we'll use the configuration file path ass a prefix
+            if not os.path.exists(template_content_file):
+                logging.warning(f'unable to load content file with path {template_content_file}, '
+                                f'last attempt to try and figure out path of file')
+
+                template_content_file = f'{path}/{os.path.basename(template_content_file)}'
+
+        # last check to ensure file exists
+        if not os.path.exists(template_content_file):
+            error = f'critical error, unable to load content file with path {template_content_file}'
+            raise FileNotFoundError(error)
+
+        with open(template_content_file, 'r') as fio_tc:
             template_content = fio_tc.read().strip()
             template_dict['template_content'] = template_content
 
     if not template_content:
-        raise Exception(f'no template defined in template file {template_file} with configuration {template_dict}')
+        raise Exception(f'no template defined in template file {template_config_file} with configuration {template_dict}')
 
     return template_dict
 

@@ -1,4 +1,5 @@
 # Dependencies
+
 Use conda build via the build.sh script
 
 - python-dotenv,
@@ -12,4 +13,8 @@ Use conda build via the build.sh script
 - conda create -n alethic-ism-core python=3.11
 - conda install conda-build
 - bash build.sh
+
+
+# Testing
+- conda install pytest
 

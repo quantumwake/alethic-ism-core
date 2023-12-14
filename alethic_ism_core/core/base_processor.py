@@ -6,9 +6,16 @@ import threading
 
 from typing import List
 
-from alethic_ism_core.utils.general_utils import higher_order_routine, calculate_hash, has_extension
-from alethic_ism_core.core.processor_state import State, StateDataRowColumnData, StateDataColumnDefinition, StateDataKeyDefinition, \
-    StateConfig, StateDataColumnIndex, implicit_count_with_force_count
+from .utils.general_utils import higher_order_routine, calculate_hash, has_extension
+from .processor_state import (
+    State,
+    StateDataRowColumnData,
+    StateDataColumnDefinition,
+    StateDataKeyDefinition,
+    StateConfig,
+    StateDataColumnIndex,
+    implicit_count_with_force_count
+)
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
 

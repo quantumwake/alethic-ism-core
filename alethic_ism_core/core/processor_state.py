@@ -3,7 +3,7 @@ import logging as log
 import os
 import re
 
-from alethic_ism_core.utils.general_utils import (
+from .utils.general_utils import (
     calculate_hash,
     build_template_text_content,
     clean_string_for_ddl_naming,
