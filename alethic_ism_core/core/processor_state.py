@@ -13,8 +13,8 @@ from .utils.general_utils import (
 
 from datetime import datetime as dt
 from enum import Enum as PyEnum
-from typing import Any, List, Dict, Optional
-from pydantic import BaseModel
+from typing import Any, List, Dict, Optional, Union
+from pydantic import BaseModel, field_validator
 
 logging = log.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class StateConfig(BaseModel):
     name: str
     version: Optional[str] = None  # "Version 0.1"
     storage_class: Optional[str] = "file"
-    output_path: Optional[str] = None
+    output_path: Optional[str] = None       # deprecated for file outputs
     primary_key: Optional[List[StateDataKeyDefinition]] = None
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
@@ -157,13 +157,32 @@ class StateDataRowColumnData(BaseModel):
 
 
 class State(BaseModel):
-    config: StateConfig
+    config: Union[StateConfig, StateConfigLM, StateConfigDB]
     columns: Dict[str, StateDataColumnDefinition] = {}
     data: Dict[str, StateDataRowColumnData] = {}
     mapping: Dict[str, StateDataColumnIndex] = {}
     count: int = 0
     create_date: Optional[dt] = None
     update_date: Optional[dt] = None
+
+    @field_validator('config', mode='before')
+    def create_config(cls, config_value):
+        if isinstance(config_value, StateConfig):
+            return config_value
+
+        if config_value and any(key in config_value for key in [
+            'provider_name',
+            'model_name',
+        ]):
+            return StateConfigLM(**config_value)
+        elif config_value and any(key in config_value for key in [
+            'embedding_columns',
+            'function_columns',
+            'constant_columns'
+        ]):
+            return StateConfigDB(**config_value)
+        else:
+            return StateConfig(**config_value)
 
     def reset(self):
         self.columns = {}
