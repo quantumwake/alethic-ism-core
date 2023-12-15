@@ -41,7 +41,7 @@ class StateConfig(BaseModel):
     storage_class: Optional[str] = "file"
     output_path: Optional[str] = None
     primary_key: Optional[List[StateDataKeyDefinition]] = None
-    include_extra_from_input_definition: Optional[List[StateDataKeyDefinition]] = None
+    query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
     template_columns: Optional[List[StateDataKeyDefinition]] = None
 
@@ -699,6 +699,7 @@ def implicit_count_with_force_count(state: State):
 
 def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataKeyDefinition]):
     try:
+
         # this will be used as the primary key
         state_key_values = extract_values_from_query_state_by_key_definition(
             key_definitions=key_definitions,
@@ -709,6 +710,7 @@ def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataK
 
         # hash the keys as a string in sha256
         return calculate_hash(str(keys)), keys
+
     except Exception as e:
         error = (f'error in trying to build state data row key for key definition {key_definitions} '
                  f'and query_state {query_state}. Ensure that the output include keys and query state '

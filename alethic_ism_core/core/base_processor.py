@@ -116,12 +116,12 @@ class BaseProcessor:
         self.config.primary_key = value
 
     @property
-    def include_extra_from_input_definition(self):
-        return self.config.include_extra_from_input_definition
+    def query_state_inheritance(self):
+        return self.config.query_state_inheritance
 
-    @include_extra_from_input_definition.setter
-    def include_extra_from_input_definition(self, value):
-        self.config.include_extra_from_input_definition = value
+    @query_state_inheritance.setter
+    def query_state_inheritance(self, value):
+        self.config.query_state_inheritance = value
 
     def add_processor(self, processor: 'BaseProcessor') -> List['BaseProcessor']:
         if not self.processors:
@@ -460,11 +460,11 @@ if __name__ == '__main__':
             input_path='../states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
             output_path='../../states/',
             # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
-            output_primary_key_definition=[
+            primary_key=[
                 StateDataKeyDefinition(name='query'),
                 StateDataKeyDefinition(name='context'),
             ],
-            include_extra_from_input_definition=[
+            query_state_inheritance=[
                 StateDataKeyDefinition(name='query', alias='input_query'),
                 StateDataKeyDefinition(name='context', alias='input_context'),
             ]

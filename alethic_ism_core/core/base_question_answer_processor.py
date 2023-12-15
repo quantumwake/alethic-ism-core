@@ -149,7 +149,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             # fetch any additional state from the input states, provided that the config_name parameter is set
             # otherwise it will default to the only parameter it knows of named 'query' within the input states
             additional_query_state = extract_values_from_query_state_by_key_definition(
-                key_definitions=self.include_extra_from_input_definition,
+                key_definitions=self.query_state_inheritance,
                 query_state=input_query_state)
 
             # apply the additional states to the current query_state
