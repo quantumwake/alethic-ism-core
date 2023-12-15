@@ -62,6 +62,7 @@ class StateConfigDB(StateConfig):
 
 
 class StateDataColumnDefinition(BaseModel):
+    id: Optional[int] = None
     name: str  # Column Name
     data_type: str = 'str'  # Data type found in table
     null: Optional[bool] = True  # Is nullable
