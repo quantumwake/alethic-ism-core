@@ -30,7 +30,7 @@ class DualStateProcessor(BaseProcessor):
             for index_2 in range(state_2_count):
                 query_state_source_2 = state_two.get_query_state_from_row_index(index_2)
                 joined_query_state = {**query_state_source_1, **query_state_source_2}
-                joined_query_state = self.save_state(query_state=joined_query_state)
+                joined_query_state = self.apply_query_state(query_state=joined_query_state)
                 print(joined_query_state)
 
         return self.state  # new state

@@ -40,7 +40,7 @@ class StateConfig(BaseModel):
     version: Optional[str] = None  # "Version 0.1"
     storage_class: Optional[str] = "file"
     output_path: Optional[str] = None
-    output_primary_key_definition: Optional[List[StateDataKeyDefinition]] = None
+    primary_key: Optional[List[StateDataKeyDefinition]] = None
     include_extra_from_input_definition: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
     template_columns: Optional[List[StateDataKeyDefinition]] = None
@@ -373,7 +373,7 @@ class State(BaseModel):
         else:
             state_key, state_key_plain = build_state_data_row_key(
                 query_state=query_state,
-                key_definitions=self.config.output_primary_key_definition)
+                key_definitions=self.config.primary_key)
 
         return column_and_value, state_key
 

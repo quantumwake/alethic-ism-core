@@ -89,13 +89,13 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
         return super().build_final_output_path(prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
 
 
-    def process_write_output_state(self, query_states: [dict]):
+    def apply_states(self, query_states: [dict]):
         with self.lock:
             logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
             def save_query_state(query_state: dict):
 
                 # persist new state such that we do not repeat the call when interrupted
-                query_state = self.save_state(query_state=query_state)
+                query_state = self.apply_query_state(query_state=query_state)
 
                 # persist the new record to the output file, if any
                 # TODO STREAM IT self.write_record(query_state=query_state)
@@ -115,7 +115,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             query_state=input_query_state,
 
             # we use the primary key definition because we are creating a primary key
-            key_definitions=self.state.config.output_primary_key_definition
+            key_definitions=self.state.config.primary_key
         )
 
         # if it already exists, then skip it, unless forced
@@ -189,7 +189,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
                 query_states.append(output_query_state)
 
             # write the query states (synchronized)
-            query_states = self.process_write_output_state(query_states=query_states)
+            query_states = self.apply_states(query_states=query_states)
 
             # return the updated query state after persistence, generally the same unless it was remapped to new columns
             return query_states
