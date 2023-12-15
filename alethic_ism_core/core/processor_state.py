@@ -52,14 +52,16 @@ class StateConfigLM(StateConfig):
     provider_name: str = None
     model_name: str = None
 
-# class StateDataColumnInclude():
-
 
 class StateConfigDB(StateConfig):
     embedding_columns: Optional[List[dict]] = None
     function_columns: Optional[List[dict]] = None
     constant_columns: Optional[List[dict]] = None
 
+class InstructionTemplate(BaseModel):
+    template_path: str
+    template_content: str
+    template_type: str
 
 class StateDataColumnDefinition(BaseModel):
     id: Optional[int] = None
