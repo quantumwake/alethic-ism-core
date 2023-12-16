@@ -3,6 +3,8 @@ import json
 import logging as log
 import os
 import re
+from typing import Union
+
 import yaml
 
 from .map_utils import flatten
@@ -133,39 +135,41 @@ def calculate_string_dict_hash(item: dict):
     plain = ",".join([f'({key}:{value})' for key, value in item.items()])
     return calculate_hash(plain)
 
-def build_template_text(template: dict, query_state: dict, strip_newlines: bool = True):
+
+def build_template_text(template: Union[dict, str], query_state: dict, strip_newlines: bool = True):
+
     if not template:
         warning = f'template is not set with query state {query_state}'
         logging.warning(warning)
         return False, None
 
-    error = None
-    if 'name' not in template:
-        error = f'template name not set, please specify a template name for template {template}'
+    if isinstance(template, dict):
+        error = None
+        if 'name' not in template:
+            error = f'template name not set, please specify a template name for template {template}'
 
-    if 'template_content' not in template:
-        error = (f'template_content not specified, please specify the template_content for template {template} '
-                 f'by either specifying the template_content or template_content_file as text or filename '
-                 f'of the text representing the template {template}')
+        if 'template_content' not in template:
+            error = (f'template_content not specified, please specify the template_content for template {template} '
+                     f'by either specifying the template_content or template_content_file as text or filename '
+                     f'of the text representing the template {template}')
 
-    if error:
-        logging.error(error)
-        raise Exception(error)
+        if error:
+            logging.error(error)
+            raise Exception(error)
 
-    # process the template now
-    template_name = template['name']
-    template_content = template['template_content']
+        # process the template now
+        template_name = template['name']
+        template_content = template['template_content']
 
-    if 'parameters' not in template:
-        logging.info(f'no parameters founds for {template_name}')
-        return template_content
+        if 'parameters' not in template:
+            logging.info(f'no parameters founds for {template_name}')
+            return template_content
+    elif isinstance(template, str):
+        template_content = template
+    else:
+        raise NotImplementedError(f'template of type {type(template)} not supported')
 
-    # def replace_variable(match):
-    #     variable_name = match.group(1)  # Extract variable name within {{...}}
-    #     return query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
-    #
-    # completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
-
+    # process the template text
     completed_template = build_template_text_content(template_content=template_content,
                                                      query_state=query_state,
                                                      strip_newlines=strip_newlines)

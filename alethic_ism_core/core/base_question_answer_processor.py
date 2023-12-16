@@ -43,26 +43,26 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
 
     @property
     def user_template(self):
-        return load_template(self.user_template_filename)
+        return load_template(self.user_template_path)
 
     @property
     def system_template(self):
-        return load_template(self.system_template_filename)
+        return load_template(self.system_template_path)
 
     @property
-    def user_template_filename(self):
+    def user_template_path(self):
         return self.config.user_template_path
 
-    @user_template_filename.setter
-    def user_template_filename(self, path: str):
+    @user_template_path.setter
+    def user_template_path(self, path: str):
         self.config.user_template_path = path
 
     @property
-    def system_template_filename(self):
+    def system_template_path(self):
         return self.config.system_template_path
 
-    @system_template_filename.setter
-    def system_template_filename(self, path: str):
+    @system_template_path.setter
+    def system_template_path(self, path: str):
         self.config.system_template_path = path
 
     def __init__(self, state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
