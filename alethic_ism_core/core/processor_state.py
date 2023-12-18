@@ -12,11 +12,21 @@ from .utils.general_utils import (
 )
 
 from datetime import datetime as dt
-from enum import Enum as PyEnum
+from enum import Enum as PyEnum, Enum
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel, field_validator
 
 logging = log.getLogger(__name__)
+
+
+class ProcessorStatus(Enum):
+    CREATED = "CREATED"
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    TERMINATED = "TERMINATED"
+    STOPPED = "STOPPED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class StateDataKeyDefinition(BaseModel):

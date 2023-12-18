@@ -3,9 +3,11 @@ import logging as log
 import os
 import queue
 import threading
+from enum import Enum
 
 from typing import List
 
+from .utils.state_utils import validate_processor_status_change
 from .utils.general_utils import higher_order_routine, calculate_hash, has_extension
 from .processor_state import (
     State,
@@ -14,35 +16,56 @@ from .processor_state import (
     StateDataKeyDefinition,
     StateConfig,
     StateDataColumnIndex,
-    implicit_count_with_force_count
+    implicit_count_with_force_count, ProcessorStatus
 )
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
 
 logging = log.getLogger(__name__)
 
+
 class ThreadQueueManager:
 
-    count: int = 0
-    remainder: int = 0
+    def __init__(self, num_workers, processor: 'BaseProcessor'):
+        self.terminated = False
+        self.remainder = 0
+        self.count = 0
+        self.processor = processor
 
-    def __init__(self, num_workers):
         self.queue = queue.Queue()
         self.workers = [threading.Thread(target=self.worker) for _ in range(num_workers)]
+
+    def start(self):
         for worker in self.workers:
             worker.daemon = True
             worker.start()
 
     def worker(self):
-        while True:
-            function = self.queue.get()
+        max_wait_count = 300
+        max_wait_time = 100
+        wait_count = 0
+
+        while not self.terminated:
+            # we do not want to block on this,
             try:
-                 function()
-                 self.remainder -= 1
-                 logging.info(f'completed worker task {function}, remainder: {self.remainder}')
+                function = self.queue.get(timeout=max_wait_time)
+            except queue.Empty:
+                if wait_count >= max_wait_count:
+                    total_wait_time = max_wait_time * max_wait_count
+                    logging.info(f'max wait time expired, waited a total of {total_wait_time}, count: {wait_count}/{max_wait_count}')
+                    self.terminated = True
+
+                wait_count += 1
+                continue
+
+            # invoke the function
+            try:
+                function()
+                self.remainder -= 1
+                logging.info(f'completed worker task {function}, remainder: {self.remainder}')
             except Exception as e:
                 logging.error(f'severe exception on worker function {e} for function: {function}')
-                raise e
+                # raise e
             finally:
                 self.queue.task_done()
 
@@ -55,6 +78,10 @@ class ThreadQueueManager:
     def wait_for_completion(self):
         self.queue.join()
 
+    def stop_all_workers(self):
+        self.terminated = True
+
+
 class BaseProcessor:
 
     def __init__(self,
@@ -62,7 +89,8 @@ class BaseProcessor:
                  processors: List['BaseProcessor'] = None):
 
         # TODO swap this with a pub/sub system at some point
-        self.manager = ThreadQueueManager(num_workers=1)
+        self.current_status = ProcessorStatus.CREATED
+        self.manager = ThreadQueueManager(num_workers=1, processor=self)
         self.state = state
         self.processors = processors
         self.lock = threading.Lock()
@@ -150,13 +178,14 @@ class BaseProcessor:
         if not isinstance(node, BaseProcessor):
             raise Exception(f'Invalid processor type {node}, expected '
                             f'class base type {type(node)}')
-#
+        #
         # execute processor
         node(input_state=self.state)
 
     def execute_downstream_processor_nodes(self):
         if not self.processors:
-            logging.info(f'no downstream processors available for config input {self.config} with input state {self.build_final_output_path()}')
+            logging.info(
+                f'no downstream processors available for config input {self.config} with input state {self.build_state_storage_path()}')
             return
 
         # iterate each child processor and inject the output state
@@ -175,27 +204,6 @@ class BaseProcessor:
         # wait for completion on downstream processor nodes
         self.manager.wait_for_completion()
 
-
-    def _be_a_dumb_coder(self):
-        pass
-        # # identify whether we should dump each call result to an output csv file
-        # dump_on_every_call = False
-        # dump_on_every_call_output_filename = None
-        # if 'dump_on_every_call' in self.config:
-        #     dump_on_every_call = bool(self.config['dump_on_every_call'])
-        #     dump_on_every_call_output_filename = self.config['dump_on_every_call_output_filename'] \
-        #         if 'dump_on_every_call_output_filename' in self.config \
-        #         else None
-        #
-        #     if not dump_on_every_call_output_filename:
-        #         raise Exception(
-        #             'Cannot specify dump_on_every_call without a dump_on_every_call_output_filename output filename')
-        #####
-        #####
-        #
-        # if dump_on_every_call:
-        #     self.dump_dataframe_csv(dump_on_every_call_output_filename)
-
     def load_previous_state(self, force: bool = False):
 
         # overwrite the state
@@ -203,8 +211,9 @@ class BaseProcessor:
             return None
 
         # first lets try and load the stored state from the storage
-        current_stored_state_filename = self.build_final_output_path()
-        logging.info(f'searching for current state file {current_stored_state_filename}, use force argument to overwrite')
+        current_stored_state_filename = self.build_state_storage_path()
+        logging.info(
+            f'searching for current state file {current_stored_state_filename}, use force argument to overwrite')
 
         # the output state is derived from the input state parameters load the
         # current output state to ensure we do not reprocess the input state
@@ -221,12 +230,13 @@ class BaseProcessor:
             logging.error(error)
             raise Exception(error)
 
+        self.update_current_status(ProcessorStatus.RUNNING)
+
         # iterate query_states and add them to the worker queue
         for query_state in query_states:
-
             # setup a function call used to execute the processing of the actual entry
             process_func = higher_order_routine(self.process_input_data_entry,
-                                                      input_query_state=query_state)
+                                                input_query_state=query_state)
 
             # add the entry to the queue for processing
             self.manager.add_to_queue(process_func)
@@ -234,9 +244,26 @@ class BaseProcessor:
         # wait on workers until the task is completed
         self.manager.wait_for_completion()
 
+        # if the termination flag is set then log it
+        if self.get_current_status() == ProcessorStatus.TERMINATED:
+            logging.warning(f'terminated processor: {self.config}, termination flag was set')
+            return
+        else:
+            self.update_current_status(ProcessorStatus.COMPLETED)
+
         # execute the downstream function to handle state propagation
         self.execute_downstream_processor_nodes()
 
+    def get_current_status(self):
+        return self.current_status
+
+    def update_current_status(self, new_status: ProcessorStatus):
+        validate_processor_status_change(
+            current_status=self.get_current_status(),
+            new_status=new_status
+        )
+
+        self.current_status = new_status
 
     def __call__(self,
                  input_file: str = None,
@@ -252,19 +279,6 @@ class BaseProcessor:
         # reload the state, if any
         self.load_previous_state(force=force_state_overwrite)
 
-        #
-        # # first lets try and load the stored state from the storage
-        # current_stored_state_filename = self.build_final_output_path()
-        #
-        # #
-        # logging.info(f'found current state file {current_stored_state_filename}, you can force a overwrite by specifying the force_state_overwrite argument')
-        #
-        # # the output state is derived from the input state parameters load the
-        # # current output state to ensure we do not reprocess the input state
-        # if os.path.exists(current_stored_state_filename):
-        #     self.state = State.load_state(current_stored_state_filename)
-        #     logging.info(f'loaded current state file {current_stored_state_filename} into processor {self.config}')
-
         # if the input is .json then make sure it is a state input
         # TODO we can stream the inputs and outputs, would be more significantly more efficient
         #  especially if we actually stream it, meaning no data will reside past the record point
@@ -272,7 +286,6 @@ class BaseProcessor:
         if input_file:
             logging.info(f'attempting to load input state from {input_file} for config {self.config}')
             input_state = State.load_state(input_file)
-
 
         # only if the input state has data do we iterate the content
         if input_state and input_state.data:
@@ -285,6 +298,9 @@ class BaseProcessor:
                          f'(aka input_query_state, essentially a single record used to as '
                          f'part of the template injection')
 
+            # update current status
+            self.update_current_status(ProcessorStatus.RUNNING)
+
             # iterate through the list of queries to be made and add them to a worker queue
             for index in range(count):
                 logging.info(f'processing query state index {index} from {count}')
@@ -293,29 +309,39 @@ class BaseProcessor:
                 query_state = input_state.get_query_state_from_row_index(index)
 
                 # setup a function call used to execute the processing of the actual entry
-                process_func = higher_order_routine(self.process_input_data_entry,
+                process_func = higher_order_routine(self._process_input_data_entry,
                                                     input_query_state=query_state)
 
                 # add the entry to the queue for processing
                 self.manager.add_to_queue(process_func)
 
+            # start the thread runner only when all the data has been added to the queue
+            self.manager.start()
+
             # wait on workers until the task is completed
             self.manager.wait_for_completion()
+
+            # if the termination flag is set then log it
+            if self.get_current_status() == ProcessorStatus.TERMINATED:
+                logging.warning(f'terminated processor: {self.config}, termination flag was set')
+                return
+            else:
+                self.update_current_status(ProcessorStatus.COMPLETED)
 
             # execute the downstream function to handle state propagation
             self.execute_downstream_processor_nodes()
 
         else:
-            error = f'*******INVALID INPUT STATE or INPUT STATE FILE or STREAM*********\n'\
-                    f'input_state: {input_state if input_state else "<not loaded>"}, \n'\
-                    f'and or data: {input_state.data if input_state.data else "<not loaded>"}. \n'\
+            error = f'*******INVALID INPUT STATE or INPUT STATE FILE or STREAM*********\n' \
+                    f'input_state: {input_state if input_state else "<not loaded>"}, \n' \
+                    f'and or data: {input_state.data if input_state.data else "<not loaded>"}. \n' \
                     f'use one of the processor execution parameters, such as input_state=..'
 
             logging.error(error)
             raise Exception(error)
 
     def load_state(self):
-        state_file = self.build_final_output_path()
+        state_file = self.build_state_storage_path()
         if not os.path.exists(state_file):
             return self.state
 
@@ -333,16 +359,9 @@ class BaseProcessor:
         # post-state apply - the completed function
         return self.post_state_apply(query_state=query_state)
 
-    def pre_state_apply(self, query_state: dict):
-        # 1. query: add the query_state entry on the output state
-        # 2. mapping: store a key indexes such that we can fetch the list of values if needed
-        #
-        # TODO IMPORTANT - PERFORMANCE AND STORAGE
-        #  look into this potential performance and storage bottleneck,
-        #  probably would benefit from a database backend instead or stream it
-        #  REPLACE WITH CENTRAL CACHE
+    def pre_state_apply(self, query_state: dict) -> dict:
 
-        # remapped query state
+        # remapped query state before applying it to the state
         query_state = self.state.remap_query_state(query_state=query_state)
 
         # apply any templates using the query state as the primary source of information
@@ -350,22 +369,22 @@ class BaseProcessor:
 
         return query_state
 
-    def post_state_apply(self, query_state: dict):
-
+    def post_state_apply(self, query_state: dict) -> dict:
         return query_state
 
     def store_state(self, output_state_path: str):
 
         # persist the entire output state to the storage class
         # fetch the state file name previously configured, or autogenerated
-        output_state_path = output_state_path if output_state_path else self.build_final_output_path()
+        output_state_path = output_state_path if output_state_path else self.build_state_storage_path()
         self.state.save_state(output_state_path)
 
-
-    def build_final_output_path(self, output_extension: str = 'pickle', prefix: str=None):
+    def build_state_storage_path(self, output_extension: str = 'pickle', prefix: str = None):
         if not self.name:
             raise Exception(
-                f'Processor name not defined, please ensure to define a unique processor name as part, otherwise your states might get overwritten or worse, merged.')
+                f'Processor name not defined, please ensure to define a '
+                f'unique processor name as part, otherwise your states might '
+                f'get overwritten or worse, merged.')
 
         if has_extension(self.output_path, ['pkl', 'pickle', 'json', 'csv', 'xlsx']):
             return self.output_path
@@ -390,8 +409,18 @@ class BaseProcessor:
         # otherwise return the full path
         return self.output_path
 
-    #
-    # def process_input_data_entry_post(self, input_state_key, input_query_state: dict, force: bool = False):
+    def _process_input_data_entry(self, input_query_state: dict, force: bool = False):
+        current_status = self.get_current_status()
+        if current_status != ProcessorStatus.RUNNING:
+            self.manager.stop_all_workers()
+            return False
+
+        # execute the query state
+        return self.process_input_data_entry(
+            input_query_state=input_query_state,
+            force=force
+        )
+
     #
     def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         raise NotImplementedError("""
@@ -452,6 +481,7 @@ def initialize_processors_with_same_state_config(config: StateConfig,
 
     return processor_types
 
+
 if __name__ == '__main__':
     # build a test state
     test_state = State(
@@ -498,11 +528,11 @@ if __name__ == '__main__':
     # number of columns and in the order of the columns that were added, otherwise
     # there will be data / column misalignment
     test_state.add_row_data(StateDataRowColumnData(values=[
-        'why are cats so mean?',   # query
-        'Education',               # context
-        'cats are ....',           # response
-        'Instrumentalist',         # analysis_dimension
-        45,                        # analysis_dimension_score
+        'why are cats so mean?',  # query
+        'Education',  # context
+        'cats are ....',  # response
+        'Instrumentalist',  # analysis_dimension
+        45,  # analysis_dimension_score
     ]))
 
     test_state.add_row_data(StateDataRowColumnData(values=[

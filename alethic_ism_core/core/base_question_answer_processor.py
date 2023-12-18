@@ -79,21 +79,21 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
-    def build_final_output_path(self):
+    def build_state_storage_path(self):
         provider = ''.join([char for char in self.provider_name if char.isalnum()]).lower()
         model_name = ''.join([char for char in self.model_name if char.isalnum()]).lower()
-        user_template = self.user_template          # this will be hashed
-        system_template = self.system_template      # this will be hashed
+        user_template = self.user_template  # this will be hashed
+        system_template = self.system_template  # this will be hashed
 
         # return super().build_final_output_path(prefix=f'{provider}_{model_name}')
-        return super().build_final_output_path(prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
-
+        return super().build_state_storage_path(
+            prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
 
     def apply_states(self, query_states: [dict]):
         with self.lock:
             logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
-            def save_query_state(query_state: dict):
 
+            def save_query_state(query_state: dict):
                 # persist new state such that we do not repeat the call when interrupted
                 query_state = self.apply_query_state(query_state=query_state)
 
@@ -194,14 +194,11 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             # return the updated query state after persistence, generally the same unless it was remapped to new columns
             return query_states
 
-        except SyntaxError as e:
-            logging.error(f'unable to parse response, skipping question {input_query_state} on {self.config}')
         except Exception as e:
-            logging.error(f'critical error handling question {input_query_state} on {self.config} client gave up')
+            self.failed_process_query_state(e, query_state=input_query_state)
 
-
-
-
-
-
-
+    def failed_process_query_state(self, e, query_state: dict):
+        if isinstance(SyntaxError, e):
+            logging.error(f'unable to parse response, skipping question {query_state} on {self.config}')
+        elif isinstance(Exception, e):
+            logging.error(f'critical error handling question {query_state} on {self.config} client gave up')
