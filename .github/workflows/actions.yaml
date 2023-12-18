@@ -25,7 +25,9 @@ jobs:
     #     echo "::set-output name=container_id::$container_id"
 
     - name: Copy File from Container
+      id: build-conda-package
       run: |
+        bash ./build-docker-image.sh
         container_id=$(docker create quantumwake/alethic-ism-core:latest)
         file_name=$(docker run --rm --entrypoint find "$container_id" /app/local-channel/linux-64 -name 'alethic-ism-core-*-py311_*.tar.bz2' -exec basename {} \;)
         docker cp "$container_id:/app/local-channel/linux-64/$file_name" .
@@ -35,5 +37,4 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: alethic-ism-core
-        path: ${{ steps.create-container.outputs.file_name }}
-
+        path: ${{ steps.build-conda-package.outputs.file_name }}
