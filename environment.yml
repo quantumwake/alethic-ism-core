@@ -1,0 +1,8 @@
+name: alethic-ism-core
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+    python-dotenv
+    pyyaml
+    pydantic

@@ -41,8 +41,8 @@ class ThreadQueueManager:
             worker.start()
 
     def worker(self):
-        max_wait_count = 300
-        max_wait_time = 100
+        max_wait_count = 150
+        max_wait_time = 1
         wait_count = 0
 
         while not self.terminated:
