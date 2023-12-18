@@ -14,6 +14,9 @@ Use conda build via the build.sh script
 - conda install conda-build
 - bash build.sh
 
+# Upload package to Anaconda
+- conda install anaconda-client conda-build
+
 
 # Testing
 - conda install pytest
