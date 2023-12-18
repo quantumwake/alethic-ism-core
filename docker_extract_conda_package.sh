@@ -13,6 +13,9 @@ file_name=$(basename $file_path)
 echo "File name: $file_name located in docker image at $file_path" # For debugging
 docker cp "$container_id:$file_path" $file_name
 
-export file_name
+echo "checking env file_name: $file_name"
+echo "::set-output name=file_name::$file_name"
+
+#export file_name
 
 
