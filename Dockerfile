@@ -30,7 +30,7 @@ RUN conda install -y conda-build
 RUN conda build . --output-folder /app/local-channel
 
 # Install the anaconda client to upload
-RUN conda install anaconda-client
+#RUN conda install anaconda-client
 
 # (Optional) Command to keep the container running, adjust as needed
 #CMD tail -f /dev/null

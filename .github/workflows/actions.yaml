@@ -26,7 +26,7 @@ jobs:
 
     - name: Copy File from Container
       run: |
-        container_id=$(docker create <your-docker-image-name>:<tag>)
+        container_id=$(docker create quantumwake/alethic-ism-core:latest)
         file_name=$(docker run --rm --entrypoint find "$container_id" /app/local-channel/linux-64 -name 'alethic-ism-core-*-py311_*.tar.bz2' -exec basename {} \;)
         docker cp "$container_id:/app/local-channel/linux-64/$file_name" .
         echo "::set-output name=file_name::$file_name"
