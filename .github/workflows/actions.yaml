@@ -21,6 +21,9 @@ jobs:
         bash ./docker_build_conda_package.sh
         bash ./docker_extract_conda_package.sh
         
+        echo "checking env file_name: $file_name"
+        echo "::set-output name=file_path::$file_path"
+        
     - name: Upload Artifact
       uses: actions/upload-artifact@v2
       with:
