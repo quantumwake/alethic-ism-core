@@ -3,6 +3,6 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-    python-dotenv
-    pyyaml
-    pydantic
+  - python-dotenv
+  - pyyaml
+  - pydantic
