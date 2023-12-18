@@ -1,0 +1,39 @@
+# actions.yml
+
+name: Docker Build Python Package using Conda (alethic-ism-core module)
+
+on: [push, pull_request]
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Build Docker Image
+      run: ./build-docker-image.sh
+
+    # - name: Create Container from Image
+    #   id: create-container
+    #   run: |
+    #     container_id=$(docker create quantumwake/alethic-ism-core:latest)
+    #     echo "::set-output name=container_id::$container_id"
+
+    - name: Copy File from Container
+      run: |
+        container_id=$(docker create <your-docker-image-name>:<tag>)
+        file_name=$(docker run --rm --entrypoint find "$container_id" /app/local-channel/linux-64 -name 'alethic-ism-core-*-py311_*.tar.bz2' -exec basename {} \;)
+        docker cp "$container_id:/app/local-channel/linux-64/$file_name" .
+        echo "::set-output name=file_name::$file_name"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: alethic-ism-core
+        path: ${{ steps.create-container.outputs.file_name }}
+
