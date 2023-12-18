@@ -1,6 +1,5 @@
 name: alethic-ism-core
 channels:
-  - pytorch
   - conda-forge
   - defaults
 dependencies:
