@@ -8,14 +8,22 @@ WORKDIR /app
 ARG GITHUB_REPO_URL
 RUN git clone --depth 1 ${GITHUB_REPO_URL} repo
 
+WORKDIR /app
+
+COPY ./entrypoint-extract.sh .
+RUN chmod +x ./entrypoint-extract.sh
+
 # Move to the repository directory
 WORKDIR /app/repo
 
 # Force all commands to run in bash
 SHELL ["/bin/bash", "--login", "-c"]
 
+# install the conda build package in base
+RUN conda install -y conda-build
+
 # Initialize the conda environment 
-RUN conda env create -f environment.yml
+RUN conda env create -f environment.yaml
 
 # Initialize conda in bash config files:
 RUN conda init bash
@@ -29,6 +37,9 @@ RUN conda install -y conda-build
 # Run the build command (adjust as per your repo's requirements)
 #RUN conda build . --output-folder /app/local-channel
 RUN bash ./build.sh
+
+# package the local channel such that we can extract into an artifact
+RUN bash ./entrypoint-package-channel.sh
 
 # Install the anaconda client to upload
 #RUN conda install anaconda-client
