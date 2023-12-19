@@ -27,5 +27,5 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v2
       with:
-        name: alethic-ism-core
+        name: ${{ steps.build-conda-package.outputs.file_name }}
         path: ${{ steps.build-conda-package.outputs.file_name }}
