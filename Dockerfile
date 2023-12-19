@@ -39,4 +39,4 @@ RUN bash ./build.sh
 # package the local channel such that we can extract into an artifact
 
 RUN chmod +x ./entrypoint-package-channel.sh
-RUN bash ./entrypoint-package-channel.sh
+RUN bash ./package-conda-channel.sh

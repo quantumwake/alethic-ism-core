@@ -1,7 +1,7 @@
 #!/bin/bash
 
 image="quantumwake/alethic-ism-core:latest"
-container_id=$(docker create quantumwake/alethic-ism-db:latest)
+container_id=$(docker create quantumwake/alethic-ism-core:latest)
 echo "Container ID: $container_id from image $image" # For debugging
 docker images # Optional: For debugging, to list available images
 
@@ -9,4 +9,11 @@ docker images # Optional: For debugging, to list available images
 file_name="local_channel.tar.gz"
 echo "File name: $file_name located in docker image at $file_path" # For debugging
 docker cp "$container_id:/app/$file_name" $file_name
-echo "::set-output name=file_name::$file_name"
+
+target_file_name=$(awk '
+    /version:/ {version = $2; gsub(/"|,/, "", version)}
+    /number:/ {build = $2; gsub(/"|,/, "", build)}
+    END {printf("alethic-ism-core_%s_%s\n", version, build)}
+' ./recipe/meta.yaml)
+
+echo "::set-output name=file_name::$target_file_name"
