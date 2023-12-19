@@ -16,4 +16,6 @@ target_file_name=$(awk '
     END {printf("alethic-ism-core_%s_%s\n", version, build)}
 ' ./recipe/meta.yaml)
 
+echo "target_file_name: $target_file_name"
+
 echo "::set-output name=file_name::$target_file_name"
