@@ -13,9 +13,11 @@ docker cp "$container_id:/app/$file_name" $file_name
 target_file_name=$(awk '
     /version:/ {version = $2; gsub(/"|,/, "", version)}
     /number:/ {build = $2; gsub(/"|,/, "", build)}
-    END {printf("alethic-ism-core_%s_%s\n", version, build)}
+    END {printf("alethic-ism-core_%s_%s.tar.gz\n", version, build)}
 ' ./recipe/meta.yaml)
 
-echo "target_file_name: $target_file_name"
+mv $file_name $target_file_name
+file_name=target_file_name
+echo "final file name: $file_name}
 
-echo "::set-output name=file_name::$target_file_name"
+echo "::set-output name=file_name::file_name"
