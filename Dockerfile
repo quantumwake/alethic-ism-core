@@ -8,11 +8,6 @@ WORKDIR /app
 ARG GITHUB_REPO_URL
 RUN git clone --depth 1 ${GITHUB_REPO_URL} repo
 
-WORKDIR /app
-
-COPY ./entrypoint-extract.sh .
-RUN chmod +x ./entrypoint-extract.sh
-
 # Move to the repository directory
 WORKDIR /app/repo
 
@@ -31,6 +26,9 @@ RUN conda init bash
 # Activate the environment, and make sure it's activated:
 RUN echo "conda activate alethic-ism-core" > ~/.bashrc
 
+# display information about the current activation
+RUN conda info
+
 # Install necessary dependencies for the build process
 RUN conda install -y conda-build
 
@@ -39,12 +37,6 @@ RUN conda install -y conda-build
 RUN bash ./build.sh
 
 # package the local channel such that we can extract into an artifact
+
+RUN chmod +x ./entrypoint-package-channel.sh
 RUN bash ./entrypoint-package-channel.sh
-
-# Install the anaconda client to upload
-#RUN conda install anaconda-client
-
-# (Optional) Command to keep the container running, adjust as needed
-#CMD tail -f /dev/null
-
-

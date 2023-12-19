@@ -1,11 +1,5 @@
 #!/bin/bash
 
-image="quantumwake/alethic-ism-core:latest"
-search_path=/app/conda/env/local_channel
-search_pattern="alethic-ism-core-*-*_*.tar.bz2"
-
-name=$(find "$image" "$search_path" -name "$search_pattern")
-name=$(basename $name)
-
+echo "packaging local conda channel into an artifact"
+rm -rf /app/local_channel.tar.gz
 tar -zcvf /app/local_channel.tar.gz /app/conda/env/local_channel
-
