@@ -1,6 +1,7 @@
 import json
 import logging as log
 import os
+import pickle
 import re
 
 from .utils.general_utils import (
@@ -15,6 +16,38 @@ from datetime import datetime as dt
 from enum import Enum as PyEnum, Enum
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel, field_validator
+
+
+class CustomStateUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        try:
+            return super().find_class(module, name)
+        except ModuleNotFoundError as e:
+
+            if 'State' == name:
+                return State
+            elif 'StateConfig' == name:
+                return StateConfig
+            elif 'StateConfigLM' == name:
+                return StateConfigLM
+            elif 'StateConfigDB' == name:
+                return StateConfigDB
+            elif 'StateDataColumnDefinition' == name:
+                return StateDataColumnDefinition
+            elif 'StateDataRowColumnData' == name:
+                return StateDataRowColumnData
+            elif 'StateDataColumnIndex' == name:
+                return StateDataColumnIndex
+            elif 'StateDataKeyDefinition' == name:
+                return StateDataKeyDefinition
+            elif 'ProcessorStatus' == name:
+                return ProcessorStatus
+            elif 'InstructionTemplate' == name:
+                return InstructionTemplate
+
+            raise e
+
+
 
 logging = log.getLogger(__name__)
 
@@ -39,6 +72,12 @@ class StateStorageClass(PyEnum):
     FILE = "FILE"
     DATABASE = "DATABASE"
 
+
+def load_state_from_pickle(file_name: str) -> 'State':
+    with open(file_name, 'rb') as f:
+        unpickler = CustomStateUnpickler(f)
+        obj = unpickler.load()
+        return obj
 
 #
 # class StateStorage(BaseModel):
@@ -449,15 +488,17 @@ class State(BaseModel):
     @staticmethod
     def load_state(input_path: str) -> 'State':
         if has_extension(input_path, ['.pickle', '.pkl']):
-            raise DeprecationWarning(f'pickle file format is deprecated, use the database storage class instead')
-            # with open(input_path, 'rb') as fio:
-            #     return pickle.load(fio)
+            logging.warning(f'it is advisable to use either a json storage class or a '
+                            f'database storage class, the latter of which is preferred.')
+            # raise DeprecationWarning(f'pickle file format is deprecated, use the database storage class instead')
+            return load_state_from_pickle(file_name=input_path)
         elif has_extension(input_path, ['.json']):
             with open(input_path, 'rb') as fio:
                 state = State.model_validate(json.load(fio))
                 return state
         else:
             raise Exception(f'unsupported input path type {input_path}')
+
 
 
     def save_state(self, output_path: str = None):
@@ -483,10 +524,11 @@ class State(BaseModel):
         os.makedirs(name=dir_path, exist_ok=True)
 
         if has_extension(output_path, ['.pkl', '.pickle']):
-            raise DeprecationWarning(f'pickle format is deprecated in favor of a database storage class')
-
-            # with open(output_path, 'wb') as fio:
-            #     pickle.dump(self, fio)
+            # raise DeprecationWarning(f'pickle format is deprecated in favor of a database storage class')
+            #
+            import pickle
+            with open(output_path, 'wb') as fio:
+                pickle.dump(self, fio)
         elif has_extension(output_path, '.json'):
             with open(output_path, 'w') as fio:
                 fio.write(self.model_dump_json())
