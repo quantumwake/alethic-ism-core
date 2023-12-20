@@ -1,4 +1,4 @@
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 from pydantic import BaseModel
 
 from .processor_state import (
@@ -145,15 +145,15 @@ class ProcessorStateStorage:
         raise NotImplemented(f'requires concrete implementation, see alethic-ism-db class '
                              f'ProcessorStateDatabaseStorage for implementation example.')
 
-    def load_state_columns(self, state: State):
+    def load_state_columns(self, state_id: str):
         raise NotImplemented(f'requires concrete implementation, see alethic-ism-db class '
                              f'ProcessorStateDatabaseStorage for implementation example.')
 
-    def load_state_data(self, state: State):
+    def load_state_data(self, columns: dict):
         raise NotImplemented(f'requires concrete implementation, see alethic-ism-db class '
                              f'ProcessorStateDatabaseStorage for implementation example.')
 
-    def load_state_data_mappings(self, state: State):
+    def load_state_data_mappings(self, state_id: str):
         raise NotImplemented(f'requires concrete implementation, see alethic-ism-db class '
                              f'ProcessorStateDatabaseStorage for implementation example.')
 
