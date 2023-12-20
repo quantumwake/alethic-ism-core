@@ -18,6 +18,6 @@ target_file_name=$(awk '
 
 mv $file_name $target_file_name
 file_name=$target_file_name
-echo "final file name: $file_name"
 
-echo "::set-output name=file_name::file_name"
+echo "final file_name: $file_name"
+echo "::set-output name=file_name::$file_name"
