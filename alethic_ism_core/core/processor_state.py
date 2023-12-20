@@ -19,11 +19,32 @@ from pydantic import BaseModel, field_validator
 
 
 class CustomStateUnpickler(pickle.Unpickler):
+    def load(self):
+        obj = super().load()
+        # Modify obj here if it's the desired class
+
+        def update_state_config_properties(_config: Union[StateConfig, StateConfigDB, StateConfigLM]):
+            if 'output_primary_key_definition' in _config.__dict__:
+                _config.primary_key = _config.output_primary_key_definition
+                del _config.output_primary_key_definition
+
+            if 'include_extra_from_input_definition' in _config.__dict__:
+                _config.query_state_inheritance = _config.include_extra_from_input_definition
+                del _config.include_extra_from_input_definition
+
+            return _config
+
+        if isinstance(obj, StateConfig):
+            obj = update_state_config_properties(_config=obj)
+        elif isinstance(obj, State):
+            obj.config = update_state_config_properties(_config=obj.config)
+
+        return obj
+
     def find_class(self, module, name):
         try:
             return super().find_class(module, name)
         except ModuleNotFoundError as e:
-
             if 'State' == name:
                 return State
             elif 'StateConfig' == name:
