@@ -233,6 +233,7 @@ class State(BaseModel):
     data: Dict[str, StateDataRowColumnData] = {}
     mapping: Dict[str, StateDataColumnIndex] = {}
     count: int = 0
+    persisted_position: Optional[int] = 0
     create_date: Optional[dt] = None
     update_date: Optional[dt] = None
 
