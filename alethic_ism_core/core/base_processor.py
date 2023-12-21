@@ -23,19 +23,18 @@ DEFAULT_OUTPUT_PATH = '/tmp/states'
 
 logging = log.getLogger(__name__)
 
-
 class ThreadQueueManager:
-
     def __init__(self, num_workers, processor: 'BaseProcessor'):
         self.terminated = False
         self.remainder = 0
+        self.num_workers = num_workers
         self.count = 0
         self.processor = processor
-
         self.queue = queue.Queue()
-        self.workers = [threading.Thread(target=self.worker) for _ in range(num_workers)]
+
 
     def start(self):
+        self.workers = [threading.Thread(target=self.worker) for _ in range(self.num_workers)]
         for worker in self.workers:
             worker.daemon = True
             worker.start()
@@ -45,7 +44,8 @@ class ThreadQueueManager:
         max_wait_time = 1
         wait_count = 0
 
-        while not self.terminated:
+        while ProcessorStatus.RUNNING == self.processor.get_current_status():
+
             # we do not want to block on this,
             try:
                 function = self.queue.get(timeout=max_wait_time)
@@ -80,7 +80,6 @@ class ThreadQueueManager:
 
     def stop_all_workers(self):
         self.terminated = True
-
 
 class BaseProcessor:
 
