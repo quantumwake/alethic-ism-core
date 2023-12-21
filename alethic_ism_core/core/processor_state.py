@@ -4,6 +4,8 @@ import os
 import pickle
 import re
 
+from pydantic import BaseModel, field_validator
+
 from .utils.general_utils import (
     calculate_hash,
     build_template_text_content,
@@ -15,7 +17,7 @@ from .utils.general_utils import (
 from datetime import datetime as dt
 from enum import Enum as PyEnum, Enum
 from typing import Any, List, Dict, Optional, Union
-from pydantic import BaseModel, field_validator
+
 
 
 class CustomStateUnpickler(pickle.Unpickler):
@@ -434,9 +436,19 @@ class State(BaseModel):
     def get_query_state_from_row_index(self, index: int):
         # state = state if state else self
 
+        def get_real_value(value):
+            # evaluates the value, if it is a callable: string
+            return get_column_state_value(
+                value=value, **{
+                    "state": self,
+                    "config": self.config
+                }
+            )
+
         query_state = {
             column_name: self.data[column_name][index]
-            if not column_header.value else column_header.value
+            if not column_header.value
+            else get_real_value(column_header.value)
             for column_name, column_header in self.columns.items()
         }
         return query_state
@@ -480,6 +492,14 @@ class State(BaseModel):
         current_row_count = implicit_count_with_force_count(self) if self.data else 0
 
         for column_name, column_header in self.columns.items():
+
+            # we will skip any column that has a value, values can be:
+            # a. constant string or value of any type
+            # b. callable instance, a callable: string starting with callable:<expression>
+
+            if column_header.value:
+                logging.debug(f'skipping column: {column_name}, constant and or function value set')
+                continue
 
             if column_name in column_and_value:
                 row_column_data = column_and_value[column_name]
@@ -860,6 +880,17 @@ def get_column_state_value(value: Any, *args, **kwargs):
         return None
 
     if isinstance(value, str):
+
+        if value.startswith("callable:"):
+            func = value[len("callable:"):]
+            # TODO security issue - use safe eval
+            #   but hell there are a lot of security issues,
+            #   this is meant to be running in an isolated
+            #   container by tenant, still yet, who knows
+            #   what functions are implement.
+            value = eval(func, kwargs)
+            return value
+
         return value
 
     elif callable(value):

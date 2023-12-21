@@ -1,7 +1,8 @@
 import random
 import pytest
 
-from alethic_ism_core.core.processor_state import StateConfigLM, State
+from alethic_ism_core.core.processor_state import StateConfigLM, State, StateDataColumnDefinition
+
 
 def create_mock_state_json():
     state = create_mock_state()
@@ -36,6 +37,43 @@ def test_state_json_model():
 
     assert isinstance(state.config, StateConfigLM)
     assert isinstance(deserialized_state.config, StateConfigLM)
+
+
+def test_state_callable_columns():
+    state = create_mock_state()
+
+    state.add_column(column=StateDataColumnDefinition(
+        name="perspective_index",
+        value="P1"
+    ))
+    state.add_columns(columns=[
+        StateDataColumnDefinition(
+            name="provider_name",
+            value="callable:config.provider_name"
+        ),
+        StateDataColumnDefinition(
+            name="model_name",
+            value="callable:config.model_name"
+        ),
+        StateDataColumnDefinition(
+            name="version",
+            value="callable:config.version"
+        )]
+    )
+
+    #
+    for i in range(1, 5):
+        state.apply_row_data(
+            {
+                "state_key": f"hello world #{i}",
+                "state data": f"testing {i}"
+            }
+        )
+
+    query_state0 = state.get_query_state_from_row_index(0)
+    assert query_state0['provider_name'] == state.config.provider_name
+    assert query_state0['model_name'] == state.config.model_name
+    assert query_state0['version'] == state.config.version
 
 
 def test_state():
