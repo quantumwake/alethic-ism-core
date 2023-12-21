@@ -2,8 +2,8 @@
 
 Use conda build via the build.sh script
 
-- python-dotenv,
-- pyyaml,
+- python-dotenv
+- pyyaml
 - pydantic
 
 # Initialize Conda
