@@ -4,7 +4,7 @@ This module forms the base layer of the Alethic ISM project, handling the core p
 
 ## Key Concepts
 - **State Information**: Manages individual state data for specific processing configurations.
-- **State Management**: Ensures coherence in managing state key, value functions, and constants.
+- **State Management**: Ensures coherence in managing state column and row data.
 
 ## Dependencies
 - Utilize `conda build` via `build.sh` script.
