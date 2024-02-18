@@ -26,7 +26,7 @@ This module forms the base layer of the [Alethic ISM project group](https://gith
 Contributions, questions, and feedback are highly encouraged. Contact us for any queries or suggestions.
 
 ## License
-Released under GNU3 license.
+Released under AGPL/GNU3 license.
 
 ## Acknowledgements
 Special thanks to Alethic Research, Princeton University Center for Human Values, and New York University.
