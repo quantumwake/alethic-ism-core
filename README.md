@@ -1,6 +1,6 @@
 # Alethic Instruction-Based State Machine (ISM) Core
 
-This module forms the base layer of the Alethic ISM project, handling the core processor and state management code. It's primarily used for building specific processor types, including language-based processors, and manages the bulk of state input and output processing.
+This module forms the base layer of the [Alethic ISM project group](https://github.com/quantumwake/alethic), handling the core processor and state management code. It's primarily used for building specific processor types, including language-based processors, and manages the bulk of state input and output processing.
 
 ## Key Concepts
 - **State Information**: Manages individual state data for specific processing configurations.
