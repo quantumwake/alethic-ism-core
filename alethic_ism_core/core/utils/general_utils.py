@@ -1,33 +1,9 @@
-# The Alethic Instruction-Based State Machine (ISM) is a versatile framework designed to 
-# efficiently process a broad spectrum of instructions. Initially conceived to prioritize
-# animal welfare, it employs language-based instructions in a graph of interconnected
-# processing and state transitions, to rigorously evaluate and benchmark AI models
-# apropos of their implications for animal well-being. 
-# 
-# This foundation in ethical evaluation sets the stage for the framework's broader applications,
-# including legal, medical, multi-dialogue conversational systems.
-# 
-# Copyright (C) 2023 Kasra Rasaee, Sankalpa Ghose, Yip Fai Tse (Alethic Research) 
-# 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# 
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# 
-# 
 import hashlib
 import json
 import logging as log
 import os
 import re
+import uuid
 from typing import Union
 
 import yaml
@@ -140,7 +116,8 @@ def load_template(template_config_file: str):
     return template_dict
 
 
-def calculate_hash(input_string: str):
+
+def calculate_sha256(input_string: str):
     # Create a SHA-256 hash object
     hash_object = hashlib.sha256()
 
@@ -151,9 +128,23 @@ def calculate_hash(input_string: str):
     return hash_object.hexdigest()
 
 
+def calculate_uuid_based_from_string_with_sha256_seed(input_string: str) -> str:
+    """Generate a UUID based on the SHA-256 hash of the input string."""
+    hash_bytes = hashlib.sha256(input_string.encode('utf-8')).digest()
+
+    # Convert the hash bytes to a large integer
+    hash_int = int.from_bytes(hash_bytes, byteorder='big')
+
+    # Modulo by 2^128 to ensure it fits in 128 bits
+    hash_int = hash_int % (1 << 128)
+
+    # Create a UUID using the adjusted integer
+    return str(uuid.UUID(int=hash_int))
+
+
 def calculate_string_list_hash(names: [str]):
     plain = ",".join([f'({idx}:{key})' for idx, key in enumerate(sorted(names))])
-    return calculate_hash(plain)
+    return calculate_uuid_based_from_string_with_sha256_seed(plain)
 
 
 def calculate_string_dict_hash(item: dict):

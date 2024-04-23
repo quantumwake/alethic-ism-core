@@ -1,50 +1,36 @@
-# The Alethic Instruction-Based State Machine (ISM) is a versatile framework designed to 
-# efficiently process a broad spectrum of instructions. Initially conceived to prioritize
-# animal welfare, it employs language-based instructions in a graph of interconnected
-# processing and state transitions, to rigorously evaluate and benchmark AI models
-# apropos of their implications for animal well-being. 
-# 
-# This foundation in ethical evaluation sets the stage for the framework's broader applications,
-# including legal, medical, multi-dialogue conversational systems.
-# 
-# Copyright (C) 2023 Kasra Rasaee, Sankalpa Ghose, Yip Fai Tse (Alethic Research) 
-# 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# 
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# 
-# 
-from typing import Optional, List, Union, Dict
+from typing import Optional, List, Union
 from pydantic import BaseModel
 
 from .processor_state import (
     StateDataColumnDefinition,
     State,
-    ProcessorStatus,
+    StatusCode,
     InstructionTemplate,
-    StateDataKeyDefinition
+    StateDataKeyDefinition, ProcessorStateDirection
 )
 
 
+class ProcessorProvider(BaseModel):
+    id: Optional[str] = None
+    name: str
+    version: str
+    class_name: str
+    user_id: Optional[str] = None
+    project_id: Optional[str] = None
+
+
 class Processor(BaseModel):
-    id: str
-    type: str
+    id: Optional[str] = None
+    provider_id: str
+    project_id: str
+    processor_status: StatusCode = StatusCode.CREATED
 
 
 class ProcessorState(BaseModel):
+    id: Optional[str] = None
     processor_id: str
-    input_state_id: str
-    output_state_id: Optional[str] = None
-    status: ProcessorStatus = ProcessorStatus.CREATED
+    state_id: str
+    direction: ProcessorStateDirection = ProcessorStateDirection.INPUT
 
 
 class ProcessorStateStorage:

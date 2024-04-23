@@ -1,141 +1,115 @@
-# The Alethic Instruction-Based State Machine (ISM) is a versatile framework designed to 
-# efficiently process a broad spectrum of instructions. Initially conceived to prioritize
-# animal welfare, it employs language-based instructions in a graph of interconnected
-# processing and state transitions, to rigorously evaluate and benchmark AI models
-# apropos of their implications for animal well-being. 
-# 
-# This foundation in ethical evaluation sets the stage for the framework's broader applications,
-# including legal, medical, multi-dialogue conversational systems.
-# 
-# Copyright (C) 2023 Kasra Rasaee, Sankalpa Ghose, Yip Fai Tse (Alethic Research) 
-# 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# 
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# 
-# 
 import logging as log
 
-from ..processor_state import ProcessorStatus
+from ..processor_state import StatusCode
 
 logging = log.getLogger(__name__)
 
-
-def validate_processor_state_from_created(new_status: ProcessorStatus):
-    if new_status not in [ProcessorStatus.CREATED,
-                          ProcessorStatus.QUEUED,
-                          ProcessorStatus.RUNNING,
-                          ProcessorStatus.TERMINATED,
-                          ProcessorStatus.STOPPED,
-                          ProcessorStatus.FAILED]:
+def validate_processor_state_from_created(new_status: StatusCode):
+    if new_status not in [StatusCode.CREATED,
+                          StatusCode.QUEUED,
+                          StatusCode.RUNNING,
+                          StatusCode.TERMINATED,
+                          StatusCode.STOPPED,
+                          StatusCode.FAILED]:
         logging.error(
-            f'unable to transition {ProcessorStatus.CREATED} to {new_status}')
+            f'unable to transition {StatusCode.CREATED} to {new_status}')
         return False
 
     return True
 
 
-def validate_processor_state_from_queued(new_status: ProcessorStatus):
-    if new_status not in [ProcessorStatus.STOPPED,
-                          ProcessorStatus.TERMINATED,
-                          ProcessorStatus.RUNNING,
-                          ProcessorStatus.QUEUED]:
+def validate_processor_state_from_queued(new_status: StatusCode):
+    if new_status not in [StatusCode.STOPPED,
+                          StatusCode.TERMINATED,
+                          StatusCode.RUNNING,
+                          StatusCode.QUEUED]:
         logging.error(
-            f'unable to transition {ProcessorStatus.QUEUED} to {new_status}')
+            f'unable to transition {StatusCode.QUEUED} to {new_status}')
         return False
 
     return True
 
 
-def validate_processor_state_from_running(new_status: ProcessorStatus):
-    if new_status not in [ProcessorStatus.RUNNING,
-                          ProcessorStatus.STOPPED,
-                          ProcessorStatus.TERMINATED,
-                          ProcessorStatus.FAILED,
-                          ProcessorStatus.COMPLETED]:
+def validate_processor_state_from_running(new_status: StatusCode):
+    if new_status not in [StatusCode.RUNNING,
+                          StatusCode.STOPPED,
+                          StatusCode.TERMINATED,
+                          StatusCode.FAILED,
+                          StatusCode.COMPLETED]:
         logging.error(
-            f'unable to transition {ProcessorStatus.RUNNING} to {new_status}')
+            f'unable to transition {StatusCode.RUNNING} to {new_status}')
         return False
 
     return True
 
 
-def validate_processor_state_from_stopped(new_status: ProcessorStatus):
-    if new_status not in [ProcessorStatus.STOPPED,
-                          ProcessorStatus.TERMINATED,
-                          ProcessorStatus.FAILED]:
+def validate_processor_state_from_stopped(new_status: StatusCode):
+    if new_status not in [StatusCode.STOPPED,
+                          StatusCode.TERMINATED,
+                          StatusCode.FAILED]:
         logging.error(
-            f'unable to transition {ProcessorStatus.STOPPED} to {new_status}')
+            f'unable to transition {StatusCode.STOPPED} to {new_status}')
         return False
 
     return True
 
 
-def validate_processor_state_from_terminated(new_status: ProcessorStatus):
-    if new_status not in [ProcessorStatus.TERMINATED,
-                          ProcessorStatus.FAILED]:
+def validate_processor_state_from_terminated(new_status: StatusCode):
+    if new_status not in [StatusCode.TERMINATED,
+                          StatusCode.FAILED]:
         logging.error(
-            f'unable to transition {ProcessorStatus.RUNNING} to {new_status}')
+            f'unable to transition {StatusCode.RUNNING} to {new_status}')
         return False
 
     return True
 
 
-def validate_processor_state_from_failed(new_status: ProcessorStatus):
-    if new_status not in [ProcessorStatus.FAILED]:
+def validate_processor_state_from_failed(new_status: StatusCode):
+    if new_status not in [StatusCode.FAILED]:
         logging.error(
-            f'unable to transition {ProcessorStatus.RUNNING} to {new_status}')
+            f'unable to transition {StatusCode.RUNNING} to {new_status}')
         return False
 
     return True
 
 
-def validate_processor_state_from_completed(new_status: ProcessorStatus):
-    if new_status not in [ProcessorStatus.COMPLETED,
-                          ProcessorStatus.FAILED]:
+def validate_processor_state_from_completed(new_status: StatusCode):
+    if new_status not in [StatusCode.COMPLETED,
+                          StatusCode.FAILED]:
         logging.error(
-            f'unable to transition {ProcessorStatus.RUNNING} to {new_status}')
+            f'unable to transition {StatusCode.RUNNING} to {new_status}')
         return False
 
     return True
 
 
-def validate_processor_status_change(current_status: ProcessorStatus,
-                                     new_status: ProcessorStatus):
+def validate_processor_status_change(current_status: StatusCode,
+                                     new_status: StatusCode):
 
     # if the current state is not set then create a new one
     if not current_status:
         return True
 
     # start with an illegal transition state and validate transition states
-    if current_status in [ProcessorStatus.CREATED]:
+    if current_status in [StatusCode.CREATED]:
         return validate_processor_state_from_created(
             new_status=new_status)
-    elif current_status in [ProcessorStatus.QUEUED]:
+    elif current_status in [StatusCode.QUEUED]:
         return validate_processor_state_from_queued(
             new_status=new_status)
-    elif current_status in [ProcessorStatus.RUNNING]:
+    elif current_status in [StatusCode.RUNNING]:
         return validate_processor_state_from_running(
             new_status=new_status)
-    elif current_status in [ProcessorStatus.TERMINATED]:
+    elif current_status in [StatusCode.TERMINATED]:
         return validate_processor_state_from_terminated(
             new_status=new_status)
-    elif current_status in [ProcessorStatus.STOPPED]:
+    elif current_status in [StatusCode.STOPPED]:
         return validate_processor_state_from_stopped(
             new_status=new_status)
-    elif current_status in [ProcessorStatus.FAILED]:
+    elif current_status in [StatusCode.FAILED]:
         return validate_processor_state_from_failed(
             new_status=new_status)
-    elif current_status in [ProcessorStatus.COMPLETED]:
+    elif current_status in [StatusCode.COMPLETED]:
         return validate_processor_state_from_completed(
             new_status=new_status)
 

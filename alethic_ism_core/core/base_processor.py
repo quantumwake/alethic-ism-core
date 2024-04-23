@@ -1,39 +1,13 @@
-# The Alethic Instruction-Based State Machine (ISM) is a versatile framework designed to 
-# efficiently process a broad spectrum of instructions. Initially conceived to prioritize
-# animal welfare, it employs language-based instructions in a graph of interconnected
-# processing and state transitions, to rigorously evaluate and benchmark AI models
-# apropos of their implications for animal well-being. 
-# 
-# This foundation in ethical evaluation sets the stage for the framework's broader applications,
-# including legal, medical, multi-dialogue conversational systems.
-# 
-# Copyright (C) 2023 Kasra Rasaee, Sankalpa Ghose, Yip Fai Tse (Alethic Research) 
-# 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# 
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# 
-# 
 import copy
 import logging as log
 import os
 import queue
 import threading
-from enum import Enum
 
 from typing import List
 
 from .utils.state_utils import validate_processor_status_change
-from .utils.general_utils import higher_order_routine, calculate_hash, has_extension
+from .utils.general_utils import higher_order_routine, has_extension, calculate_uuid_based_from_string_with_sha256_seed
 from .processor_state import (
     State,
     StateDataRowColumnData,
@@ -41,7 +15,7 @@ from .processor_state import (
     StateDataKeyDefinition,
     StateConfig,
     StateDataColumnIndex,
-    implicit_count_with_force_count, ProcessorStatus
+    implicit_count_with_force_count, StatusCode
 )
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
@@ -69,7 +43,7 @@ class ThreadQueueManager:
         max_wait_time = 1
         wait_count = 0
 
-        while ProcessorStatus.RUNNING == self.processor.get_current_status():
+        while StatusCode.RUNNING == self.processor.get_current_status():
 
             # we do not want to block on this,
             try:
@@ -113,7 +87,7 @@ class BaseProcessor:
                  processors: List['BaseProcessor'] = None):
 
         # TODO swap this with a pub/sub system at some point
-        self.current_status = ProcessorStatus.CREATED
+        self.current_status = StatusCode.CREATED
         self.manager = ThreadQueueManager(num_workers=1, processor=self)
         self.state = state
         self.processors = processors
@@ -254,7 +228,7 @@ class BaseProcessor:
             logging.error(error)
             raise Exception(error)
 
-        self.update_current_status(ProcessorStatus.RUNNING)
+        self.update_current_status(StatusCode.RUNNING)
 
         # iterate query_states and add them to the worker queue
         for query_state in query_states:
@@ -269,11 +243,11 @@ class BaseProcessor:
         self.manager.wait_for_completion()
 
         # if the termination flag is set then log it
-        if self.get_current_status() == ProcessorStatus.TERMINATED:
+        if self.get_current_status() == StatusCode.TERMINATED:
             logging.warning(f'terminated processor: {self.config}, termination flag was set')
             return
         else:
-            self.update_current_status(ProcessorStatus.COMPLETED)
+            self.update_current_status(StatusCode.COMPLETED)
 
         # execute the downstream function to handle state propagation
         self.execute_downstream_processor_nodes()
@@ -281,7 +255,7 @@ class BaseProcessor:
     def get_current_status(self):
         return self.current_status
 
-    def update_current_status(self, new_status: ProcessorStatus):
+    def update_current_status(self, new_status: StatusCode):
         validate_processor_status_change(
             current_status=self.get_current_status(),
             new_status=new_status
@@ -323,7 +297,7 @@ class BaseProcessor:
                          f'part of the template injection')
 
             # update current status
-            self.update_current_status(ProcessorStatus.RUNNING)
+            self.update_current_status(StatusCode.RUNNING)
 
             # iterate through the list of queries to be made and add them to a worker queue
             for index in range(count):
@@ -346,11 +320,11 @@ class BaseProcessor:
             self.manager.wait_for_completion()
 
             # if the termination flag is set then log it
-            if self.get_current_status() == ProcessorStatus.TERMINATED:
+            if self.get_current_status() == StatusCode.TERMINATED:
                 logging.warning(f'terminated processor: {self.config}, termination flag was set')
                 return
             else:
-                self.update_current_status(ProcessorStatus.COMPLETED)
+                self.update_current_status(StatusCode.COMPLETED)
 
             # execute the downstream function to handle state propagation
             self.execute_downstream_processor_nodes()
@@ -425,7 +399,7 @@ class BaseProcessor:
             if prefix:
                 to_be_hashed = f'[{prefix}]/[{to_be_hashed}]'
 
-            state_file_hashed = calculate_hash(to_be_hashed)
+            state_file_hashed = calculate_uuid_based_from_string_with_sha256_seed(to_be_hashed)
             state_file = f'{self.output_path}/{state_file_hashed}.{output_extension}'
             self.output_path = state_file
             return state_file
@@ -435,7 +409,7 @@ class BaseProcessor:
 
     def _process_input_data_entry(self, input_query_state: dict, force: bool = False):
         current_status = self.get_current_status()
-        if current_status != ProcessorStatus.RUNNING:
+        if current_status != StatusCode.RUNNING:
             self.manager.stop_all_workers()
             return False
 

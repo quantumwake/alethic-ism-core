@@ -1,42 +1,16 @@
-# The Alethic Instruction-Based State Machine (ISM) is a versatile framework designed to 
-# efficiently process a broad spectrum of instructions. Initially conceived to prioritize
-# animal welfare, it employs language-based instructions in a graph of interconnected
-# processing and state transitions, to rigorously evaluate and benchmark AI models
-# apropos of their implications for animal well-being. 
-# 
-# This foundation in ethical evaluation sets the stage for the framework's broader applications,
-# including legal, medical, multi-dialogue conversational systems.
-# 
-# Copyright (C) 2023 Kasra Rasaee, Sankalpa Ghose, Yip Fai Tse (Alethic Research) 
-# 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# 
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# 
-# 
 import json
 import logging as log
 import os
 import pickle
 import re
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, root_validator, model_validator
 
 from .utils.general_utils import (
-    calculate_hash,
     build_template_text_content,
     clean_string_for_ddl_naming,
     calculate_string_list_hash,
-    has_extension
+    has_extension, calculate_uuid_based_from_string_with_sha256_seed
 )
 
 from datetime import datetime as dt
@@ -44,10 +18,10 @@ from enum import Enum as PyEnum, Enum
 from typing import Any, List, Dict, Optional, Union
 
 
-
 class CustomStateUnpickler(pickle.Unpickler):
     def load(self):
         obj = super().load()
+
         # Modify obj here if it's the desired class
 
         def update_state_config_properties(_config: Union[StateConfig, StateConfigDB, StateConfigLM]):
@@ -89,18 +63,22 @@ class CustomStateUnpickler(pickle.Unpickler):
             elif 'StateDataKeyDefinition' == name:
                 return StateDataKeyDefinition
             elif 'ProcessorStatus' == name:
-                return ProcessorStatus
+                return StatusCode
             elif 'InstructionTemplate' == name:
                 return InstructionTemplate
 
             raise e
 
 
-
 logging = log.getLogger(__name__)
 
 
-class ProcessorStatus(Enum):
+class ProcessorStateDirection(Enum):
+    INPUT = "INPUT"
+    OUTPUT = "OUTPUT"
+
+
+class StatusCode(Enum):
     CREATED = "CREATED"
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
@@ -111,9 +89,11 @@ class ProcessorStatus(Enum):
 
 
 class StateDataKeyDefinition(BaseModel):
+    id: Optional[int] = None
     name: str
     alias: Optional[str] = None
     required: Optional[bool] = False
+    callable: Optional[bool] = False
 
 
 class StateStorageClass(PyEnum):
@@ -127,6 +107,7 @@ def load_state_from_pickle(file_name: str) -> 'State':
         obj = unpickler.load()
         return obj
 
+
 #
 # class StateStorage(BaseModel):
 #     name: str
@@ -137,7 +118,7 @@ class StateConfig(BaseModel):
     name: str
     version: Optional[str] = None  # "Version 0.1"
     storage_class: Optional[str] = "file"
-    output_path: Optional[str] = None       # deprecated for file outputs
+    output_path: Optional[str] = None  # deprecated for file outputs
     primary_key: Optional[List[StateDataKeyDefinition]] = None
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
@@ -156,10 +137,14 @@ class StateConfigDB(StateConfig):
     function_columns: Optional[List[dict]] = None
     constant_columns: Optional[List[dict]] = None
 
+
 class InstructionTemplate(BaseModel):
+    template_id: Optional[str] = None
     template_path: str
     template_content: str
     template_type: str
+    project_id: Optional[str] = None
+
 
 class StateDataColumnDefinition(BaseModel):
     id: Optional[int] = None
@@ -255,7 +240,10 @@ class StateDataRowColumnData(BaseModel):
 
 
 class State(BaseModel):
-    config: Union[StateConfig, StateConfigLM, StateConfigDB]
+    id: Optional[str] = None  # primary key, can be generated or directly set
+    project_id: Optional[str] = None    # project association id
+
+    config: Optional[Union[StateConfig, StateConfigLM, StateConfigDB]] = None
     columns: Dict[str, StateDataColumnDefinition] = {}
     data: Dict[str, StateDataRowColumnData] = {}
     mapping: Dict[str, StateDataColumnIndex] = {}
@@ -263,6 +251,28 @@ class State(BaseModel):
     persisted_position: Optional[int] = 0
     create_date: Optional[dt] = None
     update_date: Optional[dt] = None
+    state_type: Optional[str] = None
+
+    @model_validator(mode="after")
+    def derive_state_type(cls, state):
+        if state.config:
+            state_type = type(state.config).__name__
+            state.state_type = state_type
+
+        return state
+
+        # config = values.get('config', '')
+        # if not config:
+        #     return None
+        #
+        # values['state_type'] = type(config).__name__
+        # return values
+        #
+        # if "config" not in values:
+        #     return {"full_name": values["first_name"]}
+        #
+        # full_name = f"{values['first_name']} {values['last_name']}"
+        # return {"full_name": full_name, **values}
 
     @field_validator('config', mode='before')
     def create_config(cls, config_value):
@@ -325,7 +335,7 @@ class State(BaseModel):
 
     def calculate_columns_definition_hash(self, columns: [str]):
         plain = [key for key in sorted(columns)]
-        return calculate_hash(plain)
+        return calculate_uuid_based_from_string_with_sha256_seed(plain)
 
     def remap_query_state(self, query_state: dict):
 
@@ -566,8 +576,6 @@ class State(BaseModel):
         else:
             raise Exception(f'unsupported input path type {input_path}')
 
-
-
     def save_state(self, output_path: str = None):
         if not output_path:
             if not self.config.output_path:
@@ -606,7 +614,6 @@ class State(BaseModel):
 def add_state_column_value(column: StateDataColumnDefinition,
                            state_file: str = None,
                            state: State = None):
-
     if not state and not state_file:
         raise Exception(f'you must specify either a state_file or a load a state using the '
                         f'State.load_state(..) and pass it as a parameter')
@@ -710,7 +717,8 @@ def find_state_files(search_path: str,
                         inv_check_match(state_version_match, state.config.version)):
                     continue
             except Exception as e:
-                logging.error(f'unable to process file {final_path}, attempting to evaluate config match {state.config}')
+                logging.error(
+                    f'unable to process file {final_path}, attempting to evaluate config match {state.config}')
                 logging.error(e)
                 continue
 
@@ -765,7 +773,7 @@ def show_state_config_modification_info(
 
 def show_state_column_info(state: State):
     columns = state.columns
-    column_string = ", ".join([ f'{column}' for column, value in columns.items()])
+    column_string = ", ".join([f'{column}' for column, value in columns.items()])
     logging.info(f'columns = [{column_string}]')
     return column_string
 
@@ -851,7 +859,7 @@ def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataK
         keys = [(name, value) for name, value in state_key_values.items()]
 
         # hash the keys as a string in sha256
-        return calculate_hash(str(keys)), keys
+        return calculate_uuid_based_from_string_with_sha256_seed(str(keys)), keys
 
     except Exception as e:
         error = (f'error in trying to build state data row key for key definition {key_definitions} '
@@ -949,9 +957,9 @@ def extract_values_from_query_state_by_key_definition(query_state: dict,
                                 f'query_state: {query_state}, '
                                 f'key definition: {key}')
             else:
-                value = None        # skip the value since it does not exist in the original query state
+                value = None  # skip the value since it does not exist in the original query state
         else:
-            value = query_state[key_name]   # fetch the value from the query state
+            value = query_state[key_name]  # fetch the value from the query state
 
         if not alias:
             alias = key.name
