@@ -1,13 +1,13 @@
 import copy
 import logging as log
-import os
 import queue
 import threading
 
-from typing import List, Optional
+from typing import List
 
+from .base_model import StatusCode
 from .utils.state_utils import validate_processor_status_change
-from .utils.general_utils import higher_order_routine, has_extension, calculate_uuid_based_from_string_with_sha256_seed
+from .utils.general_utils import higher_order_routine
 from .processor_state import (
     State,
     StateDataRowColumnData,
@@ -15,12 +15,13 @@ from .processor_state import (
     StateDataKeyDefinition,
     StateConfig,
     StateDataColumnIndex,
-    implicit_count_with_force_count, StatusCode
+    implicit_count_with_force_count
 )
 
 DEFAULT_OUTPUT_PATH = '/tmp/states'
 
 logging = log.getLogger(__name__)
+
 
 class ThreadQueueManager:
     def __init__(self, num_workers, processor: 'BaseProcessor'):

@@ -34,7 +34,6 @@ class WorkflowEdge(BaseModel):
     animated: bool
 
 
-
 class ProcessorStateDirection(Enum):
     INPUT = "INPUT"
     OUTPUT = "OUTPUT"
@@ -71,7 +70,7 @@ class Processor(BaseModel):
     id: Optional[str] = None
     provider_id: str
     project_id: str
-    processor_status: StatusCode = StatusCode.CREATED
+    status: StatusCode = StatusCode.CREATED
 
 
 class ProcessorState(BaseModel):

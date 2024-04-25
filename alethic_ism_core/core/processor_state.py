@@ -3,18 +3,18 @@ import logging as log
 import os
 import pickle
 
-from pydantic import BaseModel, field_validator, root_validator, model_validator
+from enum import Enum as PyEnum
+from datetime import datetime as dt
+from typing import Any, List, Dict, Optional, Union
+from pydantic import BaseModel, field_validator, model_validator
 
+from .base_model import StatusCode, InstructionTemplate
 from .utils.general_utils import (
     build_template_text_content,
     clean_string_for_ddl_naming,
     calculate_string_list_hash,
     has_extension, calculate_uuid_based_from_string_with_sha256_seed
 )
-
-from datetime import datetime as dt
-from enum import Enum as PyEnum, Enum
-from typing import Any, List, Dict, Optional, Union
 
 
 class CustomStateUnpickler(pickle.Unpickler):

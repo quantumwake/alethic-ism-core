@@ -97,10 +97,12 @@ class StateStorage:
     def fetch_state_data_by_column_id(self, column_id: int) -> Optional[StateDataRowColumnData]:
         raise NotImplemented()
 
-    def fetch_state_columns(self, state_id: str) -> Optional[List[StateDataColumnDefinition]]:
+    def fetch_state_columns(self, state_id: str) \
+            -> Optional[Dict[str, StateDataColumnDefinition]]:
         raise NotImplemented()
 
-    def fetch_states(self, project_id: str = None, state_type: str = None) -> Optional[List[State]]:
+    def fetch_states(self, project_id: str = None, state_type: str = None)\
+            -> Optional[List[State]]:
         raise NotImplemented()
 
     def fetch_state(self, state_id: str) -> Optional[State]:
