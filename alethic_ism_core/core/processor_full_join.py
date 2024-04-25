@@ -33,7 +33,7 @@ class DualStateProcessor(BaseProcessor):
                 joined_query_state = self.apply_query_state(query_state=joined_query_state)
                 print(joined_query_state)
 
-        return self.state  # new state
+        return self.output_state  # new state
 
 
 class FullJoinStateProcessor(BaseProcessor):
@@ -75,7 +75,7 @@ class FullJoinStateProcessor(BaseProcessor):
 
             # fetch the state information before reseting it
             merger = DualStateProcessor(
-                state=State(
+                output_state=State(
                     config=copy.deepcopy(self.config)
                 )
             )

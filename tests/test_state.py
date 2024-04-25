@@ -12,13 +12,12 @@ def create_mock_state_json():
 
 def create_mock_state() -> State:
     state = State(
+        # state_type="StateConfigLM",
         config=StateConfigLM(
             name="Test Me",
-            version="Test Version 1.0",
-            model_name="Hello World Model",
-            provider_name="Hello World Provider",
-            output_path="./tmp/tmp_state_test.pickle",
-            user_template_path="./tmp/tmp_user_template.json"
+            storage_class="database",
+            user_template_id="/tmp/tmp_user_template",
+            system_template_id="/tmp/tmp_system_template"
         )
     )
 
@@ -47,17 +46,17 @@ def test_state_callable_columns():
         value="P1"
     ))
     state.add_columns(columns=[
+        # StateDataColumnDefinition(
+        #     name="provider_name",
+        #     value="callable:config.provider_name"
+        # ),
+        # StateDataColumnDefinition(
+        #     name="model_name",
+        #     value="callable:config.model_name"
+        # ),
         StateDataColumnDefinition(
-            name="provider_name",
-            value="callable:config.provider_name"
-        ),
-        StateDataColumnDefinition(
-            name="model_name",
-            value="callable:config.model_name"
-        ),
-        StateDataColumnDefinition(
-            name="version",
-            value="callable:config.version"
+            name="name",
+            value="callable:config.name"
         )]
     )
 
@@ -71,9 +70,10 @@ def test_state_callable_columns():
         )
 
     query_state0 = state.get_query_state_from_row_index(0)
-    assert query_state0['provider_name'] == state.config.provider_name
-    assert query_state0['model_name'] == state.config.model_name
-    assert query_state0['version'] == state.config.version
+    assert query_state0['name'] == state.config.name
+    # assert query_state0['storage_class'] == state.config.storage_class
+    # assert query_state0['user_template_id'] == state.config.user_template_id
+    # assert query_state0['system_template_id'] == state.config.system_template_id
 
 
 def test_state():
@@ -84,4 +84,3 @@ def test_state():
     assert 'state_data' in state.columns
 
     assert 'Test Me' in state.config.name
-    assert 'Test Version 1.0' in state.config.version

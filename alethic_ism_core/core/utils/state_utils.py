@@ -1,8 +1,8 @@
 import logging as log
-
-from ..processor_state import StatusCode
+from ..base_model import StatusCode
 
 logging = log.getLogger(__name__)
+
 
 def validate_processor_state_from_created(new_status: StatusCode):
     if new_status not in [StatusCode.CREATED,

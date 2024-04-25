@@ -149,7 +149,7 @@ def calculate_string_list_hash(names: [str]):
 
 def calculate_string_dict_hash(item: dict):
     plain = ",".join([f'({key}:{value})' for key, value in item.items()])
-    return calculate_hash(plain)
+    return calculate_uuid_based_from_string_with_sha256_seed(plain)
 
 
 def build_template_text(template: Union[dict, str], query_state: dict, strip_newlines: bool = True):

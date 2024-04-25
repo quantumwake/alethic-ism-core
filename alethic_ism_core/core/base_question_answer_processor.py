@@ -18,59 +18,63 @@ from .utils.general_utils import (
 logging = log.getLogger(__name__)
 
 
-class BaseQuestionAnswerProcessor(BaseProcessor):
+class BaseProcessorLM(BaseProcessor):
 
     @property
     def config(self) -> StateConfigLM:
-        return self.state.config
-
-    @property
-    def provider_name(self):
-        return self.config.provider_name
-
-    @provider_name.setter
-    def provider_name(self, provider_name: str):
-        self.config.provider_name = provider_name
-
-    @property
-    def model_name(self):
-        return self.config.model_name
-
-    @model_name.setter
-    def model_name(self, model_name: str):
-        self.config.model_name = model_name
+        return self.output_state.config
+    #
+    # @property
+    # def provider_name(self):
+    #     return self.config.provider_name
+    #
+    # @provider_name.setter
+    # def provider_name(self, provider_name: str):
+    #     self.config.provider_name = provider_name
+    #
+    # @property
+    # def model_name(self):
+    #     return self.config.model_name
+    #
+    # @model_name.setter
+    # def model_name(self, model_name: str):
+    #     self.config.model_name = model_name
 
     @property
     def user_template(self):
-        return load_template(self.user_template_path)
+        return load_template(self.user_template_id)
 
     @property
     def system_template(self):
-        return load_template(self.system_template_path)
+        return load_template(self.system_template_id)
 
     @property
-    def user_template_path(self):
-        return self.config.user_template_path
+    def user_template_id(self):
+        return self.config.user_template_id
 
-    @user_template_path.setter
-    def user_template_path(self, path: str):
-        self.config.user_template_path = path
+    @user_template_id.setter
+    def user_template_id(self, template_id: str):
+        self.config.user_template_id = template_id
 
     @property
-    def system_template_path(self):
-        return self.config.system_template_path
+    def system_template_id(self):
+        return self.config.system_template_id
 
-    @system_template_path.setter
-    def system_template_path(self, path: str):
-        self.config.system_template_path = path
+    @system_template_id.setter
+    def system_template_id(self, template_id: str):
+        self.config.system_template_id = template_id
 
-    def __init__(self, state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
-        super().__init__(state=state, processors=processors, **kwargs)
+    def __init__(self, output_state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
+        super().__init__(
+            output_state=output_state,
+            processors=processors,
+            **kwargs
+        )
 
         # ensure that the configuration passed is of StateConfigLM
-        if not isinstance(self.state.config, StateConfigLM):
+        if not isinstance(self.output_state.config, StateConfigLM):
             raise ValueError(f'invalid state config, '
-                             f'got {type(self.state.config)}, '
+                             f'got {type(self.output_state.config)}, '
                              f'expected {StateConfigLM}')
 
         logging.info(f'starting instruction state machine: {type(self)} with config {self.config}')
@@ -78,15 +82,15 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
-    def build_state_storage_path(self):
-        provider = ''.join([char for char in self.provider_name if char.isalnum()]).lower()
-        model_name = ''.join([char for char in self.model_name if char.isalnum()]).lower()
-        user_template = self.user_template  # this will be hashed
-        system_template = self.system_template  # this will be hashed
-
-        # return super().build_final_output_path(prefix=f'{provider}_{model_name}')
-        return super().build_state_storage_path(
-            prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
+    # def build_state_storage_path(self):
+    #     provider = ''.join([char for char in self.provider_name if char.isalnum()]).lower()
+    #     model_name = ''.join([char for char in self.model_name if char.isalnum()]).lower()
+    #     user_template = self.user_template  # this will be hashed
+    #     system_template = self.system_template  # this will be hashed
+    #
+    #     # return super().build_final_output_path(prefix=f'{provider}_{model_name}')
+    #     return super().build_state_storage_path(
+    #         prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
 
     def apply_states(self, query_states: [dict]):
         with self.lock:
@@ -114,7 +118,7 @@ class BaseQuestionAnswerProcessor(BaseProcessor):
             query_state=input_query_state,
 
             # we use the primary key definition because we are creating a primary key
-            key_definitions=self.state.config.primary_key
+            key_definitions=self.output_state.config.primary_key
         )
 
         # if it already exists, then skip it, unless forced

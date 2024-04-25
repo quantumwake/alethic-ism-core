@@ -2,7 +2,6 @@ import json
 import logging as log
 import os
 import pickle
-import re
 
 from pydantic import BaseModel, field_validator, root_validator, model_validator
 
@@ -73,20 +72,6 @@ class CustomStateUnpickler(pickle.Unpickler):
 logging = log.getLogger(__name__)
 
 
-class ProcessorStateDirection(Enum):
-    INPUT = "INPUT"
-    OUTPUT = "OUTPUT"
-
-
-class StatusCode(Enum):
-    CREATED = "CREATED"
-    QUEUED = "QUEUED"
-    RUNNING = "RUNNING"
-    TERMINATED = "TERMINATED"
-    STOPPED = "STOPPED"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-
 
 class StateDataKeyDefinition(BaseModel):
     id: Optional[int] = None
@@ -116,9 +101,9 @@ def load_state_from_pickle(file_name: str) -> 'State':
 
 class StateConfig(BaseModel):
     name: str
-    version: Optional[str] = None  # "Version 0.1"
+    # version: Optional[str] = None  # "Version 0.1"
     storage_class: Optional[str] = "file"
-    output_path: Optional[str] = None  # deprecated for file outputs
+    # output_path: Optional[str] = None  # deprecated for file outputs
     primary_key: Optional[List[StateDataKeyDefinition]] = None
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
@@ -126,10 +111,13 @@ class StateConfig(BaseModel):
 
 
 class StateConfigLM(StateConfig):
-    system_template_path: Optional[str] = None
-    user_template_path: str
-    provider_name: str = None
-    model_name: str = None
+    user_template_id: str
+    system_template_id: Optional[str] = None
+
+
+class StateConfigCode(StateConfig):
+    template_id: Optional[str] = None
+    language: str
 
 
 class StateConfigDB(StateConfig):
@@ -137,13 +125,6 @@ class StateConfigDB(StateConfig):
     function_columns: Optional[List[dict]] = None
     constant_columns: Optional[List[dict]] = None
 
-
-class InstructionTemplate(BaseModel):
-    template_id: Optional[str] = None
-    template_path: str
-    template_content: str
-    template_type: str
-    project_id: Optional[str] = None
 
 
 class StateDataColumnDefinition(BaseModel):
@@ -241,7 +222,7 @@ class StateDataRowColumnData(BaseModel):
 
 class State(BaseModel):
     id: Optional[str] = None  # primary key, can be generated or directly set
-    project_id: Optional[str] = None    # project association id
+    project_id: Optional[str] = None  # project association id
 
     config: Optional[Union[StateConfig, StateConfigLM, StateConfigDB]] = None
     columns: Dict[str, StateDataColumnDefinition] = {}
@@ -253,6 +234,10 @@ class State(BaseModel):
     update_date: Optional[dt] = None
     state_type: Optional[str] = None
 
+    # @model_validator(mode="before")
+    # def derive_config_type(cls, state):
+    #     return state
+
     @model_validator(mode="after")
     def derive_state_type(cls, state):
         if state.config:
@@ -260,19 +245,6 @@ class State(BaseModel):
             state.state_type = state_type
 
         return state
-
-        # config = values.get('config', '')
-        # if not config:
-        #     return None
-        #
-        # values['state_type'] = type(config).__name__
-        # return values
-        #
-        # if "config" not in values:
-        #     return {"full_name": values["first_name"]}
-        #
-        # full_name = f"{values['first_name']} {values['last_name']}"
-        # return {"full_name": full_name, **values}
 
     @field_validator('config', mode='before')
     def create_config(cls, config_value):
@@ -611,204 +583,6 @@ class State(BaseModel):
             raise Exception(f'Unsupported file type for {output_path}')
 
 
-def add_state_column_value(column: StateDataColumnDefinition,
-                           state_file: str = None,
-                           state: State = None):
-    if not state and not state_file:
-        raise Exception(f'you must specify either a state_file or a load a state using the '
-                        f'State.load_state(..) and pass it as a parameter')
-
-    if state and state_file:
-        raise Exception(f'cannot assign both state_file and state, choose one')
-
-    if state_file:
-        state = State.load_state(state_file)
-
-    if state.columns and column.name in state.columns:
-        raise Exception(f'column {column.name} already exists in state with config: {state.config}')
-
-    state.add_column(column)
-
-    return state
-
-
-def find_state_files(search_path: str,
-                     search_recursive: bool = False,
-                     state_path_match: str = None,
-                     state_name_match: str = None,
-                     state_version_match: str = None,
-                     state_provider_match: str = None,
-                     state_model_match: str = None,
-                     state_user_template_match: str = None,
-                     state_system_template_match: str = None):
-    logging.debug(f'searching for state files in path {search_path}, '
-                  f'recursive: {search_recursive}, '
-                  f'state_path_match: {state_path_match}, '
-                  f'state_name_match: {state_name_match}')
-
-    if not os.path.exists(search_path):
-        raise Exception(f'state path does not exist: {search_path}')
-
-    files = os.listdir(search_path)
-
-    if not files:
-        logging.error(f'no state files found in {search_path}')
-        return
-
-    # final result set to merge with previous state result files
-    results = {}
-
-    for nodes in files:
-        final_path = f'{search_path}/{nodes}'
-
-        if os.path.isdir(final_path):
-            if search_recursive:
-                logging.debug(f'recursive path {final_path}')
-
-                # find states recursively
-                new_results = find_state_files(search_path=final_path,
-                                               search_recursive=search_recursive,
-                                               state_path_match=state_path_match,
-                                               state_name_match=state_name_match,
-                                               state_version_match=state_version_match,
-                                               state_provider_match=state_provider_match,
-                                               state_model_match=state_model_match,
-                                               state_user_template_match=state_user_template_match,
-                                               state_system_template_match=state_system_template_match)
-                if new_results:
-                    # append the recursive results to the current call level
-                    results = {**results, **new_results}
-                else:
-                    logging.debug(f'no state files matched in path: {final_path}')
-
-            continue
-
-        def inv_check_match(search, value):
-            # attempt to match full path before opening state file
-            logging.debug(f'searching for pattern {search}, value: {value}, file: {final_path}')
-            if search and not re.match(search, value) and search not in value:
-                logging.debug(f'search pattern: {search} not matched as per value: {value} on file {final_path}')
-                return True
-
-            return False
-
-        # attempt to match full path before opening state file
-        if inv_check_match(state_path_match, final_path):
-            continue
-
-        # TODO must be a better way to only read the state configuration instead of the entire file
-        state = State.load_state(final_path)
-
-        # search the file path for a pattern match
-        if inv_check_match(state_name_match, state.config.name):
-            continue
-
-        # if is instance of state config lm
-        if isinstance(state.config, StateConfigLM):
-
-            # backwards compatibility, TODO remove this at some point
-            if 'version' not in state.config.__dict__:
-                state.config.version = "Version 0.0"
-            try:
-                if (inv_check_match(state_user_template_match, state.config.user_template_path) or
-                        inv_check_match(state_system_template_match, state.config.system_template_path) or
-                        inv_check_match(state_model_match, state.config.model_name) or
-                        inv_check_match(state_provider_match, state.config.provider_name) or
-                        inv_check_match(state_version_match, state.config.version)):
-                    continue
-            except Exception as e:
-                logging.error(
-                    f'unable to process file {final_path}, attempting to evaluate config match {state.config}')
-                logging.error(e)
-                continue
-
-        elif state_user_template_match or state_system_template_match:
-            # skip the file is the template user match or system template
-            # match is defined and the config type is not StateConfigLM
-            continue
-
-        # append as a dictionary of file name paths and state values
-        results[final_path] = state
-
-    return results
-
-
-def search_state(path: str, filter_func: Any):
-    # TODO terrible way to search the state but it will have to do for now,
-    #  basically a linear search since it has to open the entire state file
-    #  and iterate through it.
-    state = State.load_state(path)
-    query_states = [state.get_query_state_from_row_index(x) for x in range(state.count)]
-    return [query_state for query_state in query_states if filter_func(query_state)]
-
-
-def show_state_config_modification_info(
-        old_config: StateConfig,
-        new_config: StateConfig):
-    # filter and prepare new configuration dictionary
-    new_config = {
-        key.replace('new_', ''): value
-        for key, value in new_config.items()
-        if key is not None and
-           value is not None and
-           key.startswith('new_')
-    }
-
-    old_config_json = old_config.model_dump()
-
-    # build configuration string
-    config = "\n\t".join([f'old: {key}:{value} -> {new_config[key] if key in new_config else "<unchanged>"}'
-                          for key, value
-                          in old_config_json.items()])
-
-    # project the new configuration ontop of the old config
-    old_config_json = {**old_config_json, **new_config}
-    logging.info(f'config: {config}')
-
-    new_config = old_config.model_validate(old_config_json)
-
-    # updated configuration
-    return new_config
-
-
-def show_state_column_info(state: State):
-    columns = state.columns
-    column_string = ", ".join([f'{column}' for column, value in columns.items()])
-    logging.info(f'columns = [{column_string}]')
-    return column_string
-
-
-def show_state_info(results: dict):
-    if not results:
-        raise FileExistsError(
-            f'results cannot be blank or null, please provide a list of paths and states in either as a list[str] paths or a dict[path] = state values')
-
-    if isinstance(results, List):
-        raise NotImplementedError(
-            "list not implemented yet, please use a dictionary of state paths and state key value pairs")
-
-    for state_file, state in results.items():
-        # fetch file stats
-        stat = os.stat(state_file)
-
-        # build configuration string
-        configuration_string = "\n\t".join([f'{key}:{value}'
-                                            for key, value
-                                            in state.config.model_dump().items()])
-
-        if state.columns:
-            columns_string = ", ".join([f'[{key}]' for key in state.columns.keys()])
-        else:
-            columns_string = ""
-
-        print(f'config: {configuration_string}')
-        print(f'columns: {columns_string}')
-        print(f'state row count: {implicit_count_with_force_count(state)}')
-        print(f'created on: {dt.fromtimestamp(stat.st_ctime)}, '
-              f'updated on: {dt.fromtimestamp(stat.st_mtime)}, '
-              f'last access on: {dt.fromtimestamp(stat.st_atime)}')
-
-
 def implicit_count_with_force_count(state: State):
     if not state:
         raise Exception(f'invalid state input, cannot be empty or undefined')
@@ -846,6 +620,26 @@ def implicit_count_with_force_count(state: State):
 
     return count
 
+# def add_state_column_value(column: StateDataColumnDefinition,
+#                            state_file: str = None,
+#                            state: State = None):
+#     if not state and not state_file:
+#         raise Exception(f'you must specify either a state_file or a load a state using the '
+#                         f'State.load_state(..) and pass it as a parameter')
+#
+#     if state and state_file:
+#         raise Exception(f'cannot assign both state_file and state, choose one')
+#
+#     if state_file:
+#         state = State.load_state(state_file)
+#
+#     if state.columns and column.name in state.columns:
+#         raise Exception(f'column {column.name} already exists in state with config: {state.config}')
+#
+#     state.add_column(column)
+#
+#     return state
+
 
 def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataKeyDefinition]):
     try:
@@ -872,30 +666,30 @@ def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataK
         raise Exception(error)
 
 
-def load_state(state_file: str) -> Any:
-    state = {}
-    if not os.path.exists(state_file):
-        raise FileNotFoundError(
-            f'state file {state_file} not found, please use the ensure to use the state template to create the input state file.')
-
-    with open(state_file, 'r') as fio:
-        state = json.load(fio)
-
-        if 'config' not in state:
-            raise Exception(f'Invalid state input, please make sure you define '
-                            f'a basic header for the input state')
-
-        if 'data' not in state:
-            raise Exception(f'Invalid state input, please make sure a data field exists '
-                            f'in the root of the input state')
-
-        data = state['data']
-
-        if not isinstance(data, list):
-            raise Exception('Invalid data input states, the data input must be a list of dictionaries '
-                            'List[dict] where each dictionary is FLAT record of key/value pairs')
-
-    return state
+# def load_state(state_file: str) -> Any:
+#     state = {}
+#     if not os.path.exists(state_file):
+#         raise FileNotFoundError(
+#             f'state file {state_file} not found, please use the ensure to use the state template to create the input state file.')
+#
+#     with open(state_file, 'r') as fio:
+#         state = json.load(fio)
+#
+#         if 'config' not in state:
+#             raise Exception(f'Invalid state input, please make sure you define '
+#                             f'a basic header for the input state')
+#
+#         if 'data' not in state:
+#             raise Exception(f'Invalid state input, please make sure a data field exists '
+#                             f'in the root of the input state')
+#
+#         data = state['data']
+#
+#         if not isinstance(data, list):
+#             raise Exception('Invalid data input states, the data input must be a list of dictionaries '
+#                             'List[dict] where each dictionary is FLAT record of key/value pairs')
+#
+#     return state
 
 
 # This function is designed to augment the input dataset with additional data. It offers two methods:
@@ -920,7 +714,7 @@ def get_column_state_value(value: Any, *args, **kwargs):
             #   but hell there are a lot of security issues,
             #   this is meant to be running in an isolated
             #   container by tenant, still yet, who knows
-            #   what functions are implement.
+            #   what functions are implemented.
             value = eval(func, kwargs)
             return value
 

@@ -4,7 +4,7 @@ import os
 import queue
 import threading
 
-from typing import List
+from typing import List, Optional
 
 from .utils.state_utils import validate_processor_status_change
 from .utils.general_utils import higher_order_routine, has_extension, calculate_uuid_based_from_string_with_sha256_seed
@@ -83,55 +83,56 @@ class ThreadQueueManager:
 class BaseProcessor:
 
     def __init__(self,
-                 state: State,
-                 processors: List['BaseProcessor'] = None):
+                 output_state: State,
+                 processors: List['BaseProcessor'] = None,
+                 **kwargs):
 
         # TODO swap this with a pub/sub system at some point
         self.current_status = StatusCode.CREATED
         self.manager = ThreadQueueManager(num_workers=1, processor=self)
-        self.state = state
+        self.output_state = output_state
         self.processors = processors
         self.lock = threading.Lock()
 
     @property
     def config(self):
-        return self.state.config
+        return self.output_state.config
 
     @config.setter
     def config(self, config):
-        self.state.config = config
-
-    @property
-    def name(self):
-        return self.config.name
-
-    @name.setter
-    def name(self, name: str):
-        self.config.name = name
+        self.output_state.config = config
+    #
+    # @property
+    # def name(self):
+    #     return self.config.name
+    #
+    # @name.setter
+    # def name(self, name: str):
+    #     self.config.name = name
 
     @property
     def data(self):
-        return self.state.data
+        return self.output_state.data
 
     @property
     def columns(self):
-        return self.state.columns
+        return self.output_state.columns
 
     @columns.setter
     def columns(self, columns):
-        self.state.columns = columns
+        self.output_state.columns = columns
 
     @property
     def mapping(self):
-        return self.state.mapping
-
-    @property
-    def output_path(self):
-        return self.config.output_path
-
-    @output_path.setter
-    def output_path(self, path: str):
-        self.config.output_path = path
+        return self.output_state.mapping
+    #
+    # @property
+    # def output_path(self):
+    #     return self.config.output_path
+    #
+    # @output_path.setter
+    # def output_path(self, path: str):
+    #     self.config.output_path = path
 
     @property
     def output_primary_key_definition(self):
@@ -178,12 +179,12 @@ class BaseProcessor:
                             f'class base type {type(node)}')
         #
         # execute processor
-        node(input_state=self.state)
+        node(input_state=self.output_state)
 
     def execute_downstream_processor_nodes(self):
         if not self.processors:
             logging.info(
-                f'no downstream processors available for config input {self.config} with input state {self.build_state_storage_path()}')
+                f'no downstream processors available for state config {self.config}')
             return
 
         # iterate each child processor and inject the output state
@@ -202,24 +203,24 @@ class BaseProcessor:
         # wait for completion on downstream processor nodes
         self.manager.wait_for_completion()
 
-    def load_previous_state(self, force: bool = False):
-
-        # overwrite the state
-        if force:
-            return None
-
-        # first lets try and load the stored state from the storage
-        current_stored_state_filename = self.build_state_storage_path()
-        logging.info(
-            f'searching for current state file {current_stored_state_filename}, use force argument to overwrite')
-
-        # the output state is derived from the input state parameters load the
-        # current output state to ensure we do not reprocess the input state
-        if os.path.exists(current_stored_state_filename):
-            self.state = State.load_state(current_stored_state_filename)
-            logging.info(f'loaded current state file {current_stored_state_filename} into processor {self.config}')
-
-        return self.state
+    # def load_previous_state(self, force: bool = False):
+        #
+        # # overwrite the state
+        # if force:
+        #     return None
+        #
+        # # first lets try and load the stored state from the storage
+        # current_stored_state_filename = self.build_state_storage_path()
+        # logging.info(
+        #     f'searching for current state file {current_stored_state_filename}, use force argument to overwrite')
+        #
+        # # the output state is derived from the input state parameters load the
+        # # current output state to ensure we do not reprocess the input state
+        # if os.path.exists(current_stored_state_filename):
+        #     self.output_state = State.load_state(current_stored_state_filename)
+        #     logging.info(f'loaded current state file {current_stored_state_filename} into processor {self.config}')
+        #
+        # return self.output_state
 
     def process_by_query_states(self, query_states: List[dict]):
 
@@ -264,26 +265,26 @@ class BaseProcessor:
         self.current_status = new_status
 
     def __call__(self,
-                 input_file: str = None,
+                 # input_file: str = None,
                  input_state: State = None,
                  force_state_overwrite: bool = False,
                  *args, **kwargs):
 
-        if input_state and input_file:
-            raise Exception(f'cannot have both input_state and input_file specified, you can either '
-                            f'load the state prior and pass it as a parameter, or specify the input state '
-                            f'file')
+        # if input_state and input_file:
+        #     raise Exception(f'cannot have both input_state and input_file specified, you can either '
+        #                     f'load the state prior and pass it as a parameter, or specify the input state '
+        #                     f'file')
 
         # reload the state, if any
-        self.load_previous_state(force=force_state_overwrite)
+        # self.load_previous_state(force=force_state_overwrite)
 
         # if the input is .json then make sure it is a state input
         # TODO we can stream the inputs and outputs, would be more significantly more efficient
         #  especially if we actually stream it, meaning no data will reside past the record point
         #  in each machine, until the target output destination(s), which is likely a database
-        if input_file:
-            logging.info(f'attempting to load input state from {input_file} for config {self.config}')
-            input_state = State.load_state(input_file)
+        # if input_file:
+        #     logging.info(f'attempting to load input state from {input_file} for config {self.config}')
+        #     input_state = State.load_state(input_file)
 
         # only if the input state has data do we iterate the content
         if input_state and input_state.data:
@@ -338,12 +339,12 @@ class BaseProcessor:
             logging.error(error)
             raise Exception(error)
 
-    def load_state(self):
-        state_file = self.build_state_storage_path()
-        if not os.path.exists(state_file):
-            return self.state
-
-        return State.load_state(state_file)
+    # def load_state(self):
+    #     state_file = self.build_state_storage_path()
+    #     if not os.path.exists(state_file):
+    #         return self.output_state
+    #
+    #     return State.load_state(state_file)
 
     def apply_query_state(self, query_state: dict):
 
@@ -351,8 +352,8 @@ class BaseProcessor:
         query_state = self.pre_state_apply(query_state=query_state)
 
         # apply the response query state to the output state
-        self.state.apply_columns(query_state=query_state)
-        self.state.apply_row_data(query_state=query_state)
+        self.output_state.apply_columns(query_state=query_state)
+        self.output_state.apply_row_data(query_state=query_state)
 
         # post-state apply - the completed function
         return self.post_state_apply(query_state=query_state)
@@ -360,52 +361,52 @@ class BaseProcessor:
     def pre_state_apply(self, query_state: dict) -> dict:
 
         # remapped query state before applying it to the state
-        query_state = self.state.remap_query_state(query_state=query_state)
+        query_state = self.output_state.remap_query_state(query_state=query_state)
 
         # apply any templates using the query state as the primary source of information
-        query_state = self.state.apply_template_variables(query_state=query_state)
+        query_state = self.output_state.apply_template_variables(query_state=query_state)
 
         return query_state
 
     def post_state_apply(self, query_state: dict) -> dict:
         return query_state
 
-    def store_state(self, output_state_path: str):
+    # def store_state(self, output_state_path: str):
+        #
+        # # persist the entire output state to the storage class
+        # # fetch the state file name previously configured, or autogenerated
+        # output_state_path = output_state_path if output_state_path else self.build_state_storage_path()
+        # self.output_state.save_state(output_state_path)
 
-        # persist the entire output state to the storage class
-        # fetch the state file name previously configured, or autogenerated
-        output_state_path = output_state_path if output_state_path else self.build_state_storage_path()
-        self.state.save_state(output_state_path)
-
-    def build_state_storage_path(self, output_extension: str = 'pickle', prefix: str = None):
-        if not self.name:
-            raise Exception(
-                f'Processor name not defined, please ensure to define a '
-                f'unique processor name as part, otherwise your states might '
-                f'get overwritten or worse, merged.')
-
-        if has_extension(self.output_path, ['pkl', 'pickle', 'json', 'csv', 'xlsx']):
-            return self.output_path
-
-        # create temporary state storage area : if the output path is not set and does not exists already
-        if not self.output_path:
-            self.output_path = DEFAULT_OUTPUT_PATH
-            if not os.path.exists(self.output_path):
-                os.mkdir(self.output_path)
-
-        # when directory, then simply prefix output path to config.name
-        if os.path.isdir(self.output_path):
-            to_be_hashed = self.name
-            if prefix:
-                to_be_hashed = f'[{prefix}]/[{to_be_hashed}]'
-
-            state_file_hashed = calculate_uuid_based_from_string_with_sha256_seed(to_be_hashed)
-            state_file = f'{self.output_path}/{state_file_hashed}.{output_extension}'
-            self.output_path = state_file
-            return state_file
-
-        # otherwise return the full path
-        return self.output_path
+    # def build_state_storage_path(self, output_extension: str = 'pickle', prefix: str = None):
+    #     if not self.name:
+    #         raise Exception(
+    #             f'Processor name not defined, please ensure to define a '
+    #             f'unique processor name as part, otherwise your states might '
+    #             f'get overwritten or worse, merged.')
+    #
+    #     if has_extension(self.output_path, ['pkl', 'pickle', 'json', 'csv', 'xlsx']):
+    #         return self.output_path
+    #
+    #     # create temporary state storage area : if the output path is not set and does not exists already
+    #     if not self.output_path:
+    #         self.output_path = DEFAULT_OUTPUT_PATH
+    #         if not os.path.exists(self.output_path):
+    #             os.mkdir(self.output_path)
+    #
+    #     # when directory, then simply prefix output path to config.name
+    #     if os.path.isdir(self.output_path):
+    #         to_be_hashed = self.name
+    #         if prefix:
+    #             to_be_hashed = f'[{prefix}]/[{to_be_hashed}]'
+    #
+    #         state_file_hashed = calculate_uuid_based_from_string_with_sha256_seed(to_be_hashed)
+    #         state_file = f'{self.output_path}/{state_file_hashed}.{output_extension}'
+    #         self.output_path = state_file
+    #         return state_file
+    #
+    #     # otherwise return the full path
+    #     return self.output_path
 
     def _process_input_data_entry(self, input_query_state: dict, force: bool = False):
         current_status = self.get_current_status()
@@ -485,8 +486,8 @@ if __name__ == '__main__':
     test_state = State(
         config=StateConfig(
             name='test state 1',
-            input_path='../states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
-            output_path='../../states/',
+            # input_path='../states/07c5ea7bfa7e9c6ffd93848a9be3c2e712a0e6ca43cc0ad12b6dd24ebd788d6f.json',
+            # output_path='../../states/',
             # output_path='../dataset/examples/states/184fef148b36325a9f01eff757f0d90af535f4259c105fc612887d5fad34ce11.json',
             primary_key=[
                 StateDataKeyDefinition(name='query'),
