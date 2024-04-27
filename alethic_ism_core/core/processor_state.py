@@ -8,7 +8,7 @@ from datetime import datetime as dt
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel, field_validator, model_validator
 
-from .base_model import StatusCode, InstructionTemplate
+from .base_model import StatusCode, InstructionTemplate, BaseModelHashable
 from .utils.general_utils import (
     build_template_text_content,
     clean_string_for_ddl_naming,
@@ -72,7 +72,6 @@ class CustomStateUnpickler(pickle.Unpickler):
 logging = log.getLogger(__name__)
 
 
-
 class StateDataKeyDefinition(BaseModel):
     id: Optional[int] = None
     name: str
@@ -124,7 +123,6 @@ class StateConfigDB(StateConfig):
     embedding_columns: Optional[List[dict]] = None
     function_columns: Optional[List[dict]] = None
     constant_columns: Optional[List[dict]] = None
-
 
 
 class StateDataColumnDefinition(BaseModel):
@@ -220,7 +218,7 @@ class StateDataRowColumnData(BaseModel):
         return self.values
 
 
-class State(BaseModel):
+class State(BaseModelHashable):
     id: Optional[str] = None  # primary key, can be generated or directly set
     project_id: Optional[str] = None  # project association id
 
@@ -246,24 +244,84 @@ class State(BaseModel):
 
         return state
 
-    @field_validator('config', mode='before')
-    def create_config(cls, config_value):
-        if isinstance(config_value, StateConfig):
-            return config_value
+    @model_validator(mode="before")
+    def create_config(cls, value, values):
+        if not isinstance(value, dict):
+            return value
 
-        if config_value and any(key in config_value for key in [
-            'provider_name',
-            'model_name',
-        ]):
-            return StateConfigLM(**config_value)
-        elif config_value and any(key in config_value for key in [
-            'embedding_columns',
-            'function_columns',
-            'constant_columns'
-        ]):
-            return StateConfigDB(**config_value)
+        # this section is designed to reconstruct only the StateConfig based on State.state_type
+        # if the config value does not exist in the root value being processed, then skip it
+        if 'config' not in value:
+            return value
+
+        # extract the configuration object from the root value (e.g. either instance of StateConfig*, or dict)
+        config_value = value['config']
+
+        # if it is a state config type, then return the root object, nothing to do here
+        if isinstance(config_value, StateConfig):
+            return value
+
+        # Reconstructs the config type based on the state_type
+        state_type = value['state_type']
+        if state_type == 'StateConfigLM':
+            value['config'] = StateConfigLM(**config_value)
+        elif state_type == 'StateConfigDB':
+            value['config'] =  StateConfigDB(**config_value)
+        elif state_type == 'StateConfigCode':
+            value['config'] =  StateConfigCode(**config_value)
+        elif state_type == 'StateConfig':
+            value['config'] =  StateConfig(**config_value)
         else:
-            return StateConfig(**config_value)
+            raise NotImplemented(f'unsupported state type {state_type} for {value}')
+
+        return value
+
+        #
+        # if isinstance(config_value, StateConfig):
+        #     return config_value
+        #
+        # if state_type == 'StateConfigLM':
+        #     return StateConfigLM(**config_value)
+        # elif state_type == 'StateConfigDB':
+        #     return StateConfigDB(**config_value)
+        # elif state_type == 'StateConfigCode':
+        #     return StateConfigCode(**config_value)
+        # elif state_type == 'StateConfig':
+        #     return StateConfig(**config_value)
+
+        raise NotImplemented(f"unsupported state type {state_type}")
+
+    # @field_validator('config', , mode='before')
+    # @classmethod
+    # def create_config(cls, config_value, state_type):
+    #     if isinstance(config_value, StateConfig):
+    #         return config_value
+    #
+    #     if state_type == 'StateConfigLM':
+    #         return StateConfigLM(**config_value)
+    #     elif state_type == 'StateConfigDB':
+    #         return StateConfigDB(**config_value)
+    #     elif state_type == 'StateConfigCode':
+    #         return StateConfigCode(**config_value)
+    #     elif state_type == 'StateConfig':
+    #         return StateConfig(**config_value)
+    #
+    #     raise NotImplemented(f"unsupported state type {state_type}")
+
+    #
+    # if config_value and any(key in config_value for key in [
+    #     'provider_name',
+    #     'model_name',
+    # ]):
+    #
+    # elif config_value and any(key in config_value for key in [
+    #     'embedding_columns',
+    #     'function_columns',
+    #     'constant_columns'
+    # ]):
+    #     return StateConfigDB(**config_value)
+    # else:
+    #     return StateConfig(**config_value)
 
     def reset(self):
         self.columns = {}
@@ -619,6 +677,7 @@ def implicit_count_with_force_count(state: State):
                         break
 
     return count
+
 
 # def add_state_column_value(column: StateDataColumnDefinition,
 #                            state_file: str = None,

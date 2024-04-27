@@ -1,6 +1,4 @@
 import random
-import pytest
-
 from alethic_ism_core.core.processor_state import StateConfigLM, State, StateDataColumnDefinition
 
 

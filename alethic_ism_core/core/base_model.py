@@ -2,18 +2,27 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel
 
+from alethic_ism_core.core.utils.general_utils import calculate_sha256
 
-class UserProfile(BaseModel):
+
+class BaseModelHashable(BaseModel):
+    def hash(self) -> str:
+        return calculate_sha256(
+            str(self.model_dump_json())
+        )
+
+
+class UserProfile(BaseModelHashable):
     user_id: str
 
 
-class UserProject(BaseModel):
+class UserProject(BaseModelHashable):
     project_id: Optional[str] = None
     project_name: str
     user_id: str
 
 
-class WorkflowNode(BaseModel):
+class WorkflowNode(BaseModelHashable):
     node_id: Optional[str] = None
     node_type: str
     node_label: Optional[str] = None
@@ -25,7 +34,7 @@ class WorkflowNode(BaseModel):
     height: Optional[float] = None
 
 
-class WorkflowEdge(BaseModel):
+class WorkflowEdge(BaseModelHashable):
     source_node_id: str
     target_node_id: str
     source_handle: str
@@ -49,7 +58,7 @@ class StatusCode(Enum):
     FAILED = "FAILED"
 
 
-class InstructionTemplate(BaseModel):
+class InstructionTemplate(BaseModelHashable):
     template_id: Optional[str] = None
     template_path: str
     template_content: str
@@ -57,7 +66,7 @@ class InstructionTemplate(BaseModel):
     project_id: Optional[str] = None
 
 
-class ProcessorProvider(BaseModel):
+class ProcessorProvider(BaseModelHashable):
     id: Optional[str] = None
     name: str
     version: str
@@ -66,15 +75,19 @@ class ProcessorProvider(BaseModel):
     project_id: Optional[str] = None
 
 
-class Processor(BaseModel):
+class Processor(BaseModelHashable):
     id: Optional[str] = None
     provider_id: str
     project_id: str
     status: StatusCode = StatusCode.CREATED
 
 
-class ProcessorState(BaseModel):
+class ProcessorState(BaseModelHashable):
     id: Optional[str] = None
     processor_id: str
     state_id: str
     direction: ProcessorStateDirection = ProcessorStateDirection.INPUT
+
+
+class ProcessorStateDetail(ProcessorState, Processor):
+    pass
