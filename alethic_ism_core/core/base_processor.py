@@ -81,6 +81,7 @@ class ThreadQueueManager:
     def stop_all_workers(self):
         self.terminated = True
 
+
 class BaseProcessor:
 
     def __init__(self,

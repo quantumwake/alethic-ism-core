@@ -11,6 +11,7 @@ messageConfig:
         manage_topic: ism_openai_qa_manage
         subscription: ism_openai_qa_subscription
         selector: language/models/openai/gpt-4-1106-preview
+        schema: schema.StringSchema
 
 #
 #      - process_topic: ism_anthropic_qa

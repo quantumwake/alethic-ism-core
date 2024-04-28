@@ -1,4 +1,3 @@
-import logging
 from enum import Enum
 
 import pulsar
@@ -44,6 +43,10 @@ class Route:
             if 'service_url' in topic_selector \
             else root_service_url
 
+        self.schema = eval(topic_selector['schema'])() \
+            if 'schema' in topic_selector \
+            else schema.StringSchema()
+
         # raise exception if service url is not defined
         if not self.service_url:
             raise ConnectionError('service url is not defined in messageConfig or in the specific topic selector, '
@@ -53,15 +56,15 @@ class Route:
         self.client = pulsar.Client(self.service_url)
         self.producer_topic = self.client.create_producer(
             self.topic,
-            schema=schema.StringSchema()
+            schema=self.schema
         )
 
         self.producer_manage = self.client.create_producer(
             self.manage_topic,
-            schema=schema.StringSchema()
+            schema=self.schema
         ) if self.manage_topic else None
 
-    def send_message(self, msg) -> RouteMessageStatus:
+    def send_message(self, msg: Any) -> RouteMessageStatus:
         try:
             id = self.producer_topic.send(msg, None)
             return RouteMessageStatus(
@@ -100,16 +103,31 @@ class Router:
             if 'root_route' in self.message_config \
             else None
 
-        # if there are topic selectors then build a dictionary of selector path to the route
-        self.topic_routes = {
-            topic_selector['selector']: Route(
-                topic_selector=topic_selector,
-                root_service_url=self.root_route.service_url)
-            for topic_selector in self.message_config['topic_routes']
-        } if 'topic_routes' in self.message_config \
-            else None
+        # compile the servie url if exists
+        root_service_url = self.root_route.service_url \
+            if self.root_route else None
 
-    def send_message(self, selector: str, msg: dict) -> RouteMessageStatus:
+        self.topic_routes = {}
+        # if there are topic selectors then build a dictionary of selector path to the route
+        if 'topic_routes' in self.message_config:
+            for topic_selector in self.message_config['topic_routes']:
+                selector = topic_selector['selector']
+                route = Route(
+                    topic_selector=topic_selector,
+                    root_service_url=root_service_url
+                )
+                self.topic_routes[selector] = route
+
+        # self.topic_routes = {
+        #     topic_selector['selector']: Route(
+        #         topic_selector=topic_selector,
+        #         root_service_url=root_service_url
+        #     )
+        #     for topic_selector in self.message_config['topic_routes']
+        # } if 'topic_routes' in self.message_config \
+        #     else None
+
+    def send_message(self, selector: str, msg: Any) -> RouteMessageStatus:
         route = self.find_router(selector=selector)
 
         if not route:

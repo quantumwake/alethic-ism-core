@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel
 
-from alethic_ism_core.core.utils.general_utils import calculate_sha256
+from .utils.general_utils import calculate_sha256
 
 
 class BaseModelHashable(BaseModel):
