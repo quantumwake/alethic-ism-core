@@ -20,7 +20,7 @@ def create_mock_state() -> State:
     )
 
     for i in range(10):
-        state.apply_columns({
+        state.process_and_add_columns({
             "State Key": "hello_world_state_key_a",
             "State Data": random.randbytes(64)
         })
@@ -67,7 +67,7 @@ def test_state_callable_columns():
             }
         )
 
-    query_state0 = state.get_query_state_from_row_index(0)
+    query_state0 = state.build_query_state_from_row_data(0)
     assert query_state0['name'] == state.config.name
     # assert query_state0['storage_class'] == state.config.storage_class
     # assert query_state0['user_template_id'] == state.config.user_template_id

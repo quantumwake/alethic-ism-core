@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 
 from .utils.general_utils import calculate_sha256
@@ -40,6 +40,7 @@ class WorkflowEdge(BaseModelHashable):
     source_handle: str
     target_handle: str
     edge_label: str
+    type: str
     animated: bool
 
 
@@ -75,18 +76,29 @@ class ProcessorProvider(BaseModelHashable):
     project_id: Optional[str] = None
 
 
+class ProcessorProperty(BaseModelHashable):
+    processor_id: str
+    name: str
+    value: Optional[str] = None
+
+
 class Processor(BaseModelHashable):
     id: Optional[str] = None
     provider_id: str
     project_id: str
     status: StatusCode = StatusCode.CREATED
-
+    properties: Optional[List[ProcessorProperty]] = None
 
 class ProcessorState(BaseModelHashable):
-    id: Optional[str] = None
     processor_id: str
     state_id: str
     direction: ProcessorStateDirection = ProcessorStateDirection.INPUT
+    # this does not need to be set, it is mainly used for processing input states
+    # the current index is set to the highest index that was completed, only sequence +1,
+    # the maximum index is set to the highest index that was completed, irrespective of sequence.
+    count: Optional[int] = None
+    current_index: Optional[int] = None
+    maximum_index: Optional[int] = None
 
 
 class ProcessorStateDetail(ProcessorState, Processor):

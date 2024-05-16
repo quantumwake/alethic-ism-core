@@ -4,13 +4,13 @@ from typing import List
 from .processor_state import (
     State,
     StateConfigLM,
-    build_state_data_row_key,
-    extract_values_from_query_state_by_key_definition)
+    extract_values_from_query_state_by_key_definition
+)
 
 from .base_processor import BaseProcessor
+from .processor_state_storage import StateMachineStorage
 
 from .utils.general_utils import (
-    load_template,
     build_template_text,
     calculate_string_dict_hash,
     clean_string_for_ddl_naming
@@ -23,53 +23,34 @@ class BaseProcessorLM(BaseProcessor):
     @property
     def config(self) -> StateConfigLM:
         return self.output_state.config
-    #
-    # @property
-    # def provider_name(self):
-    #     return self.config.provider_name
-    #
-    # @provider_name.setter
-    # def provider_name(self, provider_name: str):
-    #     self.config.provider_name = provider_name
-    #
-    # @property
-    # def model_name(self):
-    #     return self.config.model_name
-    #
-    # @model_name.setter
-    # def model_name(self, model_name: str):
-    #     self.config.model_name = model_name
 
     @property
     def user_template(self):
-        return load_template(self.user_template_id)
+        if self.config.user_template_id:
+            template = self.storage.fetch_template(self.config.user_template_id)
+            return template.template_content
+        return None
 
     @property
     def system_template(self):
-        return load_template(self.system_template_id)
+        if self.config.system_template_id:
+            template = self.storage.fetch_template(self.config.system_template_id)
+            return template.template_content
+        return None
 
-    @property
-    def user_template_id(self):
-        return self.config.user_template_id
-
-    @user_template_id.setter
-    def user_template_id(self, template_id: str):
-        self.config.user_template_id = template_id
-
-    @property
-    def system_template_id(self):
-        return self.config.system_template_id
-
-    @system_template_id.setter
-    def system_template_id(self, template_id: str):
-        self.config.system_template_id = template_id
-
-    def __init__(self, output_state: State, processors: List[BaseProcessor] = None, *args, **kwargs):
+    def __init__(self,
+                 state_machine_storage: StateMachineStorage,
+                 output_state: State,
+                 processors: List[BaseProcessor] = None,
+                 *args, **kwargs):
         super().__init__(
             output_state=output_state,
             processors=processors,
             **kwargs
         )
+
+        # the storage engine
+        self.storage = state_machine_storage
 
         # ensure that the configuration passed is of StateConfigLM
         if not isinstance(self.output_state.config, StateConfigLM):
@@ -82,77 +63,53 @@ class BaseProcessorLM(BaseProcessor):
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
-    # def build_state_storage_path(self):
-    #     provider = ''.join([char for char in self.provider_name if char.isalnum()]).lower()
-    #     model_name = ''.join([char for char in self.model_name if char.isalnum()]).lower()
-    #     user_template = self.user_template  # this will be hashed
-    #     system_template = self.system_template  # this will be hashed
-    #
-    #     # return super().build_final_output_path(prefix=f'{provider}_{model_name}')
-    #     return super().build_state_storage_path(
-    #         prefix=f'{provider}_{model_name}_[system template: {system_template}]_[user template: {user_template}]')
-
     def apply_states(self, query_states: [dict]):
         with self.lock:
             logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
-
-            def save_query_state(query_state: dict):
-                # persist new state such that we do not repeat the call when interrupted
-                query_state = self.apply_query_state(query_state=query_state)
-
-                # persist the new record to the output file, if any
-                # TODO STREAM IT self.write_record(query_state=query_state)
-
-                return query_state
-
-            return [save_query_state(x) for x in query_states]
+            return [self.output_state.apply_query_state(query_state=qs) for qs in query_states]
 
     def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:
             return
 
-        # create the query data row primary key hash
-        # the individual state values of the input file
-        input_state_key, query_state_key = build_state_data_row_key(
-            # we need the input query to create the primary key
-            query_state=input_query_state,
-
-            # we use the primary key definition because we are creating a primary key
-            key_definitions=self.output_state.config.primary_key
+        # create the input query state entry primary key hash string
+        input_query_state_key_hash, input_query_state_key_plain = (
+            self.output_state.build_row_key_from_query_state(query_state=input_query_state)
         )
 
-        # if it already exists, then skip it, unless forced
-        if self.has_query_state(query_state_key=input_state_key, force=force):
+        # skip processing of this query state entry if the key exists, unless forced to process
+        if self.has_query_state(query_state_key=input_query_state_key_hash, force=force):
             return
 
-        # build out the final prompts with appropriate data injected
+        # build final user and system prompts using the query state entry as the input data
         status, user_prompt = build_template_text(self.user_template, input_query_state)
         status, system_prompt = build_template_text(self.system_template, input_query_state)
 
+        # begin the processing of the prompts
         try:
 
             # execute the underlying model function
-            response_data, response_columns, full_response = (
+            response_data, response_data_type, response_raw_data = (
                 self._execute(user_prompt=user_prompt,
                               system_prompt=system_prompt,
                               values=input_query_state))
 
-            logging.debug(f'processed prompt query: {query_state_key} and received response: {response_data}')
+            logging.debug(f'processed prompt query: {input_query_state_key_plain} and received response: {response_data}')
 
             # we build a new output state to be appended to the output states
             output_query_state = {
-                'state_key': input_state_key,
+                'state_key': input_query_state_key_hash,
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
                 'response': response_data,
-                'raw_response': full_response if full_response else '<<<blank>>>',
+                'raw_response': response_raw_data if response_raw_data else '<<<blank>>>',
                 'status': 'Success'
             }
 
             # fetch any additional state from the input states, provided that the config_name parameter is set
             # otherwise it will default to the only parameter it knows of named 'query' within the input states
             additional_query_state = extract_values_from_query_state_by_key_definition(
-                key_definitions=self.query_state_inheritance,
+                key_definitions=self.config.query_state_inheritance,
                 query_state=input_query_state)
 
             # apply the additional states to the current query_state
@@ -175,7 +132,7 @@ class BaseProcessorLM(BaseProcessor):
 
                     #
                     output_query_state = {**{
-                        'state_key': input_state_key,
+                        'state_key': input_query_state_key_hash,
                         'state_item_key': state_item_key,
                         'user_prompt': user_prompt,
                         'system_prompt': system_prompt,

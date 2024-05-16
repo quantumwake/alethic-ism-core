@@ -25,10 +25,10 @@ class DualStateProcessor(BaseProcessor):
 
         # we need to generate the state keys
         for index_1 in range(state_1_count):
-            query_state_source_1 = state_one.get_query_state_from_row_index(index_1)
+            query_state_source_1 = state_one.build_query_state_from_row_data(index_1)
 
             for index_2 in range(state_2_count):
-                query_state_source_2 = state_two.get_query_state_from_row_index(index_2)
+                query_state_source_2 = state_two.build_query_state_from_row_data(index_2)
                 joined_query_state = {**query_state_source_1, **query_state_source_2}
                 joined_query_state = self.apply_query_state(query_state=joined_query_state)
                 print(joined_query_state)

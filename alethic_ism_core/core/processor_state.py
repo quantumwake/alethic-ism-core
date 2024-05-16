@@ -97,7 +97,6 @@ def load_state_from_pickle(file_name: str) -> 'State':
 #     name: str
 #     storage_class: StateStorageClass
 
-
 class StateConfig(BaseModel):
     name: str
     # version: Optional[str] = None  # "Version 0.1"
@@ -232,10 +231,6 @@ class State(BaseModelHashable):
     update_date: Optional[dt] = None
     state_type: Optional[str] = None
 
-    # @model_validator(mode="before")
-    # def derive_config_type(cls, state):
-    #     return state
-
     @model_validator(mode="after")
     def derive_state_type(cls, state):
         if state.config:
@@ -276,52 +271,6 @@ class State(BaseModelHashable):
 
         return value
 
-        #
-        # if isinstance(config_value, StateConfig):
-        #     return config_value
-        #
-        # if state_type == 'StateConfigLM':
-        #     return StateConfigLM(**config_value)
-        # elif state_type == 'StateConfigDB':
-        #     return StateConfigDB(**config_value)
-        # elif state_type == 'StateConfigCode':
-        #     return StateConfigCode(**config_value)
-        # elif state_type == 'StateConfig':
-        #     return StateConfig(**config_value)
-
-        raise NotImplemented(f"unsupported state type {state_type}")
-
-    # @field_validator('config', , mode='before')
-    # @classmethod
-    # def create_config(cls, config_value, state_type):
-    #     if isinstance(config_value, StateConfig):
-    #         return config_value
-    #
-    #     if state_type == 'StateConfigLM':
-    #         return StateConfigLM(**config_value)
-    #     elif state_type == 'StateConfigDB':
-    #         return StateConfigDB(**config_value)
-    #     elif state_type == 'StateConfigCode':
-    #         return StateConfigCode(**config_value)
-    #     elif state_type == 'StateConfig':
-    #         return StateConfig(**config_value)
-    #
-    #     raise NotImplemented(f"unsupported state type {state_type}")
-
-    #
-    # if config_value and any(key in config_value for key in [
-    #     'provider_name',
-    #     'model_name',
-    # ]):
-    #
-    # elif config_value and any(key in config_value for key in [
-    #     'embedding_columns',
-    #     'function_columns',
-    #     'constant_columns'
-    # ]):
-    #     return StateConfigDB(**config_value)
-    # else:
-    #     return StateConfig(**config_value)
 
     def reset(self):
         self.columns = {}
@@ -331,41 +280,59 @@ class State(BaseModelHashable):
         self.create_date = None
         self.update_date = None
 
-    def add_row_data_mapping(self, state_key: str, index: int):
-        if not self.mapping:
-            self.mapping = {}
 
-        if state_key not in self.mapping:
-            # create an array of values associated to this key
-            self.mapping[state_key] = StateDataColumnIndex(
-                key=state_key,
-                values=[index])
+    # def calculate_columns_definition_hash(self, columns: [str]):
+    #     plain = [key for key in sorted(columns)]
+    #     return calculate_uuid_based_from_string_with_sha256_seed(plain)
+
+    def build_query_state_from_row_data(self, index: int):
+        # state = state if state else self
+
+        def get_real_value(value):
+            # evaluates the value, if it is a callable: string
+            return get_column_state_value(
+                value=value, **{
+                    "state": self,
+                    "config": self.config
+                }
+            )
+
+        query_state = {
+            column_name: self.data[column_name][index]
+            if not column_header.value
+            else get_real_value(column_header.value)
+            for column_name, column_header in self.columns.items()
+        }
+        return query_state
+
+    def build_row_key_from_query_state(self, query_state: dict):
+        # create the query data row primary key hash
+        # the individual state values of the input file
+        key_hash, key_plain = build_state_data_row_key(
+            # we need the input query to create the primary key
+            query_state=query_state,
+
+            # we use the primary key definition because we are creating a primary key
+            key_definitions=self.config.primary_key
+        )
+        return key_hash, key_plain
+
+    def build_row_data_from_query_state(self, query_state: dict):
+        column_and_value = {
+            column: StateDataRowColumnData.model_validate({
+                'values': [query_state[column]
+                           if column in query_state else None]
+            })
+            for column in self.columns.keys()
+        }
+
+        if 'state_key' in query_state:
+            state_key = query_state['state_key']
         else:
-            key_indexes = self.mapping[state_key]
-            key_indexes.add_index_value(index)
+            state_key, state_key_plain = self.build_row_key_from_query_state(query_state=query_state)
 
-    def add_column(self, column: StateDataColumnDefinition):
-        if not self.columns:
-            self.columns = {}
+        return column_and_value, state_key
 
-        if not column or not column.name:
-            error = f'column definition cannot be null or blank, it must also include a data type and name'
-            logging.error(error)
-            raise Exception(error)
-
-        if column.name in self.columns:
-            logging.warning(f'ignored column {column.name}, column already defined for state {self.config}')
-            return
-
-        self.columns[column.name] = column
-
-    def add_columns(self, columns: List[StateDataColumnDefinition]):
-        for column in columns:
-            self.add_column(column)
-
-    def calculate_columns_definition_hash(self, columns: [str]):
-        plain = [key for key in sorted(columns)]
-        return calculate_uuid_based_from_string_with_sha256_seed(plain)
 
     def remap_query_state(self, query_state: dict):
 
@@ -447,76 +414,93 @@ class State(BaseModelHashable):
             values=[value_func(row_index)
                     for row_index in range(count)])
 
-    def apply_columns(self, query_state: dict):
+    def process_and_add_columns(self, query_state: dict):
+        """
+        Updates the current state object with columns from the given query state. The function checks for missing
+        or new columns in the query state and adds them to the existing columns while ensuring that all columns
+        remain consistent.
+
+        TODO: the storage class must support column structure updating
+
+        If the state currently has no columns, it initializes them from the query state. If any columns are missing
+        or unbalanced (inconsistent) between the current state and the query state, new columns are added, and a
+        backfill operation is performed to align existing data.
+
+        Args:
+            query_state (dict): A dictionary representing the state data containing column names and their corresponding values.
+
+        Raises:
+            ValueError: If the provided `query_state` is None or empty.
+
+        Logs:
+            - Debug: Logs the identification of applicable columns from the query state.
+            - Warning: Warns if unbalanced columns are detected between the current state and the query state.
+            - Info: Logs new columns being applied to the state.
+            - Error: If no valid columns are identified in the final state.
+
+        Returns:
+            dict: The updated columns after the query state has been applied.
+
+        Example:
+            state = State(**params)
+            query_state = {
+                "name": "Alice",
+                "age": 30,
+                "location": "New York"
+            }
+            updated_columns = state.process_and_add_columns(query_state)
+        """
         if not query_state:
             raise Exception(f'unable to apply columns on a null or blank query state')
 
         # calculate the columns definition hash, we use this to compare to ensure there is some consistency
-        def new_columns():
+        # Helper function to create new columns definitions from the query state
+        def generate_new_columns():
             return [
                 StateDataColumnDefinition(
                     name=clean_string_for_ddl_naming(name)
-                    # data_type=str(type(utils.identify_and_return_value_by_type(value)))   # just guess
-                ) for name, value in query_state.items()
-                if self.columns is None or name not in self.columns
+                )
+                for name, value in query_state.items()
+                if not self.columns or name not in self.columns
             ]
 
-        # initial state check
+        # Initial state check for when columns are absent
         if not self.columns:
-            # add columns if empty or new columns are found in the data entries
-            logging.debug(f'identifying applicable columns using query state {query_state.keys()}')
-            new_columns = new_columns()
+            logging.debug(f'Identifying applicable columns using query state: {query_state.keys()}')
+            new_columns = generate_new_columns()
             self.add_columns(new_columns)
             return self.columns
 
-        # consecutive checks to ensure the column key states are consistent
-        # calculate the hash of the column names, make sure there are no additional columns
+        # Calculate the hash values to compare current and new columns
         new_column_definition_hash = calculate_string_list_hash(list(query_state.keys()))
-        cur_column_definition_hash = calculate_string_list_hash(list(self.columns.keys()))
+        current_column_definition_hash = calculate_string_list_hash(list(self.columns.keys()))
 
         # if the hash is different, then there are likely differences
-        if new_column_definition_hash != cur_column_definition_hash:
-            new_columns = new_columns()
+        if new_column_definition_hash != current_column_definition_hash:
+            new_columns = generate_new_columns()
 
             if new_columns:
-                logging.warning(f'*** Unbalanced columns in query state entry, new query state entry '
-                                f'contain different columns than the original columns that were initialized. '
-                                f'current columns: {self.columns}, '
-                                f'new columns: {new_columns}')
+                logging.warning(
+                    f'*** Unbalanced columns in query state entry. New query state contains different columns '
+                    f'than the original set initialized. Current columns: {self.columns}, '
+                    f'New columns: {new_columns}'
+                )
 
             logging.info(f'applying new columns {new_columns}')
             self.add_columns(new_columns)
 
-            # back-fill
+            # Back-fill new columns with None to ensure consistent data structure
             for new_column in new_columns:
                 count = self.count
-                self.data[new_column.name] = StateDataRowColumnData(values=[None for i in range(count)])
+                self.data[new_column.name] = StateDataRowColumnData(values=[None] * count)
 
-        # final check to ensure columns were specified
-        if not self.columns:  # if we do not find any columns
-            logging.error(f'query state entry does not contain any column information,'
-                          f'it must be a dictionary of key/value pairs, where each key is a '
-                          f'column name and the value is the data for the record name:value')
-
-    def get_query_state_from_row_index(self, index: int):
-        # state = state if state else self
-
-        def get_real_value(value):
-            # evaluates the value, if it is a callable: string
-            return get_column_state_value(
-                value=value, **{
-                    "state": self,
-                    "config": self.config
-                }
+        # Final validation to confirm that columns are now available
+        if not self.columns:
+            logging.error(
+                'Query state entry does not contain any valid column information. '
+                'It must be a dictionary of key-value pairs, where each key is a column name, '
+                'and the value is the data for that record.'
             )
-
-        query_state = {
-            column_name: self.data[column_name][index]
-            if not column_header.value
-            else get_real_value(column_header.value)
-            for column_name, column_header in self.columns.items()
-        }
-        return query_state
 
     def get_column_data_from_row_index(self, column_name, index: int):
         return self.data[column_name][index]
@@ -524,33 +508,37 @@ class State(BaseModelHashable):
     def get_column_data(self, column_name):
         return self.data[column_name]
 
-    def get_row_data_from_query_state(self, query_state: dict):
-        # values = [value for value in query_state.values()]
-        column_and_value = {
-            column: StateDataRowColumnData.model_validate({
-                'values': [query_state[column]
-                           if column in query_state else None]
-            })
-            for column in self.columns.keys()
-        }
+    def add_row_data_mapping(self, state_key: str, index: int):
+        if not self.mapping:
+            self.mapping = {}
 
-        # TODO revisit this, it is a bit convoluted, kind of the chicken and egg problem
-        #  we have a state key defined by the input values since we need to check whether we
-        #  we previously processed the input state, as such this is the state key, but
-        #  the output key might be different and based on various other factors (maybe not required?)
-
-        if 'state_key' in query_state:
-            state_key = query_state['state_key']
+        if state_key not in self.mapping:
+            # create an array of values associated to this key
+            self.mapping[state_key] = StateDataColumnIndex(
+                key=state_key,
+                values=[index])
         else:
-            state_key, state_key_plain = build_state_data_row_key(
-                query_state=query_state,
-                key_definitions=self.config.primary_key)
+            key_indexes = self.mapping[state_key]
+            key_indexes.add_index_value(index)
 
-        return column_and_value, state_key
+    def add_column(self, column: StateDataColumnDefinition):
+        if not self.columns:
+            self.columns = {}
 
-    def apply_row_data(self, query_state: dict):
-        column_and_value, state_key = self.get_row_data_from_query_state(query_state=query_state)
-        return self.add_row_data(state_key=state_key, column_and_value=column_and_value)
+        if not column or not column.name:
+            error = f'column definition cannot be null or blank, it must also include a data type and name'
+            logging.error(error)
+            raise Exception(error)
+
+        if column.name in self.columns:
+            logging.warning(f'ignored column {column.name}, column already defined for state {self.config}')
+            return
+
+        self.columns[column.name] = column
+
+    def add_columns(self, columns: List[StateDataColumnDefinition]):
+        for column in columns:
+            self.add_column(column)
 
     def add_row_data(self, state_key: str, column_and_value: Dict[str, StateDataRowColumnData]):
         row_index = 0
@@ -592,53 +580,99 @@ class State(BaseModelHashable):
 
         return True
 
-    @staticmethod
-    def load_state(input_path: str) -> 'State':
-        if has_extension(input_path, ['.pickle', '.pkl']):
-            logging.warning(f'it is advisable to use either a json storage class or a '
-                            f'database storage class, the latter of which is preferred.')
-            # raise DeprecationWarning(f'pickle file format is deprecated, use the database storage class instead')
-            return load_state_from_pickle(file_name=input_path)
-        elif has_extension(input_path, ['.json']):
-            with open(input_path, 'rb') as fio:
-                state = State.model_validate(json.load(fio))
-                return state
-        else:
-            raise Exception(f'unsupported input path type {input_path}')
+    def process_and_add_row_data(self, query_state: dict):
+        """
+        Extracts row data from the query state and adds it to the internal state.
 
-    def save_state(self, output_path: str = None):
-        if not output_path:
-            if not self.config.output_path:
-                raise FileNotFoundError(f'One of two output_paths must be specified, either in the '
-                                        f'state.config.output_path or as part of the output_path argument '
-                                        f'into the save_state(..) function')
-            elif not os.path.isdir(self.config.output_path):
-                logging.debug(f'falling back to using config output path: {self.config.output_path}')
-                output_path = self.config.output_path
-            else:
-                raise Exception(f'Unable to persist to directory output path as specified'
-                                f'by the state.config.output_path: {self.state.output_path}')
+        :param query_state: The state information containing column and value mappings.
+        :return: The result of the row data addition.
+        """
+        column_and_value, state_key = self.build_row_data_from_query_state(query_state=query_state)
+        return self.add_row_data(state_key=state_key, column_and_value=column_and_value)
 
-        self.update_date = dt.utcnow()
+    def apply_query_state(self, query_state: dict):
+        """
+        Applies a query state entry to the state object data rows and updates the indexes.
 
-        if 'create_date' not in self.__dict__ or not self.create_date:
-            self.create_date = dt.utcnow()
+        :param query_state: The state information to apply.
+        :return: The processed query state after the application process.
+        """
+        # Pre-state apply - perform transformations before applying the state
+        query_state = self.pre_state_apply(query_state=query_state)
 
-        # create the base directory if it does not exist
-        dir_path = os.path.dirname(output_path)
-        os.makedirs(name=dir_path, exist_ok=True)
+        # Apply columns as specified in the query state
+        self.process_and_add_columns(query_state=query_state)
 
-        if has_extension(output_path, ['.pkl', '.pickle']):
-            # raise DeprecationWarning(f'pickle format is deprecated in favor of a database storage class')
-            #
-            import pickle
-            with open(output_path, 'wb') as fio:
-                pickle.dump(self, fio)
-        elif has_extension(output_path, '.json'):
-            with open(output_path, 'w') as fio:
-                fio.write(self.model_dump_json())
-        else:
-            raise Exception(f'Unsupported file type for {output_path}')
+        # Apply row data from the query state using the helper method
+        self.process_and_add_row_data(query_state=query_state)
+
+        # Post-state apply - finalize the function and return the resulting state
+        return self.post_state_apply(query_state=query_state)
+
+    def pre_state_apply(self, query_state: dict) -> dict:
+
+        # remapped query state before applying it to the state
+        query_state = self.remap_query_state(query_state=query_state)
+
+        # apply any templates using the query state as the primary source of information
+        query_state = self.apply_template_variables(query_state=query_state)
+
+        return query_state
+
+    def post_state_apply(self, query_state: dict) -> dict:
+        return query_state
+
+
+    ## TODO move this to a file based state storage provider
+    #
+    #
+    # @staticmethod
+    # def load_state(input_path: str) -> 'State':
+    #     if has_extension(input_path, ['.pickle', '.pkl']):
+    #         logging.warning(f'it is advisable to use either a json storage class or a '
+    #                         f'database storage class, the latter of which is preferred.')
+    #         # raise DeprecationWarning(f'pickle file format is deprecated, use the database storage class instead')
+    #         return load_state_from_pickle(file_name=input_path)
+    #     elif has_extension(input_path, ['.json']):
+    #         with open(input_path, 'rb') as fio:
+    #             state = State.model_validate(json.load(fio))
+    #             return state
+    #     else:
+    #         raise Exception(f'unsupported input path type {input_path}')
+    #
+    # def save_state(self, output_path: str = None):
+    #     if not output_path:
+    #         if not self.config.output_path:
+    #             raise FileNotFoundError(f'One of two output_paths must be specified, either in the '
+    #                                     f'state.config.output_path or as part of the output_path argument '
+    #                                     f'into the save_state(..) function')
+    #         elif not os.path.isdir(self.config.output_path):
+    #             logging.debug(f'falling back to using config output path: {self.config.output_path}')
+    #             output_path = self.config.output_path
+    #         else:
+    #             raise Exception(f'Unable to persist to directory output path as specified'
+    #                             f'by the state.config.output_path: {self.state.output_path}')
+    #
+    #     self.update_date = dt.utcnow()
+    #
+    #     if 'create_date' not in self.__dict__ or not self.create_date:
+    #         self.create_date = dt.utcnow()
+    #
+    #     # create the base directory if it does not exist
+    #     dir_path = os.path.dirname(output_path)
+    #     os.makedirs(name=dir_path, exist_ok=True)
+    #
+    #     if has_extension(output_path, ['.pkl', '.pickle']):
+    #         # raise DeprecationWarning(f'pickle format is deprecated in favor of a database storage class')
+    #         #
+    #         import pickle
+    #         with open(output_path, 'wb') as fio:
+    #             pickle.dump(self, fio)
+    #     elif has_extension(output_path, '.json'):
+    #         with open(output_path, 'w') as fio:
+    #             fio.write(self.model_dump_json())
+    #     else:
+    #         raise Exception(f'Unsupported file type for {output_path}')
 
 
 def implicit_count_with_force_count(state: State):
@@ -791,10 +825,12 @@ def extract_values_from_query_state_by_key_definition(query_state: dict,
     # if the key config map does not exist then attempt
     # to use the 'query' key as the key value mapping
     if not key_definitions:
-        if "query" not in query_state:
-            raise Exception(f'query does not exist in query state {query_state}')
+        return None
 
-        return query_state['query']
+        # if "query" not in query_state:
+        #     raise Exception(f'query does not exist in query state {query_state}')
+        #
+        # return query_state['query']
 
     # iterate each parameter name and look it up in the state object
     results = {}
