@@ -1,5 +1,6 @@
 import random
-from alethic_ism_core.core.processor_state import StateConfigLM, State, StateDataColumnDefinition
+from alethic_ism_core.core.processor_state import StateConfigLM, State, StateDataColumnDefinition, StateConfig, \
+    StateDataKeyDefinition
 
 
 def create_mock_state_json():
@@ -26,6 +27,50 @@ def create_mock_state() -> State:
         })
 
     return state
+
+def test_state_has_query_state():
+    state = State(
+        config=StateConfig(
+            name="Test State Hash Query State Key",
+            primary_key=[
+                StateDataKeyDefinition(name="question"),
+                StateDataKeyDefinition(name="animal")
+            ],
+            template_columns=[
+                StateDataKeyDefinition(name="question")
+            ]
+        )
+    )
+
+    query_state = state.apply_query_state(query_state={
+        "question": "what do you think about {animal}s?",
+        "animal": "cat"
+    })
+
+    query_state = state.apply_query_state(query_state={
+        "question": "what do you think about {animal}s?",
+        "animal": "dog"
+    })
+
+    query_state_0 = state.build_query_state_from_row_data(0)
+    query_state_1 = state.build_query_state_from_row_data(1)
+
+    assert query_state_0["question"] == "what do you think about cats?"
+    assert query_state_1["question"] == "what do you think about dogs?"
+
+    query_state = state.apply_query_state(query_state={
+        "question": "what do you think about {animal}s?",
+        "animal": "dog"
+    })
+
+    assert state.count == 2
+
+    query_state = state.apply_query_state(query_state={
+        "question": "what do you think about {animal}s?",
+        "animal": "pig"
+    })
+
+    assert state.count == 3
 
 
 def test_state_json_model():

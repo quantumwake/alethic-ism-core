@@ -6,14 +6,14 @@ import pickle
 from enum import Enum as PyEnum
 from datetime import datetime as dt
 from typing import Any, List, Dict, Optional, Union
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, model_validator
 
 from .base_model import StatusCode, InstructionTemplate, BaseModelHashable
 from .utils.general_utils import (
     build_template_text_content,
     clean_string_for_ddl_naming,
     calculate_string_list_hash,
-    has_extension, calculate_uuid_based_from_string_with_sha256_seed
+    calculate_uuid_based_from_string_with_sha256_seed
 )
 
 
@@ -92,16 +92,9 @@ def load_state_from_pickle(file_name: str) -> 'State':
         return obj
 
 
-#
-# class StateStorage(BaseModel):
-#     name: str
-#     storage_class: StateStorageClass
-
 class StateConfig(BaseModel):
     name: str
-    # version: Optional[str] = None  # "Version 0.1"
-    storage_class: Optional[str] = "file"
-    # output_path: Optional[str] = None  # deprecated for file outputs
+    storage_class: Optional[str] = "database"
     primary_key: Optional[List[StateDataKeyDefinition]] = None
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
@@ -590,15 +583,42 @@ class State(BaseModelHashable):
         column_and_value, state_key = self.build_row_data_from_query_state(query_state=query_state)
         return self.add_row_data(state_key=state_key, column_and_value=column_and_value)
 
-    def apply_query_state(self, query_state: dict):
+    def has_query_state(self, query_state: dict):
+        # make sure that the state is initialized and that there is a data key
+        if not self.mapping:
+            return False
+
+        if not query_state:
+            logging.error(f'received blank or null query state on state id {self.id}')
+            raise ReferenceError(f'query state cannot be empty or null')
+
+        # create the input query state entry primary key hash string
+        input_query_state_key_hash, input_query_state_key_plain = (
+            self.build_row_key_from_query_state(query_state=query_state)
+        )
+
+        if input_query_state_key_hash in self.mapping:
+            return True
+
+        # otherwise query state entry does not exist in current state set
+        logging.debug(f'query {input_query_state_key_hash}, not cached, on config: {self.config}')
+        return False
+
+    def apply_query_state(self, query_state: dict, skip_has_query_state: bool = False):
         """
         Applies a query state entry to the state object data rows and updates the indexes.
 
         :param query_state: The state information to apply.
+        :param skip_has_query_state: Do not check whether query state entry exists before applying it, default false
         :return: The processed query state after the application process.
         """
+
         # Pre-state apply - perform transformations before applying the state
         query_state = self.pre_state_apply(query_state=query_state)
+
+        # Check to ensure query state does not exist already (after the pre state apply step)
+        if not skip_has_query_state and self.has_query_state(query_state=query_state):
+            return query_state
 
         # Apply columns as specified in the query state
         self.process_and_add_columns(query_state=query_state)

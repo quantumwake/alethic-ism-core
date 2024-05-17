@@ -64,9 +64,8 @@ class BaseProcessorLM(BaseProcessor):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
     def apply_states(self, query_states: [dict]):
-        with self.lock:
-            logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
-            return [self.output_state.apply_query_state(query_state=qs) for qs in query_states]
+        logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
+        return [self.output_state.apply_query_state(query_state=qs) for qs in query_states]
 
     def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:

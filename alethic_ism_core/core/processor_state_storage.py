@@ -63,7 +63,7 @@ class WorkflowStorage:
     def fetch_workflow_nodes(self, project_id: str) -> Optional[List[WorkflowNode]]:
         raise NotImplementedError()
 
-    def insert_workflow_node(self, node: WorkflowNode):
+    def insert_workflow_node(self, node: WorkflowNode) -> WorkflowNode:
         raise NotImplementedError()
 
     def delete_workflow_edge(self, source_node_id: str, target_node_id: str):
@@ -72,7 +72,7 @@ class WorkflowStorage:
     def fetch_workflow_edges(self, project_id: str) -> Optional[List[WorkflowEdge]]:
         raise NotImplementedError()
 
-    def insert_workflow_edge(self, edge: WorkflowEdge):
+    def insert_workflow_edge(self, edge: WorkflowEdge) -> WorkflowEdge:
         raise NotImplementedError()
 
 
