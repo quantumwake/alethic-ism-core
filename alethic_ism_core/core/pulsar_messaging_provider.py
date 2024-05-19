@@ -1,8 +1,7 @@
-from typing import Any
-
 import pulsar
 
-from alethic_ism_core.core.base_message_consumer import BaseMessagingProvider
+from typing import Any
+from .base_message_consumer import BaseMessagingProvider
 
 
 class PulsarMessagingProvider(BaseMessagingProvider):

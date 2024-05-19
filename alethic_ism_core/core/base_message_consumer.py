@@ -1,12 +1,12 @@
 import json
 import signal
 import sys
-from typing import Any
-
-import pulsar
-import asyncio
-from pydantic import ValidationError
 import logging as logging
+import asyncio
+
+from typing import Any
+from pydantic import ValidationError
+
 from .processor_state_storage import StateMachineStorage
 
 
