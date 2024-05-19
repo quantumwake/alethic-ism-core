@@ -21,7 +21,7 @@ class PulsarMessagingProvider(BaseMessagingProvider):
         if self.management_consumer:
             self.management_consumer.close()
 
-    def wait_on_data_main(self):
+    def receive_main(self) -> [Any, Any]:
         try:
             msg = self.main_consumer.receive()
             data = msg.data().decode("utf-8")
@@ -31,7 +31,7 @@ class PulsarMessagingProvider(BaseMessagingProvider):
             # since base class only supports InterruptedError
             raise InterruptedError(e)
 
-    def wait_on_data_management(self) -> [Any, Any]:
+    def receive_management(self) -> [Any, Any]:
         try:
             msg = self.management_consumer.receive()
             data = msg.data().decode("utf-8")
