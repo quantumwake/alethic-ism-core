@@ -116,6 +116,9 @@ class StateStorage:
     def insert_state(self, state: State, config_uuid=False):
         raise NotImplementedError()
 
+    def update_state_count(self, state: State) -> State:
+        raise NotImplementedError()
+
     def fetch_state_config(self, state_id: str):
         raise NotImplementedError()
 
@@ -239,20 +242,7 @@ class ProcessorStateStorage:
             -> ProcessorState:
         raise NotImplementedError()
 
-#
-# class StateMachineStorage(StateStorage,
-#                           ProcessorStorage,
-#                           ProcessorStateStorage,
-#                           ProviderStorage,
-#                           WorkflowStorage,
-#                           TemplateStorage,
-#                           UserProfileStorage,
-#                           UserProjectStorage):
-#     pass
 
-
-import types
-from functools import wraps
 
 
 # Metaclass to Add Forwarding Methods Dynamically

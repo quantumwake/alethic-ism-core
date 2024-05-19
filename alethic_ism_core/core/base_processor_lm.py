@@ -101,7 +101,7 @@ class BaseProcessorLM(BaseProcessor):
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
                 'response': response_data,
-                'raw_response': response_raw_data if response_raw_data else '<<<blank>>>',
+                # 'raw_response': response_raw_data if response_raw_data else '<<<blank>>>',
                 'status': 'Success'
             }
 
@@ -120,7 +120,11 @@ class BaseProcessorLM(BaseProcessor):
 
             query_states = []
             if isinstance(response_data, dict):
-                output_query_state = {**output_query_state, **response_data}
+                output_query_state = {
+                    **output_query_state,
+                    **response_data,
+                    'response': response_raw_data
+                }
                 query_states.append(output_query_state)
             elif isinstance(response_data, list):
                 for item in list(response_data):

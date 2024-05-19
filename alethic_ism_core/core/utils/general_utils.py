@@ -244,8 +244,14 @@ def parse_response_json(response: str):
     if json_detect < 0:
         return False, type(response), response
 
-    # find the first occurence of the json start {
-    json_start = _response.find('{', json_detect)
+    # find the first occurrence of the json start [ or {
+    json_start_array = _response.find('[', json_detect)
+    json_start_object = _response.find('{', json_detect)
+    if json_start_array != -1 and json_start_array < json_start_object:
+        json_start = json_start_array
+    else:
+        json_start = json_start_object
+
     if json_start < 0:
         raise SyntaxError(f'Invalid: json starting position not found, please ensure your response '
                           f'at position {json_detect}, for response {_response}')
@@ -260,7 +266,21 @@ def parse_response_json(response: str):
     json_response = _response[json_start:json_end].strip()
     try:
         json_response = json.loads(json_response)
-        json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
+
+        if isinstance(json_response, dict):
+            json_response = {
+                clean_string_for_ddl_naming(key): value
+                for key, value in json_response.items()
+            }
+        elif isinstance(json_response, list):
+            json_response = [
+                {
+                    clean_string_for_ddl_naming(key): value
+                    for key, value in row.items()
+                }
+                for row in json_response
+            ]
+
         return True, 'json', json_response
     except:
         pass  # try one more time with no line returns
