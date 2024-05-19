@@ -2,8 +2,10 @@ from typing import Any
 
 import pulsar
 
+from alethic_ism_core.core.base_message_consumer import BaseMessagingProvider
 
-class PulsarMessagingProvider:
+
+class PulsarMessagingProvider(BaseMessagingProvider):
 
     def __init__(self,
                  message_url: str,
