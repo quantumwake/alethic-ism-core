@@ -81,8 +81,8 @@ def test_mock_processor_lm():
     response_1 = mock_processor.process_input_data_entry(input_query_state=input_query_states[0])
     response_2 = mock_processor.process_input_data_entry(input_query_state=input_query_states[1])
 
-    assert response_1['response'] == 'the sky is blue'
-    assert response_2['response'] == 'the grass is green'
+    assert response_1[0]['response'] == 'the sky is blue'
+    assert response_2[0]['response'] == 'the grass is green'
 
 
 def test_mock_processor():

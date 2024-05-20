@@ -41,11 +41,10 @@ class BaseProcessorLM(BaseProcessor):
     def __init__(self,
                  state_machine_storage: StateMachineStorage,
                  output_state: State,
-                 processors: List[BaseProcessor] = None,
                  *args, **kwargs):
+
         super().__init__(
             output_state=output_state,
-            processors=processors,
             **kwargs
         )
 
@@ -71,14 +70,15 @@ class BaseProcessorLM(BaseProcessor):
         if not input_query_state:
             return
 
-        # create the input query state entry primary key hash string
-        input_query_state_key_hash, input_query_state_key_plain = (
-            self.output_state.build_row_key_from_query_state(query_state=input_query_state)
-        )
-
-        # skip processing of this query state entry if the key exists, unless forced to process
-        if self.has_query_state(query_state_key=input_query_state_key_hash, force=force):
-            return
+        # TODO
+        # # create the input query state entry primary key hash string
+        # input_query_state_key_hash, input_query_state_key_plain = (
+        #     self.output_state.build_row_key_from_query_state(query_state=input_query_state)
+        # )
+        #
+        # # skip processing of this query state entry if the key exists, unless forced to process
+        # if self.has_query_state(query_state_key=input_query_state_key_hash, force=force):
+        #     return
 
         # build final user and system prompts using the query state entry as the input data
         status, user_prompt = build_template_text(self.user_template, input_query_state)
@@ -93,17 +93,19 @@ class BaseProcessorLM(BaseProcessor):
                               system_prompt=system_prompt,
                               values=input_query_state))
 
-            logging.debug(f'processed prompt query: {input_query_state_key_plain} and received response: {response_data}')
+            # logging.debug(f'processed prompt query: {input_query_state_key_plain} and received response: {response_data}')
+
 
             # we build a new output state to be appended to the output states
             output_query_state = {
-                'state_key': input_query_state_key_hash,
+                # 'state_key': input_query_state_key_hash,
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
                 'response': response_data,
                 # 'raw_response': response_raw_data if response_raw_data else '<<<blank>>>',
                 'status': 'Success'
             }
+
 
             # fetch any additional state from the input states, provided that the config_name parameter is set
             # otherwise it will default to the only parameter it knows of named 'query' within the input states
@@ -123,8 +125,11 @@ class BaseProcessorLM(BaseProcessor):
                 output_query_state = {
                     **output_query_state,
                     **response_data,
-                    'response': response_raw_data
+                    'response_raw': response_raw_data
                 }
+
+                # format column names and append the state key
+                output_query_state = self.append_state_key(output_query_state)
                 query_states.append(output_query_state)
             elif isinstance(response_data, list):
                 for item in list(response_data):
@@ -135,18 +140,15 @@ class BaseProcessorLM(BaseProcessor):
 
                     #
                     output_query_state = {**{
-                        'state_key': input_query_state_key_hash,
+                        # 'state_key': input_query_state_key_hash,
                         'state_item_key': state_item_key,
                         'user_prompt': user_prompt,
                         'system_prompt': system_prompt,
                         'status': 'Success'
                     }, **item, **additional_query_state}
 
-                    # format the keys, stripping the key name to something more generalized
-                    output_query_state = {clean_string_for_ddl_naming(key): value
-                                          for key, value
-                                          in output_query_state.items()}
-
+                    # format column names and append the state key
+                    output_query_state = self.append_state_key(output_query_state)
                     query_states.append(output_query_state)
             else:
                 query_states.append(output_query_state)
@@ -159,6 +161,21 @@ class BaseProcessorLM(BaseProcessor):
 
         except Exception as e:
             self.failed_process_query_state(e, query_state=input_query_state)
+
+    def append_state_key(self, output_query_state):
+        # format the keys, stripping the key name to something more generalized
+        output_query_state = {clean_string_for_ddl_naming(key): value
+                              for key, value
+                              in output_query_state.items()}
+        state_key, state_key_plain = (
+            self.output_state.build_row_key_from_query_state(query_state=output_query_state)
+        )
+        output_query_state = {
+            **output_query_state,
+            "state_key": state_key,
+            "state_key_plain": state_key_plain
+        }
+        return output_query_state
 
     def failed_process_query_state(self, e, query_state: dict):
         if isinstance(SyntaxError, e):

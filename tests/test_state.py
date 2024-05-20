@@ -105,7 +105,7 @@ def test_state_callable_columns():
 
     #
     for i in range(1, 5):
-        state.apply_row_data(
+        state.process_and_add_row_data(
             {
                 "state_key": f"hello world #{i}",
                 "state data": f"testing {i}"

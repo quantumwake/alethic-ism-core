@@ -214,7 +214,7 @@ class State(BaseModelHashable):
     id: Optional[str] = None  # primary key, can be generated or directly set
     project_id: Optional[str] = None  # project association id
 
-    config: Optional[Union[StateConfig, StateConfigLM, StateConfigDB]] = None
+    config: Optional[Union[StateConfig, StateConfigLM, StateConfigDB, StateConfigCode]] = None
     columns: Dict[str, StateDataColumnDefinition] = {}
     data: Dict[str, StateDataRowColumnData] = {}
     mapping: Dict[str, StateDataColumnIndex] = {}
