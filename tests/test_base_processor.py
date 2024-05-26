@@ -1,7 +1,8 @@
-from alethic_ism_core.core.base_model import InstructionTemplate
+from alethic_ism_core.core.base_model import InstructionTemplate, ProcessorProvider
 from alethic_ism_core.core.base_processor import BaseProcessor
 from alethic_ism_core.core.base_processor_lm import BaseProcessorLM
-from alethic_ism_core.core.processor_state import State, StateConfig, StateDataKeyDefinition, StateConfigLM
+from alethic_ism_core.core.processor_state import State, StateConfig, StateDataKeyDefinition, StateConfigLM, \
+    StateDataColumnDefinition
 from alethic_ism_core.core.processor_state_storage import StateMachineStorage
 
 input_query_states = [
@@ -31,12 +32,13 @@ class MockStateMachineStorage(StateMachineStorage):
 
     def fetch_template(self, template_id: str) -> InstructionTemplate:
         return InstructionTemplate(
-            template_id = "test_template_id_1",
+            template_id="test_template_id_1",
             template_path="test_template_path_1",
             template_content="answer the following question: {question}",
             template_type="user template",
             project_id="test_project_id_1"
         )
+
 
 class MockProcessor(BaseProcessor):
 
@@ -76,16 +78,34 @@ def test_mock_processor_lm():
             ]
         )
     )
+    output_state.columns = {
+        "provider_name": StateDataColumnDefinition(name="provider_name",value="provider.name",callable=True),
+        "provider_version": StateDataColumnDefinition(name="provider_version", value="provider.version", callable=True),
+    }
 
-    mock_processor = MockProcessorLM(state_machine_storage=storage, output_state=output_state)
+    provider = ProcessorProvider(
+        id="test provider id",
+        name="test provider name",
+        version="test-version-1.0",
+        class_name="MockProviders"
+    )
+
+    mock_processor = MockProcessorLM(
+        state_machine_storage=storage,
+        output_state=output_state,
+        provider=provider
+    )
     response_1 = mock_processor.process_input_data_entry(input_query_state=input_query_states[0])
     response_2 = mock_processor.process_input_data_entry(input_query_state=input_query_states[1])
 
     assert response_1[0]['response'] == 'the sky is blue'
     assert response_2[0]['response'] == 'the grass is green'
+    assert response_2[0]['provider_name'] == 'test provider name'
+    assert response_2[0]['provider_version'] == 'test-version-1.0'
 
 
 def test_mock_processor():
+    storage = MockStateMachineStorage()
 
     output_state = State(
         config=StateConfig(
@@ -96,7 +116,7 @@ def test_mock_processor():
             ]
         )
     )
-    mock_processor = MockProcessor(output_state=output_state)
+    mock_processor = MockProcessor(state_machine_storage=storage, output_state=output_state)
 
     input_query_states = [
         {"question": "what color is the sky?"},

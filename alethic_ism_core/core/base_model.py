@@ -93,6 +93,8 @@ class ProcessorState(BaseModelHashable):
     processor_id: str
     state_id: str
     direction: ProcessorStateDirection = ProcessorStateDirection.INPUT
+    status: StatusCode = StatusCode.CREATED
+
     # this does not need to be set, it is mainly used for processing input states
     # the current index is set to the highest index that was completed, only sequence +1,
     # the maximum index is set to the highest index that was completed, irrespective of sequence.

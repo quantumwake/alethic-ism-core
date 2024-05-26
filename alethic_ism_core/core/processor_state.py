@@ -9,6 +9,7 @@ from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel, model_validator
 
 from .base_model import StatusCode, InstructionTemplate, BaseModelHashable
+from .utils.evaluate import safer_evaluate
 from .utils.general_utils import (
     build_template_text_content,
     clean_string_for_ddl_naming,
@@ -121,7 +122,8 @@ class StateDataColumnDefinition(BaseModel):
     id: Optional[int] = None
     name: str  # Column Name
     data_type: str = 'str'  # Data type found in table
-    null: Optional[bool] = True  # Is nullable
+    required: Optional[bool] = True  # Is nullable
+    callable: Optional[bool] = False  # Is nullable
     min_length: Optional[int] = None  # Length of min string values
     max_length: Optional[int] = None  # Length of max string values
     dimensions: Optional[int] = None  # Dimensions for vector
@@ -132,7 +134,8 @@ class StateDataColumnDefinition(BaseModel):
         state = {
             "name": self.name,
             "data_type": self.data_type,
-            "null": self.null,
+            "required": self.required,
+            "callable": self.callable,
             "min_length": self.min_length,
             "max_length": self.max_length,
             "dimensions": self.dimensions,
@@ -144,6 +147,24 @@ class StateDataColumnDefinition(BaseModel):
         json_encoders = {
             type: lambda t: t.__name__  # For serialization to JSON
         }
+
+    def build_column_value(self, query_state: dict = None, scope_variable_mappings: dict = None):
+        if not self.value:
+            return None
+
+        if self.callable:
+
+            allowed_vars = {
+                "query_state": query_state,
+            }
+            if scope_variable_mappings:
+                allowed_vars.update(**scope_variable_mappings)
+
+            # TODO inject only current state object for evaluation
+            # return eval(column_definition.value)
+            return safer_evaluate(self.value, allowed_vars=allowed_vars)
+
+        return self.value
 
 
 class StateDataColumnIndex(BaseModel):
@@ -254,16 +275,15 @@ class State(BaseModelHashable):
         if state_type == 'StateConfigLM':
             value['config'] = StateConfigLM(**config_value)
         elif state_type == 'StateConfigDB':
-            value['config'] =  StateConfigDB(**config_value)
+            value['config'] = StateConfigDB(**config_value)
         elif state_type == 'StateConfigCode':
-            value['config'] =  StateConfigCode(**config_value)
+            value['config'] = StateConfigCode(**config_value)
         elif state_type == 'StateConfig':
-            value['config'] =  StateConfig(**config_value)
+            value['config'] = StateConfig(**config_value)
         else:
             raise NotImplemented(f'unsupported state type {state_type} for {value}')
 
         return value
-
 
     def reset(self):
         self.columns = {}
@@ -273,30 +293,66 @@ class State(BaseModelHashable):
         self.create_date = None
         self.update_date = None
 
-
     # def calculate_columns_definition_hash(self, columns: [str]):
     #     plain = [key for key in sorted(columns)]
     #     return calculate_uuid_based_from_string_with_sha256_seed(plain)
 
-    def build_query_state_from_row_data(self, index: int):
-        # state = state if state else self
+    def build_query_state_from_row_data(self, index: int, scope_variable_mappings: dict = None):
+        # TODO evaluation of expressions upon expressions is not supported,
+        #  this is complex to implement, as such, an expression can only be evaluated
+        #  on hard state data and constants, in that order.
+        #  (maybe don't do this, not really needed, we can always combine an expression within a single expression)
 
-        def get_real_value(value):
-            # evaluates the value, if it is a callable: string
-            return get_column_state_value(
-                value=value, **{
-                    "state": self,
-                    "config": self.config
-                }
-            )
+        # as such, if we have a callable expression definition we can evaluate it in such order.
+        # 1. query_state that is stored as rows and columns
+        # 2. constant values
+        # 3. expressions in the order in which they are added
 
+        def get_value(definition: StateDataColumnDefinition):
+            return self.data[definition.name][index] \
+                if not definition.value \
+                else definition.build_column_value()
+
+        # start with stored values and any constant values
         query_state = {
-            column_name: self.data[column_name][index]
-            if not column_header.value
-            else get_real_value(column_header.value)
-            for column_name, column_header in self.columns.items()
+            name: get_value(definition)
+            for name, definition in self.columns.items()
+            if not definition.callable
         }
+
+        # apply the callable values to the query state for the given row index
+        query_state = {
+            **query_state,
+            **{
+                name: self._build_column_data(
+                    definition=definition,
+                    query_state=query_state,
+                    scope_variable_mappings=scope_variable_mappings
+                )
+                for name, definition in self.columns.items()
+                if definition.callable
+            }
+        }
+
         return query_state
+
+    def _build_column_data(self, definition, query_state, scope_variable_mappings=None):
+
+        # if not scope_variable_mappings:
+        if scope_variable_mappings is None:
+            scope_variable_mappings = {}
+
+        scope_variable_mappings = {
+            **scope_variable_mappings,
+            "id": self.id,
+            "state_type": self.state_type,
+            "config": self.config,
+        }
+
+        return definition.build_column_value(
+            query_state=query_state,
+            scope_variable_mappings=scope_variable_mappings
+        )
 
     def build_row_key_from_query_state(self, query_state: dict):
         # create the query data row primary key hash
@@ -325,7 +381,6 @@ class State(BaseModelHashable):
             state_key, state_key_plain = self.build_row_key_from_query_state(query_state=query_state)
 
         return column_and_value, state_key
-
 
     def remap_query_state(self, query_state: dict):
 
@@ -496,7 +551,12 @@ class State(BaseModelHashable):
             )
 
     def get_column_data_from_row_index(self, column_name, index: int):
-        return self.data[column_name][index]
+        column_definition = self.columns[column_name]
+        if column_definition.value:
+            query_state = self.build_query_state_from_row_data(index=index)
+            return query_state[column_name]
+        else:
+            return self.data[column_name][index]
 
     def get_column_data(self, column_name):
         return self.data[column_name]
@@ -604,17 +664,31 @@ class State(BaseModelHashable):
         logging.debug(f'query {input_query_state_key_hash}, not cached, on config: {self.config}')
         return False
 
-    def apply_query_state(self, query_state: dict, skip_has_query_state: bool = False):
+    def apply_query_state(self,
+                          query_state: dict,
+                          skip_has_query_state: bool = False,
+                          scope_variable_mappings: dict = None):
         """
         Applies a query state entry to the state object data rows and updates the indexes.
 
         :param query_state: The state information to apply.
-        :param skip_has_query_state: Do not check whether query state entry exists before applying it, default false
+        :param skip_has_query_state: If True, skips the check for the existence of a query state entry before applying it. Default is False.
+        :param query_state_scope_var_func: A callable function that returns a dictionary of key-value pairs used for evaluating callable columns.
+                                            For example, {column_name: eval(processor_state.version)} to get the model version in a language model configuration.
         :return: The processed query state after the application process.
         """
 
+        # Pre-state apply - applies any constant and or callable value to the query state
+        query_state = self.pre_state_derived_and_constant_columns_apply(
+            query_state=query_state,
+            scope_variable_mappings=scope_variable_mappings
+        )
+
         # Pre-state apply - perform transformations before applying the state
         query_state = self.pre_state_apply(query_state=query_state)
+
+        # Calculate and apply data primary key values to the query state object
+        query_state = self.post_state_primary_key_apply(query_state=query_state)
 
         # Check to ensure query state does not exist already (after the pre state apply step)
         if not skip_has_query_state and self.has_query_state(query_state=query_state):
@@ -629,6 +703,59 @@ class State(BaseModelHashable):
         # Post-state apply - finalize the function and return the resulting state
         return self.post_state_apply(query_state=query_state)
 
+    #
+    # def column_value(self, column_definition: StateDataColumnDefinition):
+    #     if column_definition.callable:
+    #         # TODO inject only current state object for evaluation
+    #         # return eval(column_definition.value)
+    #         return safer_evaluate(column_definition.value, allowed_vars={
+    #             "query_state": query_state
+    #         })
+    #
+    #     return column_definition.value
+
+    def pre_state_derived_and_constant_columns_apply(self, query_state: dict, scope_variable_mappings: callable = None) -> dict:
+        # derive the constant and callable column values and apply them to the query state
+        constant_and_callable_query_state = {
+            name: self._build_column_data(
+                definition=definition,
+                query_state=query_state,
+                scope_variable_mappings=scope_variable_mappings
+            )
+            for name, definition in self.columns.items() if definition.value
+        }
+
+        # append the constant and callable query state values to the response query state
+        query_state = {
+            **query_state,
+            **constant_and_callable_query_state
+        } if constant_and_callable_query_state else query_state
+
+        # return the final query state response with any additional constant and derived (callable) key:value pair
+        return query_state
+
+    def post_state_primary_key_apply(self, query_state: dict) -> dict:
+
+        # format the keys, stripping the key name to something more generalized
+        output_query_state = {
+            clean_string_for_ddl_naming(key): value
+            for key, value
+            in query_state.items()
+        }
+
+        # build the primary key for this query_state
+        state_key, state_key_plain = self.build_row_key_from_query_state(
+            query_state=output_query_state
+        )
+
+        output_query_state = {
+            **output_query_state,
+            "state_key": state_key,
+            "state_key_plain": state_key_plain
+        }
+
+        return output_query_state
+
     def pre_state_apply(self, query_state: dict) -> dict:
 
         # remapped query state before applying it to the state
@@ -641,7 +768,6 @@ class State(BaseModelHashable):
 
     def post_state_apply(self, query_state: dict) -> dict:
         return query_state
-
 
     ## TODO move this to a file based state storage provider
     #
@@ -815,29 +941,31 @@ def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataK
 #       - provider_name
 #       - model_name
 #       - etc.
-def get_column_state_value(value: Any, *args, **kwargs):
-    if not value:
-        return None
 
-    if isinstance(value, str):
 
-        if value.startswith("callable:"):
-            func = value[len("callable:"):]
-            # TODO security issue - use safe eval
-            #   but hell there are a lot of security issues,
-            #   this is meant to be running in an isolated
-            #   container by tenant, still yet, who knows
-            #   what functions are implemented.
-            value = eval(func, kwargs)
-            return value
-
-        return value
-
-    elif callable(value):
-        value = value(*args, **kwargs)
-        return value
-
-    return value
+# def get_column_state_value(value: Any, *args, **kwargs):
+#     if not value:
+#         return None
+#
+#     if isinstance(value, str):
+#
+#         if value.startswith("callable:"):
+#             func = value[len("callable:"):]
+#             # TODO security issue - use safe eval
+#             #   but hell there are a lot of security issues,
+#             #   this is meant to be running in an isolated
+#             #   container by tenant, still yet, who knows
+#             #   what functions are implemented.
+#             value = eval(func, kwargs)
+#             return value
+#
+#         return value
+#
+#     elif callable(value):
+#         value = value(*args, **kwargs)
+#         return value
+#
+#     return value
 
 
 def extract_values_from_query_state_by_key_definition(query_state: dict,

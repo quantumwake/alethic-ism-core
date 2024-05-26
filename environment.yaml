@@ -7,4 +7,5 @@ dependencies:
   - python-dotenv
   - pyyaml
   - pydantic
+  - restrictedpython
   - pulsar-client

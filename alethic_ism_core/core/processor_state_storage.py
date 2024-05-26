@@ -11,7 +11,8 @@ from .base_model import (
     Processor,
     ProcessorState,
     ProcessorProvider,
-    ProcessorStateDirection, ProcessorProperty
+    ProcessorStateDirection,
+    ProcessorProperty
 )
 from .processor_state import (
     State,
@@ -290,6 +291,7 @@ class ForwardingStateMachineStorageMeta(type):
                     # Override or create the method on the new instance, ensuring the first parameter is `self`
                     # We use types.MethodType to correctly bind the forwarding method to the instance
                     setattr(instance, method_name, types.MethodType(forwarder_method, instance))
+
 
         return instance
 

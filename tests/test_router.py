@@ -1,4 +1,3 @@
-import random
 import json
 from alethic_ism_core.core.base_message_router import Router, MessageStatus
 

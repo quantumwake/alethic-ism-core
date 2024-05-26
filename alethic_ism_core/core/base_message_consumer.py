@@ -31,7 +31,9 @@ class BaseMessagingProvider:
 
 class BaseMessagingConsumer:
 
-    def __init__(self, name: str,  storage: StateMachineStorage, messaging_provider: BaseMessagingProvider):
+    def __init__(self, name: str,
+
+                 storage: StateMachineStorage, messaging_provider: BaseMessagingProvider):
 
         # flag that determines whether to shut down the consumers
         self.RUNNING = False
@@ -44,16 +46,33 @@ class BaseMessagingConsumer:
     def close(self):
         self.messaging_provider.close()
 
+
+    async def pre_execute(self, message: dict, **kwargs):
+        pass
+        # processor.status = StatusCode.RUNNING
+
+    async def fail_execute(self, message: dict, **kwargs):
+        pass
+        #processor.status = StatusCode.FAILED
+
+    async def post_execute(self, message: dict, **kwargs):
+        pass
+        # processor.status = StatusCode.COMPLETED
+
+    async def broken(self, exception: Exception, msg: Any):
+        logging.error(f"Message validation error: {exception} on data {msg}")
+        self.messaging_provider.acknowledge_main(msg)
+
     async def _execute(self, message: dict):
         try:
+            await self.pre_execute(message)
             await self.execute(message)
-            pass
+            await self.post_execute(message)
         except Exception as exception:
-            # processor_state.status = ProcessorStatus.FAILED
+            await self.fail_execute(message)
             logging.error(f'critical error {exception}')
         finally:
             pass
-            # state_storage.update_processor_state(processor_state=processor_state)
 
     async def execute(self, message: dict):
         raise NotImplementedError()
@@ -95,41 +114,15 @@ class BaseMessagingConsumer:
                 message_dict = json.loads(data)
                 await self._execute(message_dict)
 
-
-                # if 'state_id' not in message_dict:
-
-                # TODO check whether the message is for the appropriate processor
-
-                # the configuration of the state
-                # processor_state = ProcessorState.model_validate_json(data)
-                # processor_state = state_storage.fetch_processor_states_by(
-                #     processor_id=processor_state.processor_id,
-                #     input_state_id=processor_state.input_state_id,
-                #     output_state_id=processor_state.output_state_id
-                # )
-                # if processor_state.status in [ProcessorStatus.QUEUED, ProcessorStatus.RUNNING]:
-                #     await execute(processor_state=processor_state)
-                # else:
-                #     logging.error(f'status not in QUEUED, unable to processor state: {processor_state}  ')
-
                 # send ack that the message was consumed.
                 self.messaging_provider.acknowledge_main(msg)
-
-                # Log success
-                # logger.info(
-                #     f"Message successfully consumed and stored with asset id {asset.id} for account {asset.library_id}")
-            except InterruptedError:
-                logging.error("Stop receiving messages")
+            except InterruptedError as e:
+                logging.error(f"Stop receiving messages: {e}")
                 break
             except ValidationError as e:
-                # it is safe to assume that if we get a validation error, there is a problem with the json object
-                # TODO throw into an exception log or trace it such that we can see it on a dashboard
-                self.messaging_provider.acknowledge_main(msg)
-                logging.error(f"Message validation error: {e} on data {data}")
+                await self.broken(exception=e, msg=msg)
             except Exception as e:
-                self.messaging_provider.acknowledge_main(msg)
-                # TODO need to send this to a dashboard, all excdptions in consumers need to be sent to a dashboard
-                logging.error(f"An error occurred: {e} on data {data}")
+                await self.broken(exception=e, msg=msg)
 
     def graceful_shutdown(self, signum, frame):
         logging.info("Received SIGTERM signal. Gracefully shutting down.")

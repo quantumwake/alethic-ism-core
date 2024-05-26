@@ -1,20 +1,14 @@
 import logging as log
-from typing import List
-
 from .processor_state import (
-    State,
     StateConfigLM,
     extract_values_from_query_state_by_key_definition
 )
 
 from .base_processor import BaseProcessor
-from .processor_state_storage import StateMachineStorage
-
 from .utils.general_utils import (
     build_template_text,
-    calculate_string_dict_hash,
-    clean_string_for_ddl_naming
 )
+
 logging = log.getLogger(__name__)
 
 
@@ -38,18 +32,8 @@ class BaseProcessorLM(BaseProcessor):
             return template.template_content
         return None
 
-    def __init__(self,
-                 state_machine_storage: StateMachineStorage,
-                 output_state: State,
-                 *args, **kwargs):
-
-        super().__init__(
-            output_state=output_state,
-            **kwargs
-        )
-
-        # the storage engine
-        self.storage = state_machine_storage
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
         # ensure that the configuration passed is of StateConfigLM
         if not isinstance(self.output_state.config, StateConfigLM):
@@ -57,23 +41,33 @@ class BaseProcessorLM(BaseProcessor):
                              f'got {type(self.output_state.config)}, '
                              f'expected {StateConfigLM}')
 
-        logging.info(f'starting instruction state machine: {type(self)} with config {self.config}')
-
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
     def apply_states(self, query_states: [dict]):
         logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
-        return [self.output_state.apply_query_state(query_state=qs) for qs in query_states]
+
+        return [
+            self.output_state.apply_query_state(
+                query_state=query_state,
+                scope_variable_mappings={
+                    "provider": self.provider
+                }
+            )
+            for query_state in query_states
+        ]
 
     def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:
             return
 
-        # TODO
+        # TODO maybe validate the input state to see if it was already processed for this particular output state?
+        #
         # # create the input query state entry primary key hash string
         # input_query_state_key_hash, input_query_state_key_plain = (
-        #     self.output_state.build_row_key_from_query_state(query_state=input_query_state)
+        #   TODO this was the old way, needs to use the input state id's primary key not the output state's primary key.
+        #       alternatively this should be handled at the state-router
+        #   self.output_state.build_row_key_from_query_state(query_state=input_query_state)
         # )
         #
         # # skip processing of this query state entry if the key exists, unless forced to process
@@ -89,21 +83,21 @@ class BaseProcessorLM(BaseProcessor):
 
             # execute the underlying model function
             response_data, response_data_type, response_raw_data = (
-                self._execute(user_prompt=user_prompt,
-                              system_prompt=system_prompt,
-                              values=input_query_state))
-
-            # logging.debug(f'processed prompt query: {input_query_state_key_plain} and received response: {response_data}')
-
+                self._execute(
+                    user_prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    values=input_query_state
+                )
+            )
 
             # we build a new output state to be appended to the output states
             output_query_state = {
                 # 'state_key': input_query_state_key_hash,
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
-                'response': response_data,
+                # 'response': response_data,
                 # 'raw_response': response_raw_data if response_raw_data else '<<<blank>>>',
-                'status': 'Success'
+                # 'status': 'Success'
             }
 
 
@@ -125,32 +119,30 @@ class BaseProcessorLM(BaseProcessor):
                 output_query_state = {
                     **output_query_state,
                     **response_data,
-                    'response_raw': response_raw_data
+                    # 'response': response_raw_data
                 }
 
-                # format column names and append the state key
-                output_query_state = self.append_state_key(output_query_state)
                 query_states.append(output_query_state)
             elif isinstance(response_data, list):
                 for item in list(response_data):
                     if not isinstance(item, dict):
                         raise Exception(f'item in response list of rows must be in of type dict.')
 
-                    state_item_key = calculate_string_dict_hash(item)
-
-                    #
+                    # state_item_key = calculate_string_dict_hash(item)
                     output_query_state = {**{
-                        # 'state_key': input_query_state_key_hash,
-                        'state_item_key': state_item_key,
+                        # 'state_item_key': state_item_key,
                         'user_prompt': user_prompt,
                         'system_prompt': system_prompt,
-                        'status': 'Success'
                     }, **item, **additional_query_state}
 
                     # format column names and append the state key
-                    output_query_state = self.append_state_key(output_query_state)
                     query_states.append(output_query_state)
             else:
+                output_query_state = {
+                    **output_query_state,
+                    'response': response_data
+                }
+
                 query_states.append(output_query_state)
 
             # write the query states (synchronized)
@@ -161,21 +153,6 @@ class BaseProcessorLM(BaseProcessor):
 
         except Exception as e:
             self.failed_process_query_state(e, query_state=input_query_state)
-
-    def append_state_key(self, output_query_state):
-        # format the keys, stripping the key name to something more generalized
-        output_query_state = {clean_string_for_ddl_naming(key): value
-                              for key, value
-                              in output_query_state.items()}
-        state_key, state_key_plain = (
-            self.output_state.build_row_key_from_query_state(query_state=output_query_state)
-        )
-        output_query_state = {
-            **output_query_state,
-            "state_key": state_key,
-            "state_key_plain": state_key_plain
-        }
-        return output_query_state
 
     def failed_process_query_state(self, e, query_state: dict):
         if isinstance(SyntaxError, e):
