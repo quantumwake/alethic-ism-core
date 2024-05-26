@@ -153,12 +153,14 @@ class StateDataColumnDefinition(BaseModel):
             return None
 
         if self.callable:
-
             allowed_vars = {
                 "query_state": query_state,
             }
+
             if scope_variable_mappings:
-                allowed_vars.update(**scope_variable_mappings)
+                allowed_vars.update(
+                    **scope_variable_mappings
+                )
 
             # TODO inject only current state object for evaluation
             # return eval(column_definition.value)
