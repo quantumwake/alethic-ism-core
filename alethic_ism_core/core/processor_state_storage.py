@@ -201,6 +201,9 @@ class StateStorage:
     def delete_state_column_data(self, state_id):
         raise NotImplementedError()
 
+    def delete_state_config_key_definition(self, state_id: str, definition_type: str, definition_id: int) -> int:
+        raise NotImplementedError()
+
     def delete_state_config_key_definitions(self, state_id):
         raise NotImplementedError()
 

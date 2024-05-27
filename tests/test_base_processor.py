@@ -116,7 +116,15 @@ def test_mock_processor():
             ]
         )
     )
-    mock_processor = MockProcessor(state_machine_storage=storage, output_state=output_state)
+
+    provider = ProcessorProvider(
+        id="test provider id",
+        name="test provider name",
+        version="test-version-1.0",
+        class_name="MockProviders"
+    )
+
+    mock_processor = MockProcessor(provider=provider, state_machine_storage=storage, output_state=output_state)
 
     input_query_states = [
         {"question": "what color is the sky?"},

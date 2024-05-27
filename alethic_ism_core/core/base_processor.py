@@ -1,7 +1,8 @@
 import logging as log
+import uuid
 
 from .processor_state_storage import StateMachineStorage
-from .base_model import StatusCode, ProcessorProvider
+from .base_model import StatusCode, ProcessorProvider, Processor, ProcessorState
 from .utils.state_utils import validate_processor_status_change
 from .processor_state import (
     State,
@@ -20,16 +21,22 @@ class BaseProcessor:
     def __init__(self,
                  output_state: State,
                  state_machine_storage: StateMachineStorage,
-                 provider: ProcessorProvider,
+                 provider: ProcessorProvider = None,
+                 processor: Processor = None,
+                 output_processor_state: ProcessorState = None,
                  **kwargs):
 
         self.current_status = StatusCode.CREATED
         self.output_state = output_state
         self.storage = state_machine_storage
         self.provider = provider
+        self.processor = processor
+        self.output_processor_state = output_processor_state
 
-        logging.info(f'setting up processor with provider: {self.provider.name}, '
-                     f'version: {self.provider.version}, '
+        logging.info(f'setting up processor: {self.processor.id if processor else None},'
+                     f'provider id: {self.provider.id if provider else None}, '
+                     f'provider name: {self.provider.name if provider else None}, '
+                     f'provider version: {self.provider.version if provider else None}, '
                      f'config: {self.config}')
 
     @property

@@ -2,13 +2,17 @@ from pydantic import ValidationError
 import logging as logging
 
 from .base_message_consumer import BaseMessagingConsumer
-from .base_model import ProcessorStateDirection, ProcessorProvider, Processor, StatusCode
+from .base_model import ProcessorStateDirection, ProcessorProvider, Processor, StatusCode, ProcessorState
 from .processor_state import State
 
 
 class BaseMessagingConsumerState(BaseMessagingConsumer):
 
-    def create_processor(self, provider: ProcessorProvider, output_state: State):
+    def create_processor(self,
+                         processor: Processor,
+                         provider: ProcessorProvider,
+                         output_processor_state: ProcessorState,
+                         output_state: State):
         # create (or fetch cached state) processor handling this state output instruction
         raise NotImplementedError(f'must return an instance of BaseProcessorLM for provider {provider.id}, '
                                   f'output state: {output_state.id}')
@@ -29,31 +33,36 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
             provider = self.storage.fetch_processor_provider(id=processor.provider_id)
 
             # fetch the processors to forward the state query to, state must be an input of the state id
-            output_states = self.storage.fetch_processor_state(
+            output_processor_states = self.storage.fetch_processor_state(
                 processor_id=processor_id,
                 direction=ProcessorStateDirection.OUTPUT
             )
 
-            if not output_states:
+            if not output_processor_states:
                 raise BrokenPipeError(f'no output state found for processor id: {processor_id} provider {provider.id}')
 
             # fetch query state input entries
             query_states = message['query_state']
 
-            logging.info(f'found {len(output_states)} on processor id {processor_id} with provider {provider.id}')
+            logging.info(f'found {len(output_processor_states)} on processor id {processor_id} with provider {provider.id}')
 
             # iterate each output state and forward the query state input
-            for state in output_states:
+            for output_processor_state in output_processor_states:
                 # load the output state and relevant state instruction
-                output_state = self.storage.load_state(state_id=state.state_id, load_data=False)
+                output_state = self.storage.load_state(state_id=output_processor_state.state_id, load_data=False)
 
-                logging.info(f'creating processor provider {processor_id} on output state id {state.state_id} with '
-                             f'current index: {state.current_index}, '
-                             f'maximum processed index: {state.maximum_index}, '
-                             f'count: {state.count}')
+                logging.info(f'creating processor provider {processor_id} on output state id {output_processor_state.state_id} with '
+                             f'current index: {output_processor_state.current_index}, '
+                             f'maximum processed index: {output_processor_state.maximum_index}, '
+                             f'count: {output_processor_state.count}')
 
                 # create (or fetch cached state) process handling this state output instruction
-                processor = self.create_processor(provider=provider, output_state=output_state)
+                processor = self.create_processor(
+                    processor=processor,
+                    provider=provider,
+                    output_processor_state=output_processor_state,
+                    output_state=output_state
+                )
 
                 # submit execution
                 await self.pre_execute(message=message)

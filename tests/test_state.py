@@ -9,6 +9,16 @@ def create_mock_state_json():
     return state_json, state
 
 
+def create_mock_state_with_no_data(state_id: str = None) -> State:
+    state = State(
+        id=state_id,
+        config=StateConfig(
+            name="Test Me",
+            storage_class="database"
+        )
+    )
+    return state
+
 def create_mock_state(state_id: str = None) -> State:
     state = State(
         id=state_id,
@@ -122,22 +132,18 @@ def test_state_primary_key_constant_and_dyanmic():
 
 
 def test_state_callable_columns():
-    state = create_mock_state()
-
-    state.add_column(column=StateDataColumnDefinition(
-        name="perspective_index",
-        value="P1"
-    ))
+    state = create_mock_state_with_no_data()
+    state.config.primary_key = [
+        StateDataKeyDefinition(name="name"),
+        StateDataKeyDefinition(name="code"),
+        StateDataKeyDefinition(name="index")
+    ]
 
     state.add_columns(columns=[
-        # StateDataColumnDefinition(
-        #     name="provider_name",
-        #     value="callable:config.provider_name"
-        # ),
-        # StateDataColumnDefinition(
-        #     name="model_name",
-        #     value="callable:config.model_name"
-        # ),
+        StateDataColumnDefinition(
+            name="some_fixed_column",
+            value="some_fixed_value"
+        ),
         StateDataColumnDefinition(
             name="name",
             value="config.name",
@@ -145,20 +151,29 @@ def test_state_callable_columns():
         )]
     )
 
-    #
-    for i in range(1, 5):
-        state.process_and_add_row_data(
-            {
-                "state_key": f"hello world #{i}",
-                "state data": f"testing {i}"
+    for i in range(0, 5):
+        state.apply_query_state(
+            query_state={
+                "index": f"{i}",
+                "code": "P1",
+                "state_data": f"testing {i}"
+            }
+        )
+
+    for i in range(0, 5):
+        state.apply_query_state(
+            query_state={
+                "index": f"{i}",
+                "code": "P2",
+                "state_data": f"testing {i}"
             }
         )
 
     query_state0 = state.build_query_state_from_row_data(0)
+    query_state5 = state.build_query_state_from_row_data(5)
     assert query_state0['name'] == state.config.name
-    # assert query_state0['storage_class'] == state.config.storage_class
-    # assert query_state0['user_template_id'] == state.config.user_template_id
-    # assert query_state0['system_template_id'] == state.config.system_template_id
+    assert query_state5['code'] == "P2"
+    assert query_state5['index'] == "0"
 
 
 def test_state():

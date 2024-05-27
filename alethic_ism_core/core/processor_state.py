@@ -310,31 +310,40 @@ class State(BaseModelHashable):
         # 2. constant values
         # 3. expressions in the order in which they are added
 
-        def get_value(definition: StateDataColumnDefinition):
-            return self.data[definition.name][index] \
-                if not definition.value \
-                else definition.build_column_value()
+        # TODO REMOVE - in favor of appending the evaluated and constant columsn directly into the
+        #  query_state as a value in the state.data[column].values instead of trying to evaluate it, this helps with the distributed nature of
+        #  trying to fix evaluation on the fly issue, in addition, a must be immutable, all elements in the state set should be primed.
+        # def get_value(definition: StateDataColumnDefinition):
+        #     return self.data[definition.name][index] \
+        #         if not definition.value \
+        #         else definition.build_column_value()
+        #
+        # # start with stored values and any constant values
+        # query_state = {
+        #     name: get_value(definition)
+        #     for name, definition in self.columns.items()
+        #     if not definition.callable
+        # }
 
-        # start with stored values and any constant values
         query_state = {
-            name: get_value(definition)
+            name: self.data[definition.name][index]
             for name, definition in self.columns.items()
-            if not definition.callable
+            # if not definition.callable
         }
 
-        # apply the callable values to the query state for the given row index
-        query_state = {
-            **query_state,
-            **{
-                name: self._build_column_data(
-                    definition=definition,
-                    query_state=query_state,
-                    scope_variable_mappings=scope_variable_mappings
-                )
-                for name, definition in self.columns.items()
-                if definition.callable
-            }
-        }
+        # # apply the callable values to the query state for the given row index
+        # query_state = {
+        #     **query_state,
+        #     **{
+        #         name: self._build_column_data(
+        #             definition=definition,
+        #             query_state=query_state,
+        #             scope_variable_mappings=scope_variable_mappings
+        #         )
+        #         for name, definition in self.columns.items()
+        #         if definition.callable
+        #     }
+        # }
 
         return query_state
 
@@ -348,7 +357,7 @@ class State(BaseModelHashable):
             **scope_variable_mappings,
             "id": self.id,
             "state_type": self.state_type,
-            "config": self.config,
+            "config": self.config
         }
 
         return definition.build_column_value(
@@ -553,12 +562,12 @@ class State(BaseModelHashable):
             )
 
     def get_column_data_from_row_index(self, column_name, index: int):
-        column_definition = self.columns[column_name]
-        if column_definition.value:
-            query_state = self.build_query_state_from_row_data(index=index)
-            return query_state[column_name]
-        else:
-            return self.data[column_name][index]
+        # column_definition = self.columns[column_name]
+        # if column_definition.value:
+        #     query_state = self.build_query_state_from_row_data(index=index)
+        #     return query_state[column_name]
+        # else:
+        return self.data[column_name][index]
 
     def get_column_data(self, column_name):
         return self.data[column_name]
@@ -605,9 +614,9 @@ class State(BaseModelHashable):
             # a. constant string or value of any type
             # b. callable instance, a callable: string starting with callable:<expression>
 
-            if column_header.value:
-                logging.debug(f'skipping column: {column_name}, constant and or function value set')
-                continue
+            # if column_header.value:
+            #     logging.debug(f'skipping column: {column_name}, constant and or function value set')
+            #     continue
 
             if column_name in column_and_value:
                 row_column_data = column_and_value[column_name]
@@ -675,19 +684,20 @@ class State(BaseModelHashable):
 
         :param query_state: The state information to apply.
         :param skip_has_query_state: If True, skips the check for the existence of a query state entry before applying it. Default is False.
-        :param query_state_scope_var_func: A callable function that returns a dictionary of key-value pairs used for evaluating callable columns.
-                                            For example, {column_name: eval(processor_state.version)} to get the model version in a language model configuration.
+        :param scope_variable_mappings: A dictionary key-value pairs used for evaluating callable columns.
+                                            For example, eval for column name version: eval(processor_state.version) to
+                                            get the model version in a language model configuration.
         :return: The processed query state after the application process.
         """
 
+        # Pre-state apply - perform transformations before applying the state
+        query_state = self.pre_state_apply(query_state=query_state)
+
         # Pre-state apply - applies any constant and or callable value to the query state
-        query_state = self.pre_state_derived_and_constant_columns_apply(
+        query_state = self.pre_state_apply_callable_and_constant_columns(
             query_state=query_state,
             scope_variable_mappings=scope_variable_mappings
         )
-
-        # Pre-state apply - perform transformations before applying the state
-        query_state = self.pre_state_apply(query_state=query_state)
 
         # Calculate and apply data primary key values to the query state object
         query_state = self.post_state_primary_key_apply(query_state=query_state)
@@ -716,7 +726,8 @@ class State(BaseModelHashable):
     #
     #     return column_definition.value
 
-    def pre_state_derived_and_constant_columns_apply(self, query_state: dict, scope_variable_mappings: callable = None) -> dict:
+    def pre_state_apply_callable_and_constant_columns(self, query_state: dict, scope_variable_mappings: callable = None) -> dict:
+
         # derive the constant and callable column values and apply them to the query state
         constant_and_callable_query_state = {
             name: self._build_column_data(

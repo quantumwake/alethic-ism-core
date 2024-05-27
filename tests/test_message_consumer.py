@@ -3,7 +3,7 @@ from typing import Any
 
 from alethic_ism_core.core.base_message_consumer import BaseMessagingProvider
 from alethic_ism_core.core.base_message_consumer_lm import BaseMessagingConsumerLM
-from alethic_ism_core.core.base_model import ProcessorProvider
+from alethic_ism_core.core.base_model import ProcessorProvider, Processor, ProcessorState
 from alethic_ism_core.core.base_processor_lm import BaseProcessorLM
 from alethic_ism_core.core.processor_state import State
 from alethic_ism_core.core.processor_state_storage import StateMachineStorage
@@ -87,7 +87,12 @@ class MockMessagingProvider(BaseMessagingProvider):
 
 class MockMessageConsumerProcessor(BaseMessagingConsumerLM):
 
-    def create_processor(self, provider: ProcessorProvider, output_state: State):
+    def create_processor(self,
+                         processor: Processor,
+                         provider: ProcessorProvider,
+                         output_processor_state: ProcessorState,
+                         output_state: State):
+
         return MockProcessor(
             state_machine_storage=self.storage,
             provider=provider,
