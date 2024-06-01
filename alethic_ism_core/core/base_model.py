@@ -1,3 +1,4 @@
+import datetime
 from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel
@@ -146,6 +147,7 @@ class ProcessorState(BaseModelHashable):
 class MonitorLogEvent(BaseModelHashable):
     log_id: Optional[int] = None
     log_type: str
+    log_time: Optional[datetime.datetime] = None
     internal_reference_id: Optional[int] = None
     user_id: Optional[str] = None
     project_id: Optional[str] = None
