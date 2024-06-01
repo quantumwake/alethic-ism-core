@@ -35,26 +35,10 @@ class BaseMessagingConsumerProvider:
         raise NotImplementedError()
 
 
-class BaseMessagingConsumer:
+class Monitorable:
 
-    def __init__(self, name: str,
-                 storage: StateMachineStorage,
-                 messaging_provider: BaseMessagingConsumerProvider,
-                 monitor_route: Route = None):
-
-        # flag that determines whether to shut down the consumers
-        self.RUNNING = False
-
-        # consumer config
-        self.name = name
-        self.messaging_provider = messaging_provider
-        self.storage = storage
-
-        # monitoring route to publish messages to
+    def __init__(self, monitor_route: Route = None, **kwargs):
         self.monitor_route = monitor_route
-
-    def close(self):
-        self.messaging_provider.close()
 
     async def send_processor_state_update(
             self,
@@ -161,6 +145,27 @@ class BaseMessagingConsumer:
             exception=exception,
             data=data
         )
+
+
+class BaseMessagingConsumer(Monitorable):
+
+    def __init__(self, name: str,
+                 storage: StateMachineStorage,
+                 messaging_provider: BaseMessagingConsumerProvider,
+                 **kwargs):
+
+        super().__init__(**kwargs)
+
+        # flag that determines whether to shut down the consumers
+        self.RUNNING = False
+
+        # consumer config
+        self.name = name
+        self.messaging_provider = messaging_provider
+        self.storage = storage
+
+    def close(self):
+        self.messaging_provider.close()
 
     async def broken(self, exception: Exception, msg: Any):
         logging.error(f"Message validation error: {exception} on data {msg}")

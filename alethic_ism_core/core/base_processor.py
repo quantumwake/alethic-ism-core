@@ -1,6 +1,7 @@
 import logging as log
 import uuid
 
+from alethic_ism_core.core.base_message_provider import Monitorable
 from .processor_state_storage import StateMachineStorage
 from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState
 from .utils.state_utils import validate_processor_status_change
@@ -16,7 +17,7 @@ from .processor_state import (
 logging = log.getLogger(__name__)
 
 
-class BaseProcessor:
+class BaseProcessor(Monitorable):
 
     def __init__(self,
                  output_state: State,
@@ -24,8 +25,9 @@ class BaseProcessor:
                  provider: ProcessorProvider = None,
                  processor: Processor = None,
                  output_processor_state: ProcessorState = None,
-
                  **kwargs):
+
+        super().__init__(**kwargs)
 
         self.current_status = ProcessorStatusCode.CREATED
         self.output_state = output_state

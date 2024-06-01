@@ -237,6 +237,10 @@ class ProcessorStorage:
 
 class ProcessorStateStorage:
 
+    def fetch_processor_states_by_project_id(self, project_id) \
+            -> Optional[List[ProcessorState]]:
+        raise NotImplementedError()
+
     def fetch_processor_state(self, processor_id: str = None, state_id: str = None,
                               direction: ProcessorStateDirection = None) \
             -> Optional[List[ProcessorState]]:

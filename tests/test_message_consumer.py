@@ -192,13 +192,9 @@ def test_message_consumer():
     mock_messaging_consumer = MockMessageConsumerProcessor(
         name="mocked messaging consumer lm",
         storage=test_state_machine_storage,
-        messaging_provider=MockMessagingConsumerProvider()
+        messaging_provider=MockMessagingConsumerProvider(),
+        monitor_route=mock_monitor_route
     )
 
     # with pytest.raises(NotImplementedError) as exc_info:
     mock_messaging_consumer.start_topic_consumer(1)
-
-
-
-
-    # mock_messaging_consumer.RUNNING = False
