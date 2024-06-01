@@ -18,24 +18,32 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
 
     async def fetch_processor_state_outputs(self, consumer_message_mapping: dict):
         try:
+            # validate that the type is defined
             if 'type' not in consumer_message_mapping:
                 raise ValueError(f'unable to identity type for consumed message {consumer_message_mapping}')
 
             message_type = consumer_message_mapping['type']
+            # validate the message type is supported
             if message_type != 'query_state':
-                raise NotImplemented(f'unsupported message format, must be a dictionary defined as type '
-                                     f'query state with data field value as query_state: {{}} : {message_type}')
+                raise NotImplemented(
+                    f'unsupported message format, must be a dictionary defined as type '
+                    f'query state with data field value as query_state: {{}} : {message_type}'
+                )
 
+            # validate processor id exists in consumed from streaming sub-system
             if 'processor_id' not in consumer_message_mapping:
                 raise ValueError(f'no processor_id found in consumed message content')
 
+            # fetch and validate the processor association, including provider selector
             processor_id = consumer_message_mapping['processor_id']
             processor = self.storage.fetch_processor(processor_id=processor_id)
-
             if not processor:
                 raise ValueError(f'no processor found for processor id: {processor_id} ')
 
             provider = self.storage.fetch_processor_provider(id=processor.provider_id)
+
+            if not provider:
+                raise ValueError(f'no provider found for processor {processor_id}')
 
             # fetch the processors to forward the state query to, state must be an input of the state id
             output_processor_states = self.storage.fetch_processor_state(
@@ -43,6 +51,7 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
                 direction=ProcessorStateDirection.OUTPUT
             )
 
+            # validate there are output states to submit the query state input to
             if not output_processor_states:
                 raise ValueError(f'no output state found for processor id: {processor_id} provider {provider.id}')
 

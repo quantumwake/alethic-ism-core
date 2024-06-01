@@ -12,7 +12,7 @@ from .base_model import (
     ProcessorState,
     ProcessorProvider,
     ProcessorStateDirection,
-    ProcessorProperty
+    ProcessorProperty, MonitorLogEvent
 )
 from .processor_state import (
     State,
@@ -247,6 +247,15 @@ class ProcessorStateStorage:
         raise NotImplementedError()
 
 
+class MonitorLogEventStorage:
+
+    def fetch_monitor_log_events(self, internal_reference_id: int = None, user_id: str = None, project_id: str = None) \
+            -> Optional[List[MonitorLogEvent]]:
+        raise NotImplementedError()
+
+    def insert_monitor_log_event(self, monitor_log_event: MonitorLogEvent) \
+            -> MonitorLogEvent:
+        raise NotImplementedError()
 
 
 # Metaclass to Add Forwarding Methods Dynamically
@@ -295,7 +304,6 @@ class ForwardingStateMachineStorageMeta(type):
                     # We use types.MethodType to correctly bind the forwarding method to the instance
                     setattr(instance, method_name, types.MethodType(forwarder_method, instance))
 
-
         return instance
 
 
@@ -307,6 +315,7 @@ class StateMachineStorage(StateStorage,
                           TemplateStorage,
                           UserProfileStorage,
                           UserProjectStorage,
+                          MonitorLogEventStorage,
                           metaclass=ForwardingStateMachineStorageMeta):
     def __init__(self,
                  state_storage: StateStorage = None,
@@ -316,7 +325,8 @@ class StateMachineStorage(StateStorage,
                  workflow_storage: WorkflowStorage = None,
                  template_storage: TemplateStorage = None,
                  user_profile_storage: UserProfileStorage = None,
-                 user_project_storage: UserProjectStorage = None):
+                 user_project_storage: UserProjectStorage = None,
+                 monitor_log_event_storage: MonitorLogEventStorage = None):
 
         # Assign the delegates dynamically via constructor parameters
         self._delegate_state_storage = state_storage
@@ -327,4 +337,4 @@ class StateMachineStorage(StateStorage,
         self._delegate_template_storage = template_storage
         self._delegate_user_profile_storage = user_profile_storage
         self._delegate_user_project_storage = user_project_storage
-
+        self._delegate_monitor_log_event_storage = monitor_log_event_storage

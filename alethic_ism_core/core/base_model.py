@@ -119,6 +119,9 @@ class Processor(BaseModelHashable):
 
 
 class ProcessorState(BaseModelHashable):
+
+    _internal_id: Optional[int] = None     # internal reference number for tracking of log messages
+
     processor_id: str
     state_id: str
     direction: ProcessorStateDirection = ProcessorStateDirection.INPUT
@@ -130,6 +133,24 @@ class ProcessorState(BaseModelHashable):
     count: Optional[int] = None
     current_index: Optional[int] = None
     maximum_index: Optional[int] = None
+
+    @property
+    def internal_id(self):
+        return self._internal_id
+
+    @internal_id.setter
+    def internal_id(self, internal_id):
+        self._internal_id = internal_id
+
+
+class MonitorLogEvent(BaseModelHashable):
+    log_id: Optional[int] = None
+    log_type: str
+    internal_reference_id: Optional[int] = None
+    user_id: Optional[str] = None
+    project_id: Optional[str] = None
+    exception: Optional[str] = None
+    data: Optional[str] = None
 
 
 class ProcessorStateDetail(ProcessorState, Processor):

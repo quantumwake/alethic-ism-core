@@ -74,7 +74,7 @@ class BaseMessagingConsumer:
             "project_id": project_id,
             "type": "processor_state",
             "processor_state": processor_state,
-            "status": status.value,
+            "status": status.name,
             "exception": str(exception) if exception else None,
             "data": data
         })
@@ -96,7 +96,7 @@ class BaseMessagingConsumer:
         await self.send_processor_state_update(
             user_id=user_id,
             project_id=project_id,
-            status=status.name,
+            status=status,
             processor_state={
                 "processor_id": processor_id,
                 "state_id": state_id,
@@ -176,7 +176,7 @@ class BaseMessagingConsumer:
             await self.fail_validate_input_message(consumer_message_mapping=message, exception=e)
             return False
 
-    async def execute(self, message: dict):
+    async def execute(self, consumer_message_mapping: dict):
         raise NotImplementedError()
 
     async def management_consumer_runloop(self):
