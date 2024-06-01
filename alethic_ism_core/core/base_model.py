@@ -49,13 +49,41 @@ class ProcessorStateDirection(Enum):
     OUTPUT = "OUTPUT"
 
 
-class StatusCode(Enum):
+class ProcessorStatusCode(Enum):
+    # Represents that an entity or task has been created or initialized,
+    # but no further action has been taken yet.
     CREATED = "CREATED"
+
+    # Indicates that the entity or task is in the process of being routed
+    # or directed to the appropriate destination or handler.
+    ROUTE = "ROUTE"
+
+    # Implies that the routing process has been completed, and the entity or
+    # task has been successfully directed to the intended destination or handler.
+    ROUTED = "ROUTED"
+
+    # Suggests that the entity or task has been placed in a queue,
+    # waiting to be processed or executed.
     QUEUED = "QUEUED"
+
+    # Indicates that the entity or task is currently
+    # being executed or processed.
     RUNNING = "RUNNING"
-    TERMINATED = "TERMINATED"
+
+    # Implies that the execution or processing of the entity or task
+    # is being forcefully terminated
+    TERMINATE = "TERMINATE"
+
+    # Suggests that the execution or processing of the entity
+    # or task has been intentionally stopped or paused.
     STOPPED = "STOPPED"
+
+    # Indicates that the entity or task has been successfully
+    # executed or processed to completion.
     COMPLETED = "COMPLETED"
+
+    # Suggests that an error or failure occurred during the execution
+    # or processing of the entity or task, preventing it from being completed successfully.
     FAILED = "FAILED"
 
 
@@ -86,14 +114,15 @@ class Processor(BaseModelHashable):
     id: Optional[str] = None
     provider_id: str
     project_id: str
-    status: StatusCode = StatusCode.CREATED
+    status: ProcessorStatusCode = ProcessorStatusCode.CREATED
     properties: Optional[List[ProcessorProperty]] = None
+
 
 class ProcessorState(BaseModelHashable):
     processor_id: str
     state_id: str
     direction: ProcessorStateDirection = ProcessorStateDirection.INPUT
-    status: StatusCode = StatusCode.CREATED
+    status: ProcessorStatusCode = ProcessorStatusCode.CREATED
 
     # this does not need to be set, it is mainly used for processing input states
     # the current index is set to the highest index that was completed, only sequence +1,

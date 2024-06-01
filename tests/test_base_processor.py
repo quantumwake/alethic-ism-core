@@ -1,4 +1,4 @@
-from alethic_ism_core.core.base_model import InstructionTemplate, ProcessorProvider
+from alethic_ism_core.core.base_model import InstructionTemplate, ProcessorProvider, ProcessorState
 from alethic_ism_core.core.base_processor import BaseProcessor
 from alethic_ism_core.core.base_processor_lm import BaseProcessorLM
 from alethic_ism_core.core.processor_state import State, StateConfig, StateDataKeyDefinition, StateConfigLM, \
@@ -90,10 +90,14 @@ def test_mock_processor_lm():
         class_name="MockProviders"
     )
 
+    def failure_callback_handler(processor_state: ProcessorState, exception: Exception, query_state: dict):
+        pass
+
     mock_processor = MockProcessorLM(
         state_machine_storage=storage,
         output_state=output_state,
-        provider=provider
+        provider=provider,
+        failure_callback=failure_callback_handler
     )
     response_1 = mock_processor.process_input_data_entry(input_query_state=input_query_states[0])
     response_2 = mock_processor.process_input_data_entry(input_query_state=input_query_states[1])

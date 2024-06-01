@@ -175,6 +175,26 @@ def test_state_callable_columns():
     assert query_state5['code'] == "P2"
     assert query_state5['index'] == "0"
 
+def test_state_column_alias():
+    state = create_mock_state_with_no_data(state_id="hello world")
+
+    state.config.primary_key = [
+        StateDataKeyDefinition(name="question")
+    ]
+
+    state.add_columns(columns=[
+        StateDataColumnDefinition(name="question")
+    ])
+
+    state.apply_query_state(query_state={
+        "question": "tell me about hello world."
+    })
+
+    query_state_0 = state.build_query_state_from_row_data(0)
+
+    assert query_state_0
+
+
 
 def test_state():
     state = create_mock_state()

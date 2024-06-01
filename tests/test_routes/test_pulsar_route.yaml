@@ -13,6 +13,14 @@ messageConfig:
         selector: language/models/openai/gpt-4-1106-preview
         schema: schema.StringSchema
 
+      - service_url: pulsar://localhost:6650
+        topic: test_topic
+        manage_topic: test_topic_mgmt
+        subscription: test_topic_subs
+        selector: test/topic
+        schema: schema.StringSchema
+
+
 #
 #      - process_topic: ism_anthropic_qa
 #        manage_topic: ism_anthropic_qa_manage

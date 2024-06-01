@@ -1,8 +1,7 @@
-from pydantic import ValidationError
 import logging as logging
 
-from .base_message_consumer import BaseMessagingConsumer
-from .base_model import ProcessorStateDirection, ProcessorProvider, Processor, StatusCode, ProcessorState
+from .base_message_provider import BaseMessagingConsumer
+from .base_model import ProcessorStateDirection, ProcessorProvider, Processor, ProcessorStatusCode, ProcessorState
 from .processor_state import State
 
 
@@ -17,19 +16,25 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
         raise NotImplementedError(f'must return an instance of BaseProcessorLM for provider {provider.id}, '
                                   f'output state: {output_state.id}')
 
-
-    async def execute(self, message: dict):
+    async def fetch_processor_state_outputs(self, consumer_message_mapping: dict):
         try:
+            if 'type' not in consumer_message_mapping:
+                raise ValueError(f'unable to identity type for consumed message {consumer_message_mapping}')
 
-            if 'type' not in message:
-                raise ValidationError(f'unable to identity type for consumed message {message}')
-
-            message_type = message['type']
+            message_type = consumer_message_mapping['type']
             if message_type != 'query_state':
-                raise NotImplemented(f'unsupported message type: {message_type}')
+                raise NotImplemented(f'unsupported message format, must be a dictionary defined as type '
+                                     f'query state with data field value as query_state: {{}} : {message_type}')
 
-            processor_id = message['processor_id']
+            if 'processor_id' not in consumer_message_mapping:
+                raise ValueError(f'no processor_id found in consumed message content')
+
+            processor_id = consumer_message_mapping['processor_id']
             processor = self.storage.fetch_processor(processor_id=processor_id)
+
+            if not processor:
+                raise ValueError(f'no processor found for processor id: {processor_id} ')
+
             provider = self.storage.fetch_processor_provider(id=processor.provider_id)
 
             # fetch the processors to forward the state query to, state must be an input of the state id
@@ -39,60 +44,87 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
             )
 
             if not output_processor_states:
-                raise BrokenPipeError(f'no output state found for processor id: {processor_id} provider {provider.id}')
+                raise ValueError(f'no output state found for processor id: {processor_id} provider {provider.id}')
 
-            # fetch query state input entries
-            query_states = message['query_state']
+        except Exception as exception:
+            logging.error(f'invalid query state entry: {consumer_message_mapping} provided, ignoring message')
+            raise exception
 
-            logging.info(f'found {len(output_processor_states)} on processor id {processor_id} with provider {provider.id}')
+        return output_processor_states, processor, provider
 
-            # iterate each output state and forward the query state input
-            for output_processor_state in output_processor_states:
+    async def execute(self, consumer_message_mapping: dict):
+
+        # identifies all the output states for this new input state entry(s)
+        output_processor_states, processor, provider = await self.fetch_processor_state_outputs(
+            consumer_message_mapping=consumer_message_mapping
+        )
+
+        # extract the input query state entry(s)
+        query_states = consumer_message_mapping['query_state']
+        logging.info(f'found {len(output_processor_states)} on processor id {processor.id} with provider {provider.id}')
+
+        # change query state input to a mono list of dict, if instanceof dict, passed to each output state
+        query_states = [query_states] \
+            if isinstance(query_states, dict) \
+            else query_states
+
+        if not query_states:
+            raise ValueError(f'no input query state defined in received message: {consumer_message_mapping}')
+
+        # iterate each output state and forward the query state input
+        for output_processor_state in output_processor_states:
+            try:
+
                 # load the output state and relevant state instruction
                 output_state = self.storage.load_state(state_id=output_processor_state.state_id, load_data=False)
+                if not output_state: raise ValueError(f'unable to load state {output_processor_state.state_id}')
 
-                logging.info(f'creating processor provider {processor_id} on output state id {output_processor_state.state_id} with '
-                             f'current index: {output_processor_state.current_index}, '
-                             f'maximum processed index: {output_processor_state.maximum_index}, '
-                             f'count: {output_processor_state.count}')
+                logging.debug(
+                    f'creating processor provider {processor.id},'
+                    f'output state id: {output_processor_state.state_id} with '
+                    f'current index: {output_processor_state.current_index}, '
+                    f'maximum processed index: {output_processor_state.maximum_index}, '
+                    f'count: {output_processor_state.count}'
+                )
 
                 # create (or fetch cached state) process handling this state output instruction
-                processor = self.create_processor(
+                runnable_processor = self.create_processor(
                     processor=processor,
                     provider=provider,
                     output_processor_state=output_processor_state,
                     output_state=output_state
                 )
 
-                # submit execution
-                await self.pre_execute(message=message)
+                logging.debug(
+                    f'submitting batch query state entries count: {len(query_states)}, '
+                    f'with processor_id: {processor.id}, '
+                    f'provider_id: {provider.id}'
+                )
 
-                if isinstance(query_states, dict):
-                    query_states = [query_states]
-
-                logging.debug(f'submitting batch query state entries count: {len(query_states)}, '
-                              f'with processor_id: {processor_id}, '
-                              f'provider_id: {provider.id}')
+                # update the processor state with the relevant status of RUNNING
+                await self.intra_execute(
+                    consumer_message_mapping=consumer_message_mapping
+                )
 
                 # iterate each query state entry and forward it to the processor
                 for query_state_entry in query_states:
-                    processor.process_input_data_entry(
+                    runnable_processor.process_input_data_entry(
                         input_query_state=query_state_entry
                     )
 
-            # submit completed execution
-            await self.post_execute(
-                processor_id=processor_id,
-                message=message
-            )
+                # submit completed execution
+                await self.post_execute(
+                    consumer_message_mapping=consumer_message_mapping
+                )
 
-        except Exception as exception:
-            # submit failed execution
-            await self.fail_execute(
-                processor_id=processor_id,
-                message=message,
-                ex=exception
-            )
-            logging.error(f'critical error {exception}')
-        finally:
-            pass
+            except Exception as ex:
+                # submit failed execution log to the output processor state
+                await self.fail_execute_processor_state(
+                    processor_state=output_processor_state,
+                    exception=ex,
+                    message=consumer_message_mapping
+                )
+
+                logging.warning(f'unable to execute processor state flow, received exception {ex}')
+            finally:
+                pass

@@ -266,37 +266,32 @@ def parse_response_json(response: str):
     json_response = _response[json_start:json_end].strip()
     try:
         json_response = json.loads(json_response)
+    except:
+        # try a different approach by stripping out the \\n
+        try:
+            json_response = json_response.replace('\\n', ' ')
+            json_response = json.loads(json_response)
+        except:
+            raise SyntaxError(f'Invalid: json object even though we were able to extract it from the response text, '
+                              f'the json response is still invalid, please ensure that json_response is correct, '
+                              f'here is what we tried to parse into a json dictionary:\n{json_response}')
 
-        if isinstance(json_response, dict):
-            json_response = {
+    # checks response type
+    if isinstance(json_response, dict):
+        json_response = {
+            clean_string_for_ddl_naming(key): value
+            for key, value in json_response.items()
+        }
+    elif isinstance(json_response, list):
+        json_response = [
+            {
                 clean_string_for_ddl_naming(key): value
-                for key, value in json_response.items()
+                for key, value in row.items()
             }
-        elif isinstance(json_response, list):
-            json_response = [
-                {
-                    clean_string_for_ddl_naming(key): value
-                    for key, value in row.items()
-                }
-                for row in json_response
-            ]
+            for row in json_response
+        ]
 
-        return True, 'json', json_response
-    except:
-        pass  # try one more time with no line returns
-
-    try:
-        json_response = json_response.replace('\\n', ' ')
-        json_response = json.loads(json_response)
-        json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
-        return True, 'json', json_response
-    except:
-        raise SyntaxError(f'Invalid: json object even though we were able to extract it from the response text, '
-                          f'the json response is still invalid, please ensure that json_response is correct, '
-                          f'here is what we tried to parse into a json dictionary:\n{json_response}')
-
-    # json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
-    # return True, 'json', json_response
+    return True, 'json', json_response
 
 def parse_response_auto_detect_type(response: str):
     data_parse_status, data_type, data_parsed = parse_response_json(response=response)

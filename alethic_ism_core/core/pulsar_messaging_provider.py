@@ -1,10 +1,10 @@
 import pulsar
-
 from typing import Any
-from .base_message_consumer import BaseMessagingProvider
+
+from .base_message_provider import BaseMessagingConsumerProvider
 
 
-class PulsarMessagingProvider(BaseMessagingProvider):
+class PulsarMessagingConsumerProvider(BaseMessagingConsumerProvider):
 
     def __init__(self,
                  message_url: str,

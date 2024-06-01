@@ -8,7 +8,7 @@ from datetime import datetime as dt
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel, model_validator
 
-from .base_model import StatusCode, InstructionTemplate, BaseModelHashable
+from .base_model import ProcessorStatusCode, InstructionTemplate, BaseModelHashable
 from .utils.evaluate import safer_evaluate
 from .utils.general_utils import (
     build_template_text_content,
@@ -63,7 +63,7 @@ class CustomStateUnpickler(pickle.Unpickler):
             elif 'StateDataKeyDefinition' == name:
                 return StateDataKeyDefinition
             elif 'ProcessorStatus' == name:
-                return StatusCode
+                return ProcessorStatusCode
             elif 'InstructionTemplate' == name:
                 return InstructionTemplate
 

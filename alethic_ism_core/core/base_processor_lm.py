@@ -1,4 +1,7 @@
 import logging as log
+from typing import Callable, Dict
+
+from .base_model import ProcessorState
 from .processor_state import (
     StateConfigLM,
     extract_values_from_query_state_by_key_definition
@@ -13,6 +16,10 @@ logging = log.getLogger(__name__)
 
 
 class BaseProcessorLM(BaseProcessor):
+
+    def __init__(self, failure_callback: Callable[[ProcessorState, Exception, Dict], None] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.failure_callback = failure_callback
 
     @property
     def config(self) -> StateConfigLM:
@@ -92,12 +99,8 @@ class BaseProcessorLM(BaseProcessor):
 
             # we build a new output state to be appended to the output states
             output_query_state = {
-                # 'state_key': input_query_state_key_hash,
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
-                # 'response': response_data,
-                # 'raw_response': response_raw_data if response_raw_data else '<<<blank>>>',
-                # 'status': 'Success'
             }
 
 
@@ -151,11 +154,15 @@ class BaseProcessorLM(BaseProcessor):
             # return the updated query state after persistence, generally the same unless it was remapped to new columns
             return query_states
 
-        except Exception as e:
-            self.failed_process_query_state(e, query_state=input_query_state)
+        except Exception as exception:
+            self.failure_callback(
+                self.output_processor_state,
+                exception,
+                input_query_state
+            )
 
-    def failed_process_query_state(self, e, query_state: dict):
-        if isinstance(SyntaxError, e):
-            logging.error(f'unable to parse response, skipping question {query_state} on {self.config}')
-        elif isinstance(Exception, e):
-            logging.error(f'critical error handling question {query_state} on {self.config} client gave up')
+    # def failed_process_query_state(self, exception: e, query_state: dict):
+    #     if isinstance(SyntaxError, e):
+    #         logging.error(f'unable to parse response, skipping question {query_state} on {self.config}')
+    #     elif isinstance(Exception, e):
+    #         logging.error(f'critical error handling question {query_state} on {self.config} client gave up')
