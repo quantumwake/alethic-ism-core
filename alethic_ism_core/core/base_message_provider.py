@@ -107,27 +107,27 @@ class BaseMessagingConsumer:
         )
 
     async def pre_execute(self, consumer_message_mapping: dict, **kwargs):
-        self.send_processor_state_from_consumed_message(
+        await self.send_processor_state_from_consumed_message(
             consumer_message_mapping=consumer_message_mapping,
             status=ProcessorStatusCode.QUEUED
         )
 
     async def intra_execute(self, consumer_message_mapping: dict, **kwargs):
-        self.send_processor_state_from_consumed_message(
+        await self.send_processor_state_from_consumed_message(
             consumer_message_mapping=consumer_message_mapping,
             status=ProcessorStatusCode.RUNNING
         )
 
     # TODO probably should not flipflop, we can handle this flipflop in the ism-monitor consumer?
     async def post_execute(self, consumer_message_mapping: dict, **kwargs):
-        self.send_processor_state_from_consumed_message(
+        await self.send_processor_state_from_consumed_message(
             consumer_message_mapping=consumer_message_mapping,
             status=ProcessorStatusCode.COMPLETED
         )
 
     async def fail_validate_input_message(self, consumer_message_mapping: dict, exception: Exception = None):
         # failed to execute validate input message, differs from when a processor fails to execute on a query entry
-        self.send_processor_state_from_consumed_message(
+        await self.send_processor_state_from_consumed_message(
             consumer_message_mapping=consumer_message_mapping,
             status=ProcessorStatusCode.FAILED,
             exception=exception
@@ -167,9 +167,14 @@ class BaseMessagingConsumer:
         self.messaging_provider.acknowledge_main(msg)
 
     async def _execute(self, message: dict):
-        await self.pre_execute(message)
-        await self.execute(message)
-        await self.post_execute(message)
+        try:
+            await self.pre_execute(message)
+            await self.execute(message)
+            await self.post_execute(message)
+            return True
+        except ValueError as e:
+            await self.fail_validate_input_message(consumer_message_mapping=message, exception=e)
+            return False
 
     async def execute(self, message: dict):
         raise NotImplementedError()
