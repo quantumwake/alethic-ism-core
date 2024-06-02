@@ -135,12 +135,11 @@ class Monitorable:
 
         # if the user_id and project_id is available, then extract it, each message should
         # be submitted with the following information for additional tracking in case of root errors
+        user_id = None
+        project_id = None
         if data:
             user_id = data['user_id'] if 'user_id' in data else None
-            project_id: data['project_id'] if 'project_id' in data else None
-        else:
-            user_id = None
-            project_id = None
+            project_id = data['project_id'] if 'project_id' in data else None
 
         # failed to execute the processor, differs from when a processor fails to execute on a query entry
         await self.send_processor_state_update(
