@@ -1,4 +1,6 @@
 import logging as log
+
+from .base_message_route_model import Route
 from .base_message_provider import Monitorable
 from .processor_state_storage import StateMachineStorage
 from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState
@@ -23,9 +25,15 @@ class BaseProcessor(Monitorable):
                  provider: ProcessorProvider = None,
                  processor: Processor = None,
                  output_processor_state: ProcessorState = None,
+                 state_router_route: Route = None,
+                 sync_store_route: Route = None,
                  **kwargs):
 
         super().__init__(**kwargs)
+
+        # TODO move into a Syncable and StateRouteable feature class
+        self.sync_store_route = sync_store_route
+        self.state_router_route = state_router_route
 
         self.current_status = ProcessorStatusCode.CREATED
         self.output_state = output_state

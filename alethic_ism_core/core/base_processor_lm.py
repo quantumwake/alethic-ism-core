@@ -63,7 +63,7 @@ class BaseProcessorLM(BaseProcessor):
             for query_state in query_states
         ]
 
-    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
+    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:
             return
 

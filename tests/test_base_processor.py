@@ -1,3 +1,5 @@
+import pytest
+
 from alethic_ism_core.core.base_model import InstructionTemplate, ProcessorProvider, ProcessorState
 from alethic_ism_core.core.base_processor import BaseProcessor
 from alethic_ism_core.core.base_processor_lm import BaseProcessorLM
@@ -42,7 +44,7 @@ class MockStateMachineStorage(StateMachineStorage):
 
 class MockProcessor(BaseProcessor):
 
-    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
+    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         return mock_question_response(input_query_state=input_query_state)
 
 
@@ -108,7 +110,9 @@ def test_mock_processor_lm():
     assert response_2[0]['provider_version'] == 'test-version-1.0'
 
 
-def test_mock_processor():
+@staticmethod
+@pytest.mark.asynico
+async def test_mock_processor():
     storage = MockStateMachineStorage()
 
     output_state = State(
@@ -135,8 +139,8 @@ def test_mock_processor():
         {"question": "what color is the grass?"},
     ]
 
-    response_1 = mock_processor.process_input_data_entry(input_query_state=input_query_states[0])
-    response_2 = mock_processor.process_input_data_entry(input_query_state=input_query_states[1])
+    response_1 = mock_processor.execute(input_query_state=input_query_states[0])
+    response_2 = mock_processor.execute(input_query_state=input_query_states[1])
 
     assert response_1['response'] == 'the sky is blue'
     assert response_2['response'] == 'the grass is green'

@@ -90,7 +90,7 @@ class FullJoinStateProcessor(BaseProcessor):
         self.__downstream(input_state=self.state)
 
 
-    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
+    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         # TODO handle this in a distributed way
         #  we could handle each individual state separately
         #  but for now we are simply passing the entire state as an input
