@@ -2,6 +2,7 @@ import logging as logging
 
 from .base_message_provider import BaseMessagingConsumer
 from .base_model import ProcessorStateDirection, ProcessorProvider, Processor, ProcessorStatusCode, ProcessorState
+from .base_processor import BaseProcessor
 from .processor_state import State
 
 
@@ -11,7 +12,7 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
                          processor: Processor,
                          provider: ProcessorProvider,
                          output_processor_state: ProcessorState,
-                         output_state: State):
+                         output_state: State) -> BaseProcessor:
         # create (or fetch cached state) processor handling this state output instruction
         raise NotImplementedError(f'must return an instance of BaseProcessorLM for provider {provider.id}, '
                                   f'output state: {output_state.id}')
@@ -117,7 +118,7 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
 
                 # iterate each query state entry and forward it to the processor
                 for query_state_entry in query_states:
-                    runnable_processor.process_input_data_entry(
+                    await runnable_processor.execute(
                         input_query_state=query_state_entry
                     )
 
@@ -131,7 +132,8 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
                 await self.fail_execute_processor_state(
                     processor_state=output_processor_state,
                     exception=ex,
-                    message=consumer_message_mapping
+                    message=consumer_message_mapping,
+                    data=consumer_message_mapping
                 )
 
                 logging.warning(f'unable to execute processor state flow, received exception {ex}')

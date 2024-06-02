@@ -4,7 +4,7 @@ import sys
 import logging as logging
 import asyncio
 
-from typing import Any
+from typing import Any, Dict, Union
 
 from .base_message_route_model import Route
 from .base_model import ProcessorState, ProcessorStatusCode, ProcessorStateDirection
@@ -42,12 +42,21 @@ class Monitorable:
 
     async def send_processor_state_update(
             self,
-            processor_state: dict,
+            processor_state: Union[Dict, str],
             status: ProcessorStatusCode,
             data: dict = None,
             exception: Exception = None,
             user_id: str = None,
             project_id: str = None):
+
+        # convert to dictionary of processor_state from ProcessorState
+        processor_state = processor_state if not isinstance(processor_state, ProcessorState) else \
+            {
+                "processor_id": processor_state.processor_id,
+                "state_id": processor_state.state_id,
+                "direction": processor_state.direction.name,
+                "status": processor_state.status.name
+            }
 
         if not self.monitor_route:
             logging.warning(f'no monitor route defined, unable to provide processor state status updates')
@@ -90,6 +99,7 @@ class Monitorable:
             data=data
         )
 
+
     async def pre_execute(self, consumer_message_mapping: dict, **kwargs):
         await self.send_processor_state_from_consumed_message(
             consumer_message_mapping=consumer_message_mapping,
@@ -120,7 +130,7 @@ class Monitorable:
     async def fail_execute_processor_state(self,
                                            processor_state: ProcessorState,
                                            exception: Exception,
-                                           data: dict,
+                                           data: dict = None,
                                            **kwargs):
 
         # if the user_id and project_id is available, then extract it, each message should

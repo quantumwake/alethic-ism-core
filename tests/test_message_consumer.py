@@ -55,7 +55,7 @@ router = Router(
 
 class MockProcessor(BaseProcessorLM):
 
-    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
+    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         question = input_query_state["question"]
         additional_info_field = input_query_state["additional_info_field"]
         some_other_field = input_query_state["some_other_field"]
@@ -150,7 +150,8 @@ class MockMessageConsumerProcessor(BaseMessagingConsumerLM):
             provider=provider,
             processor=processor,
             output_state=output_state,
-            failure_callback=self.fail_execute_processor_state
+            output_processor_state=output_processor_state,
+            monitor_route=self.monitor_route
         )
 
 

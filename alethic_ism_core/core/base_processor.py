@@ -1,7 +1,5 @@
 import logging as log
-import uuid
-
-from alethic_ism_core.core.base_message_provider import Monitorable
+from .base_message_provider import Monitorable
 from .processor_state_storage import StateMachineStorage
 from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState
 from .utils.state_utils import validate_processor_status_change
@@ -91,7 +89,34 @@ class BaseProcessor(Monitorable):
 
         self.current_status = new_status
 
-    def process_input_data_entry(self, input_query_state: dict, force: bool = False):
+    async def execute(self, input_query_state: dict, force: bool = False):
+        try:
+
+            await self.send_processor_state_update(
+                processor_state=self.output_processor_state,
+                status=ProcessorStatusCode.RUNNING
+            )
+
+            output_query_states = await self.process_input_data_entry(
+                input_query_state=input_query_state,
+                force=force)
+
+            await self.send_processor_state_update(
+                processor_state=self.output_processor_state,
+                status=ProcessorStatusCode.COMPLETED
+            )
+
+        except Exception as ex:
+            await self.fail_execute_processor_state(
+                processor_state=self.output_processor_state,
+                exception=ex,
+                data=input_query_state
+            )
+        finally:
+
+            return output_query_states
+
+    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         raise NotImplementedError("process the query state entry")
 
 

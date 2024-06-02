@@ -17,9 +17,8 @@ logging = log.getLogger(__name__)
 
 class BaseProcessorLM(BaseProcessor):
 
-    def __init__(self, failure_callback: Callable[[ProcessorState, Exception, Dict], None] = None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.failure_callback = failure_callback
 
     @property
     def config(self) -> StateConfigLM:

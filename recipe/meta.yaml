@@ -10,7 +10,7 @@ source:
 #  git_rev: main
 
 build:
-  number: 321
+  number: 335
   script: "{{ PYTHON }} -m pip install . -vv"
 
 requirements:
