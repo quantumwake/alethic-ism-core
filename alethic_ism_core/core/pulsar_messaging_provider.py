@@ -11,10 +11,10 @@ class PulsarMessagingConsumerProvider(BaseMessagingConsumerProvider):
                  message_topic,
                  message_topic_subscription,
                  management_topic: str = None):
-
         self.client = pulsar.Client(message_url)
-        self.main_consumer = self.client.subscribe(message_topic, message_topic_subscription)
-        self.management_consumer = self.client.subscribe(management_topic, message_topic_subscription)
+        main_consumer = self.client.subscribe(message_topic, message_topic_subscription)
+        manage_consumer = self.client.subscribe(management_topic, message_topic_subscription)
+        super().__init__(main_consumer=main_consumer, manage_consumer=manage_consumer)
 
     def close(self):
         self.main_consumer.close()

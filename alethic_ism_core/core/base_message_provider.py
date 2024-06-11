@@ -19,6 +19,10 @@ class BaseMessagingProducerProvider:
 
 class BaseMessagingConsumerProvider:
 
+    def __init__(self, main_consumer: Any = None, manage_consumer: Any = None):
+        self.main_consumer = main_consumer
+        self.manage_consumer = manage_consumer
+
     def close(self):
         raise NotImplementedError()
 
@@ -182,9 +186,16 @@ class BaseMessagingConsumer(Monitorable):
 
     async def _execute(self, message: dict):
         try:
-            await self.pre_execute(message)
-            await self.execute(message)
-            await self.post_execute(message)
+
+            async def handle_message(consumer, msg):
+                await self.pre_execute(message)
+                await self.execute(message)
+                await self.post_execute(message)
+
+            # Process the message asynchronously
+            # asyncio.create_task(handle_message(self.messaging_provider.main_consumer, message))
+            #
+            await handle_message(self.messaging_provider.main_consumer, message)
             return True
         except ValueError as e:
             await self.fail_validate_input_message(consumer_message_mapping=message, exception=e)
@@ -194,29 +205,30 @@ class BaseMessagingConsumer(Monitorable):
         raise NotImplementedError()
 
     async def management_consumer_runloop(self):
-        msg = None
-
-        while self.RUNNING:
-            msg = None
-            try:
-                msg, data = self.messaging_provider.receive_management()
-                logging.info(f'Message received with {data}')
-
-                # the configuration of the state
-                # processor_state = ProcessorState.model_validate_json(data)
-                # if processor_state.status in [
-                #     ProcessorStatus.TERMINATED,
-                #     ProcessorStatus.STOPPED]:
-                #     logging.info(f'terminating processor_state: {processor_state}')
-                # TODO update the state, ensure that the state information is properly set,
-                #  do not forward the msg unless the state has been terminated.
-
-                # else:
-                #     logging.info(f'nothing to do for processor_state: {processor_state}')
-            except Exception as e:
-                logging.error(e)
-            finally:
-                self.messaging_provider.acknowledge_management(msg)
+        raise NotImplementedError('need to implement management topic interface control loop')
+        # msg = None
+        #
+        # while self.RUNNING:
+        #     msg = None
+        #     try:
+        #         msg, data = self.messaging_provider.receive_management()
+        #         logging.info(f'Message received with {data}')
+        #
+        #         # the configuration of the state
+        #         # processor_state = ProcessorState.model_validate_json(data)
+        #         # if processor_state.status in [
+        #         #     ProcessorStatus.TERMINATED,
+        #         #     ProcessorStatus.STOPPED]:
+        #         #     logging.info(f'terminating processor_state: {processor_state}')
+        #         # TODO update the state, ensure that the state information is properly set,
+        #         #  do not forward the msg unless the state has been terminated.
+        #
+        #         # else:
+        #         #     logging.info(f'nothing to do for processor_state: {processor_state}')
+        #     except Exception as e:
+        #         logging.error(e)
+        #     finally:
+        #         self.messaging_provider.acknowledge_management(msg)
 
     async def main_consumer_runloop(self, max_loops: int = None):
         msg = None

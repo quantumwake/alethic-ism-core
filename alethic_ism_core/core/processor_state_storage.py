@@ -192,6 +192,9 @@ class StateStorage:
     def delete_state_config(self, state_id):
         raise NotImplementedError()
 
+    def reset_state_column_data_zero(self, state_id, zero: int = 0) -> int:
+        raise NotImplementedError()
+
     def delete_state_column_data_mapping(self, state_id):
         raise NotImplementedError()
 
@@ -199,6 +202,9 @@ class StateStorage:
         raise NotImplementedError()
 
     def delete_state_column_data(self, state_id):
+        raise NotImplementedError()
+
+    def delete_state_data(self, state_id):
         raise NotImplementedError()
 
     def delete_state_config_key_definition(self, state_id: str, definition_type: str, definition_id: int) -> int:

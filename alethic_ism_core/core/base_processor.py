@@ -114,15 +114,13 @@ class BaseProcessor(Monitorable):
                 status=ProcessorStatusCode.COMPLETED
             )
 
+            return output_query_states
         except Exception as ex:
             await self.fail_execute_processor_state(
                 processor_state=self.output_processor_state,
                 exception=ex,
                 data=input_query_state
             )
-        finally:
-
-            return output_query_states
 
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         raise NotImplementedError("process the query state entry")
