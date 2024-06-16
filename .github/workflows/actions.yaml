@@ -34,9 +34,9 @@ jobs:
         
 #        echo "checking env file_name: $file_name"
 #        echo "::set-output name=file_name::$file_name"
-        
+
     - name: Upload Artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.build-conda-package.outputs.file_name }}
         path: ${{ steps.build-conda-package.outputs.file_name }}
