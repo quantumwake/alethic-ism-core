@@ -7,7 +7,7 @@ WORKDIR /app
 
 ADD . /app/repo
 
-#ARG GITHUB_REPO_URL
+#ARG GITHUB_REPO_URLls -l
 #RUN git clone --depth 1 ${GITHUB_REPO_URL} repo
 
 # Move to the repository directory

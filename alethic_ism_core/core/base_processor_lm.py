@@ -154,11 +154,12 @@ class BaseProcessorLM(BaseProcessor):
             return query_states
 
         except Exception as exception:
-            self.failure_callback(
+            self.fail_execute_processor_state(
                 self.output_processor_state,
-                exception,
-                input_query_state
+                exception=exception,
+                data=input_query_state
             )
+
 
     # def failed_process_query_state(self, exception: e, query_state: dict):
     #     if isinstance(SyntaxError, e):

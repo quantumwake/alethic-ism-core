@@ -1,9 +1,20 @@
 #!/bin/bash
 
-#docker build --platform linux/amd64 -t quantumwake/alethic-ism-core:latest \
-# --build-arg GITHUB_REPO_URL=https://github.com/quantumwake/alethic-ism-core.git --no-cache .
+APP_NAME="alethic-ism-api"
+DOCKER_NAMESPACE="krasaee"
+GIT_COMMIT_ID=$(git rev-parse HEAD)
+TAG="$DOCKER_NAMESPACE/$APP_NAME:$GIT_COMMIT_ID"
 
-docker build --progress=plain -t quantumwake/alethic-ism-core:latest \
- --build-arg GITHUB_REPO_URL=https://github.com/quantumwake/alethic-ism-core.git --no-cache .
+ARCH=$1
+if [ -z "$ARCH" ];
+then
+  ARCH="linux/amd64"
+  #TODO check operating system ARCH="linux/arm64"
+fi;
+
+docker build --progress=plain \
+  --platform $ARCH -t $TAG \
+  --build-arg \
+  --no-cache .
 
 
