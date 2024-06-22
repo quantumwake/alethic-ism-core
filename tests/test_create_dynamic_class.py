@@ -11,7 +11,7 @@ def test_create_dynamic_class():
     new_class_content = """class MyClass(BaseClass):
     def __init__(self, name, **kwargs):
         super().__init__(**kwargs)
-        print(f"fuck yeah {name}")
+        print(f"{name}")
         self.name = name
 
     def process_input(self, input_dict) -> dict:

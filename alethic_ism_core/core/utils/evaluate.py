@@ -1,4 +1,5 @@
 import math
+import random
 
 from RestrictedPython import compile_restricted
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
@@ -18,7 +19,8 @@ def safer_evaluate(code, allowed_vars=None, allowed_funcs=None):
             **safe_builtins,
             'sum': sum,
             'range': range,
-            'math': math
+            'math': math,
+            'random': random,
         },
         '_getattr_': safer_getattr,  # allow gets
         "_getitem_": default_guarded_getitem,

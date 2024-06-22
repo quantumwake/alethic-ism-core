@@ -19,6 +19,7 @@ def create_mock_state_with_no_data(state_id: str = None) -> State:
     )
     return state
 
+
 def create_mock_state(state_id: str = None) -> State:
     state = State(
         id=state_id,
@@ -128,6 +129,29 @@ def test_state_primary_key_constant_and_dyanmic():
     assert 42 == state.get_column_data_from_row_index("answer_length", index=0)
     assert updated_query_state['answer_length'] == 42
     assert query_state_entry['state_key'] is not None
+
+
+def test_state_callable_column_invalid_expression():
+
+    state_id = 'c0d77357-cfce-4597-93d3-f6e9e185d8ba'
+    state = create_mock_state_with_no_data(state_id=state_id)
+    state.add_column(StateDataColumnDefinition(
+        name="random_value",
+        value="random.randbytes(8)",
+        callable=True,
+    ))
+
+    state.apply_query_state(
+        query_state={
+            "question": "hello world?"
+        },
+        scope_variable_mappings={
+            "state": state
+        }
+    )
+
+    data = state.build_query_state_from_row_data(0)
+    assert data
 
 
 

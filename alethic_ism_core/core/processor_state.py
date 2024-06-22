@@ -99,6 +99,10 @@ class StateConfig(BaseModel):
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
     template_columns: Optional[List[StateDataKeyDefinition]] = None
 
+    flag_require_primary_key: Optional[bool] = False
+    flag_query_state_inheritance_all: Optional[bool] = True
+    flag_query_state_inheritance_inverse: Optional[bool] = True
+
 
 class StateConfigLM(StateConfig):
     user_template_id: str
@@ -160,9 +164,16 @@ class StateDataColumnDefinition(BaseModel):
                     **scope_variable_mappings
                 )
 
-            # TODO inject only current state object for evaluation
-            # return eval(column_definition.value)
-            return safer_evaluate(self.value, allowed_vars=allowed_vars)
+            try:
+                # TODO inject only current state object for evaluation
+                # return eval(column_definition.value)
+                return safer_evaluate(self.value, allowed_vars=allowed_vars)
+            except NameError as ne:
+                raise ValueError(ne)
+            except Exception as e:
+                msg = f'critical exception when trying to evaluate expression {self.value} with {e}'
+                logging.warning(msg)
+                raise ValueError(e)
 
         return self.value
 
@@ -364,6 +375,7 @@ class State(BaseModelHashable):
         )
 
     def build_row_key_from_query_state(self, query_state: dict):
+
         # create the query data row primary key hash
         # the individual state values of the input file
         key_hash, key_plain = build_state_data_row_key(
@@ -384,12 +396,7 @@ class State(BaseModelHashable):
             for column in self.columns.keys()
         }
 
-        if 'state_key' in query_state:
-            state_key = query_state['state_key']
-        else:
-            state_key, state_key_plain = self.build_row_key_from_query_state(query_state=query_state)
-
-        return column_and_value, state_key
+        return column_and_value
 
     def remap_query_state(self, query_state: dict):
 
@@ -572,9 +579,7 @@ class State(BaseModelHashable):
         return self.data[column_name]
 
     def add_row_data_mapping(self, state_key: str, index: int):
-        if not self.mapping:
-            self.mapping = {}
-
+        # at this stage the state key should be defined
         if state_key not in self.mapping:
             # create an array of values associated to this key
             self.mapping[state_key] = StateDataColumnIndex(
@@ -603,7 +608,7 @@ class State(BaseModelHashable):
         for column in columns:
             self.add_column(column)
 
-    def add_row_data(self, state_key: str, column_and_value: Dict[str, StateDataRowColumnData]):
+    def add_row_data(self, column_and_value: Dict[str, StateDataRowColumnData]):
         row_index = 0
         current_row_count = implicit_count_with_force_count(self) if self.data else 0
 
@@ -622,21 +627,21 @@ class State(BaseModelHashable):
             else:
                 row_column_data = StateDataRowColumnData(values=[None])
 
-            # if the data state is not set, create one
+            # if there is no data at all, then this must be the first time.
             if not self.data:
+                # initialize the data state and set the first column
                 self.data = {
                     column_name: StateDataRowColumnData(values=[])
                 }
-            elif column_name not in self.data:  # back-fill rows for new column
-                self.data[column_name] = StateDataRowColumnData(values=[None for _ in range(current_row_count)])
 
-            # column_data = self.data[column_name]
+            # if data is initialized but the column does not exist, then we need to back-fill this new column name
+            elif column_name not in self.data:
+                # back-fill data rows, with empty values, for new column
+                # TODO try and back fill data if there is a column value expression, derived values, using safer_evaluate(..)
+                self.data[column_name] = StateDataRowColumnData(values=[None for _ in range(current_row_count)])
 
             # append the new row to the state.data
             self.data[column_name].add_column_data_values(row_column_data.values)
-
-        # create an index to map back to the exact position in the array
-        self.add_row_data_mapping(state_key=state_key, index=self.count)
 
         # increment the row count
         self.count = self.count + 1
@@ -650,8 +655,27 @@ class State(BaseModelHashable):
         :param query_state: The state information containing column and value mappings.
         :return: The result of the row data addition.
         """
-        column_and_value, state_key = self.build_row_data_from_query_state(query_state=query_state)
-        return self.add_row_data(state_key=state_key, column_and_value=column_and_value)
+        column_and_value = self.build_row_data_from_query_state(query_state=query_state)
+        return self.add_row_data(column_and_value=column_and_value)
+
+    def process_and_add_row_data_mapping(self, query_state: dict):
+        # check to see if we even need to create a data mapping
+        if not self.flag_require_primary_key():
+            return False
+
+        # first time initialize the mappings table (tracks the row index from the primary key definition of the data)
+        if not self.mapping:
+            self.mapping = {}
+
+        # in mappings, associate the state key to the column row index, if a primary key definition is defined
+        if 'state_key' in query_state:
+            state_key = query_state['state_key']
+        else:
+            state_key, state_key_plain = self.build_row_key_from_query_state(query_state=query_state)
+
+        # create an index to map back to the exact position in the array
+        self.add_row_data_mapping(state_key=state_key, index=self.count)
+
 
     def has_query_state(self, query_state: dict):
         # make sure that the state is initialized and that there is a data key
@@ -660,7 +684,7 @@ class State(BaseModelHashable):
 
         if not query_state:
             logging.error(f'received blank or null query state on state id {self.id}')
-            raise ReferenceError(f'query state cannot be empty or null')
+            raise ValueError(f'query state cannot be empty or null')
 
         # create the input query state entry primary key hash string
         input_query_state_key_hash, input_query_state_key_plain = (
@@ -698,12 +722,14 @@ class State(BaseModelHashable):
             scope_variable_mappings=scope_variable_mappings
         )
 
-        # Calculate and apply data primary key values to the query state object
-        query_state = self.post_state_primary_key_apply(query_state=query_state)
+        # derive primary key if required and check if element exists in state data mapping
+        if self.flag_require_primary_key():
+            # Calculate and apply data primary key values to the query state object
+            query_state = self.post_state_primary_key_apply(query_state=query_state)
 
-        # Check to ensure query state does not exist already (after the pre state apply step)
-        if not skip_has_query_state and self.has_query_state(query_state=query_state):
-            return query_state
+            # Check to ensure query state does not exist already (after the opre state apply step)
+            if not skip_has_query_state and self.has_query_state(query_state=query_state):
+                return query_state
 
         # Apply columns as specified in the query state
         self.process_and_add_columns(query_state=query_state)
@@ -711,8 +737,24 @@ class State(BaseModelHashable):
         # Apply row data from the query state using the helper method
         self.process_and_add_row_data(query_state=query_state)
 
+        # Apply the state key to the mappings for constant access seek time
+        self.process_and_add_row_data_mapping(query_state=query_state)
+
         # Post-state apply - finalize the function and return the resulting state
         return self.post_state_apply(query_state=query_state)
+
+    def flag_require_primary_key(self):
+        if self.config.flag_require_primary_key and not self.config.primary_key:
+            raise ValueError(f'primary key is not defined for state {self.id}')
+
+        if not self.config.primary_key:
+            logging.debug(
+                f'no primary key defined for state id {self.id}, '
+                f'however flag_require_primary_key is set to {self.config.flag_require_primary_key}'
+            )
+            return False
+
+        return True
 
     #
     # def column_value(self, column_definition: StateDataColumnDefinition):
@@ -760,11 +802,12 @@ class State(BaseModelHashable):
             query_state=output_query_state
         )
 
-        output_query_state = {
-            **output_query_state,
-            "state_key": state_key,
-            "state_key_plain": state_key_plain
-        }
+        if state_key:
+            output_query_state = {
+                **output_query_state,
+                "state_key": state_key,
+                "state_key_plain": state_key_plain
+            }
 
         return output_query_state
 

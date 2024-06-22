@@ -1,5 +1,5 @@
 import logging as log
-from typing import Callable, Dict
+from typing import Callable, Dict, Any
 
 from .base_model import ProcessorState
 from .processor_state import (
@@ -50,18 +50,105 @@ class BaseProcessorLM(BaseProcessor):
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
-    def apply_states(self, query_states: [dict]):
-        logging.debug(f'persisting processed new query states from response. query states: {query_states} ')
+    async def apply_states(self, input_query_state: Any, output_query_states: [dict]):
+        logging.debug(f'persisting processed new query states from response. query states: {output_query_states} ')
 
-        return [
-            self.output_state.apply_query_state(
-                query_state=query_state,
-                scope_variable_mappings={
-                    "provider": self.provider
-                }
+        # iterate each query state and apply it to the output state
+        return [self.output_state.apply_query_state(
+            query_state=query_state,
+            scope_variable_mappings={
+                "provider": self.provider,
+                "input_query_state": input_query_state
+            }
+        ) for query_state in output_query_states]
+
+    async def apply_query_state_inheritance(self, input_query_state: dict, output_query_state: dict = {}):
+
+        # quick return if no inheritance is set
+        if not self.config.query_state_inheritance:
+            return output_query_state
+
+        # remove the keys defined in inheritance (as a result of inverse flag)
+        if self.config.flag_query_state_inheritance_inverse:
+            [   # delete the value by key from the output
+                output_query_state.pop(keyDefinition.nam, None)
+                for keyDefinition in self.config.query_state_inheritance
+            ]
+        # extract specific keys from the input query state, to append to the output state
+        else:
+
+            # extract the values by key from the input source
+            inherited_query_state = extract_values_from_query_state_by_key_definition(
+                key_definitions=self.config.query_state_inheritance,
+                query_state=input_query_state
             )
-            for query_state in query_states
-        ]
+
+            # apply the additional states to the current query_state
+            if inherited_query_state:
+                output_query_state = {
+                    **output_query_state,
+                    **inherited_query_state
+                }
+
+        return output_query_state
+
+    async def apply_result(self, result: Any, input_query_state: Any, additional_output_values: Any):
+        if not isinstance(result, (dict, list, str)):
+            raise ValueError(f'the result of the process is not of type dict, list or str. type: {result} invalid')
+
+        # fetch any additional state from the input states, provided that the config_name parameter is set
+        # otherwise it will default to the only parameter it knows of named 'query' within the input states
+
+        # new output state query (template output query, f multiple outputs)
+        output_query_state = {}
+        if additional_output_values:
+            output_query_state = {**additional_output_values}
+
+        # if the inherit all variables from previous input state is enabled
+        if self.config.flag_query_state_inheritance_all:
+            output_query_state = {**output_query_state, **input_query_state}
+            output_query_state.pop('state_key', None)         # TODO create an internal function for this
+            output_query_state.pop('state_key_plain', None)
+
+        # if there are any inherited key definitions, for each key move data from the source to the output.
+        if not self.config.query_state_inheritance:
+            output_query_state = await self.apply_query_state_inheritance(
+                input_query_state=input_query_state,
+                output_query_state=output_query_state
+            )
+
+        # depending on the result type, build the output state(s)
+        query_states = []
+        if isinstance(result, dict):
+            output_query_state = {
+                **output_query_state,
+                **result,
+            }
+
+            query_states.append(output_query_state)
+        elif isinstance(result, list):
+            base_output_query_state = output_query_state
+            for item in list(result):
+                if not isinstance(item, dict):
+                    raise ValueError(f'item in response list of rows must be in of type dict.')
+
+                # state_item_key = calculate_string_dict_hash(item)
+                output_query_state = {
+                    **base_output_query_state,
+                    ** item,
+                }
+
+                # format column names and append the state key
+                query_states.append(output_query_state)
+        else:
+            output_query_state = {
+                **output_query_state,
+                'result': result
+            }
+
+            query_states.append(output_query_state)
+
+        return query_states
 
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:
@@ -88,7 +175,7 @@ class BaseProcessorLM(BaseProcessor):
         try:
 
             # execute the underlying model function
-            response_data, response_data_type, response_raw_data = (
+            result, result_type, response_raw_data = (
                 self._execute(
                     user_prompt=user_prompt,
                     system_prompt=system_prompt,
@@ -97,61 +184,70 @@ class BaseProcessorLM(BaseProcessor):
             )
 
             # we build a new output state to be appended to the output states
-            output_query_state = {
+            additional_output_values = {
                 'user_prompt': user_prompt,
                 'system_prompt': system_prompt,
             }
 
+            # apply the results into
+            output_states = await self.apply_result(
+                result=result,                   # the result of the execution
+                input_query_state=input_query_state,    # the initial input state
+                additional_output_values=additional_output_values   # any additional output values
+            )
 
-            # fetch any additional state from the input states, provided that the config_name parameter is set
-            # otherwise it will default to the only parameter it knows of named 'query' within the input states
-            additional_query_state = extract_values_from_query_state_by_key_definition(
-                key_definitions=self.config.query_state_inheritance,
-                query_state=input_query_state)
+            return await self.apply_states(input_query_state=input_query_state, output_query_states=output_states)
 
-            # apply the additional states to the current query_state
-            if additional_query_state:
-                output_query_state = {
-                    **output_query_state,
-                    **additional_query_state
-                }
-
-            query_states = []
-            if isinstance(response_data, dict):
-                output_query_state = {
-                    **output_query_state,
-                    **response_data,
-                    # 'response': response_raw_data
-                }
-
-                query_states.append(output_query_state)
-            elif isinstance(response_data, list):
-                for item in list(response_data):
-                    if not isinstance(item, dict):
-                        raise ValueError(f'item in response list of rows must be in of type dict.')
-
-                    # state_item_key = calculate_string_dict_hash(item)
-                    output_query_state = {**{
-                        # 'state_item_key': state_item_key,
-                        'user_prompt': user_prompt,
-                        'system_prompt': system_prompt,
-                    }, **item, **additional_query_state}
-
-                    # format column names and append the state key
-                    query_states.append(output_query_state)
-            else:
-                output_query_state = {
-                    **output_query_state,
-                    'response': response_data
-                }
-
-                query_states.append(output_query_state)
-
-            # write the query states (synchronized)
-            query_states = self.apply_states(query_states=query_states)
-
-            # return the updated query state after persistence, generally the same unless it was remapped to new columns
-            return query_states
+            #
+            # # fetch any additional state from the input states, provided that the config_name parameter is set
+            # # otherwise it will default to the only parameter it knows of named 'query' within the input states
+            # additional_query_state = extract_values_from_query_state_by_key_definition(
+            #     key_definitions=self.config.query_state_inheritance,
+            #     query_state=input_query_state)
+            #
+            # # apply the additional states to the current query_state
+            # if additional_query_state:
+            #     output_query_state = {
+            #         **output_query_state,
+            #         **additional_query_state
+            #     }
+            #
+            # query_states = []
+            # if isinstance(response_data, dict):
+            #     output_query_state = {
+            #         **output_query_state,
+            #         **response_data,
+            #         # 'response': response_raw_data
+            #     }
+            #
+            #     query_states.append(output_query_state)
+            # elif isinstance(response_data, list):
+            #     for item in list(response_data):
+            #         if not isinstance(item, dict):
+            #             raise ValueError(f'item in response list of rows must be in of type dict.')
+            #
+            #         # state_item_key = calculate_string_dict_hash(item)
+            #         output_query_state = {**{
+            #             # 'state_item_key': state_item_key,
+            #             'user_prompt': user_prompt,
+            #             'system_prompt': system_prompt,
+            #         }, **item, **additional_query_state}
+            #
+            #         # format column names and append the state key
+            #         query_states.append(output_query_state)
+            # else:
+            #     output_query_state = {
+            #         **output_query_state,
+            #         'response': response_data
+            #     }
+            #
+            #     query_states.append(output_query_state)
+            #
+            # # write the query states (synchronized)
+            # query_states = self.apply_states(query_states=query_states)
+            #
+            # # return the updated query state after persistence, generally the same unless it was remapped to new columns
+            # return query_states
 
         except Exception as exception:
             await self.fail_execute_processor_state(
