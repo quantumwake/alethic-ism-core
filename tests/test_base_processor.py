@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from alethic_ism_core.core.base_model import InstructionTemplate, ProcessorProvider, ProcessorState
@@ -101,8 +103,9 @@ def test_mock_processor_lm():
         provider=provider,
         failure_callback=failure_callback_handler
     )
-    response_1 = mock_processor.process_input_data_entry(input_query_state=input_query_states[0])
-    response_2 = mock_processor.process_input_data_entry(input_query_state=input_query_states[1])
+
+    response_1 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states[0]))
+    response_2 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states[1]))
 
     assert response_1[0]['response'] == 'the sky is blue'
     assert response_2[0]['response'] == 'the grass is green'

@@ -80,7 +80,7 @@ def load_template(template_config_file: str):
 
         # throw an exception if both the template_file and template keys are set
         if template_content:
-            raise Exception(f'Cannot define a template_content and a template_content_file in the same '
+            raise ValueError(f'Cannot define a template_content and a template_content_file in the same '
                             f'template configuration {template_config_file}. For example, if you define the key '
                             f'"template_content" with some text content, you cannot also define a '
                             f'"template_content_file" which points to a different content from a file"')
@@ -111,7 +111,7 @@ def load_template(template_config_file: str):
             template_dict['template_content'] = template_content
 
     if not template_content:
-        raise Exception(f'no template defined in template file {template_config_file} with configuration {template_dict}')
+        raise ValueError(f'no template defined in template file {template_config_file} with configuration {template_dict}')
 
     return template_dict
 
@@ -171,7 +171,7 @@ def build_template_text(template: Union[dict, str], query_state: dict, strip_new
 
         if error:
             logging.error(error)
-            raise Exception(error)
+            raise ValueError(error)
 
         # process the template now
         template_name = template['name']
@@ -312,7 +312,7 @@ def parse_response(raw_response: str):
             flattened = flatten(data_parsed)
             return flattened, data_type, raw_response  # TODO extract the list of column names
         elif 'csv' == data_type:
-            raise Exception(f'unsupported csv format, need to fix the _parse_response_csv(.) function')
+            raise ValueError(f'unsupported csv format, need to fix the _parse_response_csv(.) function')
 
     return raw_response, data_type, raw_response
 
@@ -397,7 +397,7 @@ def obsolete_parse_response_csv(response: str):
                      f'with response: {response}')
 
             logging.error(error)
-            raise Exception(error)
+            raise ValueError(error)
 
         record = {columns[i]: p for i, p in enumerate(row_data)}
         data.append(record)

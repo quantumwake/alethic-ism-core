@@ -99,9 +99,10 @@ class BaseProcessor(Monitorable):
 
     async def execute(self, input_query_state: dict, force: bool = False):
         try:
+            route_id = self.output_processor_state.id
 
             await self.send_processor_state_update(
-                processor_state=self.output_processor_state,
+                route_id=route_id,
                 status=ProcessorStatusCode.RUNNING
             )
 
@@ -110,14 +111,14 @@ class BaseProcessor(Monitorable):
                 force=force)
 
             await self.send_processor_state_update(
-                processor_state=self.output_processor_state,
+                route_id=route_id,
                 status=ProcessorStatusCode.COMPLETED
             )
 
             return output_query_states
         except Exception as ex:
             await self.fail_execute_processor_state(
-                processor_state=self.output_processor_state,
+                route_id=self.output_processor_state.id,
                 exception=ex,
                 data=input_query_state
             )

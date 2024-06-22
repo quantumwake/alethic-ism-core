@@ -15,7 +15,7 @@ from tests.test_metaclass_state_storage import (
     MockStateStorage,
     MockProcessorProviderStorage,
     MockProcessorStorage,
-    MockProcessorStateStorage, MockTemplateStorage
+    MockProcessorStateRouteStorage, MockTemplateStorage
 )
 
 
@@ -95,8 +95,7 @@ class MockMessagingConsumerProvider(BaseMessagingConsumerProvider):
             # mocked message received on consumer main endpoint
             data = f"""{{
                 "type": "query_state",
-                "processor_id": "{processor_id}",
-                "input_state_id": "10000000-0000-0000-0000-000000000000",
+                "route_id": "10000000-0000-0000-0000-000000000000:{processor_id}",
                 "query_state": {query_states}
             }}"""
 
@@ -106,8 +105,7 @@ class MockMessagingConsumerProvider(BaseMessagingConsumerProvider):
             self.count += 1
             data = f"""{{
                 "type": "query_state",
-                "processor_id": "{processor_id}",
-                "input_state_id": "10000000-0000-0000-0000-00000000000a",
+                "route_id": "10000000-0000-0000-0000-000000000000:{processor_id}",
                 "query_state": null
             }}"""
             return msg, data
@@ -161,7 +159,7 @@ def test_message_pre_post_fail_status():
     test_state_machine_storage = StateMachineStorage(
         state_storage=MockStateStorage(),
         processor_storage=MockProcessorStorage(),
-        processor_state_storage=MockProcessorStateStorage(),
+        processor_state_storage=MockProcessorStateRouteStorage(),
         processor_provider_storage=MockProcessorProviderStorage(),
         template_storage=MockTemplateStorage()
     )
@@ -185,7 +183,7 @@ def test_message_consumer():
     test_state_machine_storage = StateMachineStorage(
         state_storage=MockStateStorage(),
         processor_storage=MockProcessorStorage(),
-        processor_state_storage=MockProcessorStateStorage(),
+        processor_state_storage=MockProcessorStateRouteStorage(),
         processor_provider_storage=MockProcessorProviderStorage(),
         template_storage=MockTemplateStorage()
     )

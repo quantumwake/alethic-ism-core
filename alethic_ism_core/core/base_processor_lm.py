@@ -128,7 +128,7 @@ class BaseProcessorLM(BaseProcessor):
             elif isinstance(response_data, list):
                 for item in list(response_data):
                     if not isinstance(item, dict):
-                        raise Exception(f'item in response list of rows must be in of type dict.')
+                        raise ValueError(f'item in response list of rows must be in of type dict.')
 
                     # state_item_key = calculate_string_dict_hash(item)
                     output_query_state = {**{
@@ -154,8 +154,9 @@ class BaseProcessorLM(BaseProcessor):
             return query_states
 
         except Exception as exception:
-            self.fail_execute_processor_state(
-                self.output_processor_state,
+            await self.fail_execute_processor_state(
+                # self.output_processor_state,
+                route_id=self.output_processor_state.id,
                 exception=exception,
                 data=input_query_state
             )

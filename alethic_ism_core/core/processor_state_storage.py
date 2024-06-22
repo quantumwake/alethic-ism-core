@@ -12,7 +12,7 @@ from .base_model import (
     ProcessorState,
     ProcessorProvider,
     ProcessorStateDirection,
-    ProcessorProperty, MonitorLogEvent
+    ProcessorProperty, MonitorLogEvent, ProcessorStatusCode
 )
 from .processor_state import (
     State,
@@ -241,19 +241,26 @@ class ProcessorStorage:
         raise NotImplementedError()
 
 
-class ProcessorStateStorage:
+class ProcessorStateRouteStorage:
 
-    def fetch_processor_states_by_project_id(self, project_id) \
+    def fetch_processor_state_routes_by_project_id(self, project_id) \
             -> Optional[List[ProcessorState]]:
         raise NotImplementedError()
 
-    def fetch_processor_state(self, processor_id: str = None, state_id: str = None,
-                              direction: ProcessorStateDirection = None) \
+    def fetch_processor_state_route(self,
+                                    route_id: str = None,
+                                    processor_id: str = None,
+                                    state_id: str = None,
+                                    direction: ProcessorStateDirection = None,
+                                    status: ProcessorStatusCode = None) \
             -> Optional[List[ProcessorState]]:
         raise NotImplementedError()
 
-    def insert_processor_state(self, processor_state: ProcessorState) \
+    def insert_processor_state_route(self, processor_state: ProcessorState) \
             -> ProcessorState:
+        raise NotImplementedError()
+
+    def delete_processor_state_route(self, route_id: str) -> int:
         raise NotImplementedError()
 
 
@@ -265,6 +272,13 @@ class MonitorLogEventStorage:
 
     def insert_monitor_log_event(self, monitor_log_event: MonitorLogEvent) \
             -> MonitorLogEvent:
+        raise NotImplementedError()
+
+    def delete_monitor_log_event(self,
+                                 id: str = None,
+                                 user_id: str = None,
+                                 project_id: str = None,
+                                 force: bool = False) -> int:
         raise NotImplementedError()
 
 
@@ -319,7 +333,7 @@ class ForwardingStateMachineStorageMeta(type):
 
 class StateMachineStorage(StateStorage,
                           ProcessorStorage,
-                          ProcessorStateStorage,
+                          ProcessorStateRouteStorage,
                           ProcessorProviderStorage,
                           WorkflowStorage,
                           TemplateStorage,
@@ -330,7 +344,7 @@ class StateMachineStorage(StateStorage,
     def __init__(self,
                  state_storage: StateStorage = None,
                  processor_storage: ProcessorStorage = None,
-                 processor_state_storage: ProcessorStateStorage = None,
+                 processor_state_storage: ProcessorStateRouteStorage = None,
                  processor_provider_storage: ProcessorProviderStorage = None,
                  workflow_storage: WorkflowStorage = None,
                  template_storage: TemplateStorage = None,

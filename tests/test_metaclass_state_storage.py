@@ -1,24 +1,54 @@
 import uuid
 from typing import Optional, List
-
 import pytest
 
-from alethic_ism_core.core.base_model import ProcessorProvider, ProcessorStateDirection, ProcessorState, Processor, \
-    InstructionTemplate
-from alethic_ism_core.core.processor_state import State, StateConfig, StateDataKeyDefinition, StateConfigLM
-from alethic_ism_core.core.processor_state_storage import StateStorage, \
-    StateMachineStorage, ProcessorStateStorage, ProcessorProviderStorage, ProcessorStorage, TemplateStorage
+from alethic_ism_core.core.base_model import (
+    ProcessorProvider,
+    ProcessorStateDirection,
+    ProcessorState,
+    Processor,
+    InstructionTemplate, ProcessorStatusCode
+)
+from alethic_ism_core.core.processor_state import (
+    State,
+    StateConfig,
+    StateDataKeyDefinition,
+    StateConfigLM
+)
+
+from alethic_ism_core.core.processor_state_storage import (
+    StateStorage,
+    StateMachineStorage,
+    ProcessorStateRouteStorage,
+    ProcessorProviderStorage,
+    ProcessorStorage,
+    TemplateStorage
+)
 
 
-class MockProcessorStateStorage(ProcessorStateStorage):
+class MockProcessorStateRouteStorage(ProcessorStateRouteStorage):
 
-    def fetch_processor_state(self, processor_id: str = None, state_id: str = None,
-                              direction: ProcessorStateDirection = None) \
+    def fetch_processor_state_route(self,
+                                    route_id: str = None,
+                                    processor_id: str = None,
+                                    state_id: str = None,
+                                    direction: ProcessorStateDirection = None,
+                                    status: ProcessorStatusCode = None) \
             -> Optional[List[ProcessorState]]:
+
+        # route_id = (f'{state_id}:{processor_id}'
+        #       if not direction or direction.value == ProcessorStateDirection.INPUT
+        #       else f'{processor_id}:{state_id}',)
+
+        if route_id:
+            from_to_ids = route_id.split(':')
+            state_id = from_to_ids[0]
+            processor_id = from_to_ids[1]
 
         if state_id:
             return [
                 ProcessorState(
+                    id=route_id,
                     processor_id=processor_id,
                     state_id=state_id,
                     direction=direction if direction else ProcessorStateDirection.INPUT
@@ -26,22 +56,34 @@ class MockProcessorStateStorage(ProcessorStateStorage):
             ]
         else:
             if direction:
+                state_id = state_id if state_id else f"test {direction} state id"
+                if direction == ProcessorStateDirection.INPUT:
+                    route_id = f'{state_id}:{processor_id}'
+                else:
+                    route_id = f'{processor_id}:{state_id}'
+
                 return [
                     ProcessorState(
+                        id=route_id,
                         processor_id=processor_id,
-                        state_id=f"test {direction} state id",
+                        state_id=state_id,
                         direction=direction
                 )]
             else:
+                state_id_input = str(uuid.uuid4()) if not state_id else state_id
+                state_id_output = str(uuid.uuid4()) if not state_id else state_id
                 return [
                     ProcessorState(
+                        id=f'{state_id_input}:{processor_id}',
                         processor_id=processor_id,
-                        state_id=str(uuid.uuid4()) if not state_id else state_id,
+                        state_id=state_id_input,
                         direction=direction if direction else ProcessorStateDirection.INPUT
                     ),
+
                     ProcessorState(
+                        id=f'{processor_id}:{state_id_output}',
                         processor_id=processor_id,
-                        state_id=str(uuid.uuid4()) if not state_id else state_id,
+                        state_id=state_id_output,
                         direction=direction if direction else ProcessorStateDirection.OUTPUT
                     ),
                 ]
@@ -105,7 +147,7 @@ def test_state_machine_storage_method_derive():
     test_state_machine = StateMachineStorage(
         state_storage=MockStateStorage(),
         processor_storage=MockProcessorStorage(),
-        processor_state_storage=MockProcessorStateStorage(),
+        processor_state_storage=MockProcessorStateRouteStorage(),
         processor_provider_storage=MockProcessorProviderStorage(),
         template_storage=MockTemplateStorage()
     )

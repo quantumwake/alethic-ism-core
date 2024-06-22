@@ -414,7 +414,7 @@ class State(BaseModelHashable):
             # otherwise attempt to remap it
             _map = remap[state_item_name]
             if not _map:
-                raise Exception(f'remapping of field {state_item_name} specified without a callable '
+                raise ValueError(f'remapping of field {state_item_name} specified without a callable '
                                 f'function NEITHER alias. Please specify either a function or an alias using '
                                 f'the .alias property in {type(StateDataKeyDefinition)}, current values: {remap}')
 
@@ -435,8 +435,9 @@ class State(BaseModelHashable):
         ## map the template variables
         for template_column in self.config.template_columns:
             if template_column.name not in query_state:
-                raise Exception(
-                    f'template column {template_column} not specified in query state {query_state}, did you remap it using .remap_query_state_columns[]??')
+                raise ValueError(
+                    f'template column {template_column} not specified in query state {query_state}, '
+                    f'did you remap it using .remap_query_state_columns[]??')
 
             template_content = query_state[template_column.name]
 
@@ -458,7 +459,7 @@ class State(BaseModelHashable):
     def expand_columns(self, column: StateDataColumnDefinition, value_func: Any):
 
         if column.name in self.columns:
-            raise Exception(f'column {column.name} already exists')
+            raise ValueError(f'column {column.name} already exists')
 
         logging.info(f'applying new column {column.name}')
         self.add_column(column)
@@ -508,7 +509,7 @@ class State(BaseModelHashable):
             updated_columns = state.process_and_add_columns(query_state)
         """
         if not query_state:
-            raise Exception(f'unable to apply columns on a null or blank query state')
+            raise ValueError(f'unable to apply columns on a null or blank query state')
 
         # calculate the columns definition hash, we use this to compare to ensure there is some consistency
         # Helper function to create new columns definitions from the query state
@@ -590,7 +591,7 @@ class State(BaseModelHashable):
         if not column or not column.name:
             error = f'column definition cannot be null or blank, it must also include a data type and name'
             logging.error(error)
-            raise Exception(error)
+            raise ValueError(error)
 
         if column.name in self.columns:
             logging.warning(f'ignored column {column.name}, column already defined for state {self.config}')
@@ -795,7 +796,7 @@ class State(BaseModelHashable):
     #             state = State.model_validate(json.load(fio))
     #             return state
     #     else:
-    #         raise Exception(f'unsupported input path type {input_path}')
+    #         raise ValueError(f'unsupported input path type {input_path}')
     #
     # def save_state(self, output_path: str = None):
     #     if not output_path:
@@ -807,7 +808,7 @@ class State(BaseModelHashable):
     #             logging.debug(f'falling back to using config output path: {self.config.output_path}')
     #             output_path = self.config.output_path
     #         else:
-    #             raise Exception(f'Unable to persist to directory output path as specified'
+    #             raise ValueError(f'Unable to persist to directory output path as specified'
     #                             f'by the state.config.output_path: {self.state.output_path}')
     #
     #     self.update_date = dt.utcnow()
@@ -829,15 +830,15 @@ class State(BaseModelHashable):
     #         with open(output_path, 'w') as fio:
     #             fio.write(self.model_dump_json())
     #     else:
-    #         raise Exception(f'Unsupported file type for {output_path}')
+    #         raise ValueError(f'Unsupported file type for {output_path}')
 
 
 def implicit_count_with_force_count(state: State):
     if not state:
-        raise Exception(f'invalid state input, cannot be empty or undefined')
+        raise ValueError(f'invalid state input, cannot be empty or undefined')
 
     if not isinstance(state, State):
-        raise Exception(f'invalid state type, expected {type(State)}, got {type(state)}')
+        raise ValueError(f'invalid state type, expected {type(State)}, got {type(state)}')
 
     count = state.count
     logging.info(f'current state data count: {count} for state config {state.config}')
@@ -892,28 +893,16 @@ def implicit_count_with_force_count(state: State):
 
 
 def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataKeyDefinition]):
-    try:
+    # this will be used as the primary key
+    state_key_values = extract_values_from_query_state_by_key_definition(
+        key_definitions=key_definitions,
+        query_state=query_state)
 
-        # this will be used as the primary key
-        state_key_values = extract_values_from_query_state_by_key_definition(
-            key_definitions=key_definitions,
-            query_state=query_state)
+    # iterate each primary key value pair and create a tuple for hashing
+    keys = [(name, value) for name, value in state_key_values.items()]
 
-        # iterate each primary key value pair and create a tuple for hashing
-        keys = [(name, value) for name, value in state_key_values.items()]
-
-        # hash the keys as a string in sha256
-        return calculate_uuid_based_from_string_with_sha256_seed(str(keys)), keys
-
-    except Exception as e:
-        error = (f'error in trying to build state data row key for key definition {key_definitions} '
-                 f'and query_state {query_state}. Ensure that the output include keys and query state '
-                 f'keys you are trying to use with this key definition are reflective of both the input '
-                 f'query state and the response query state. Not that aliases could also cause key match '
-                 f'errors, ensure that key combinations are correct. Exception: {e}')
-
-        logging.error(error)
-        raise Exception(error)
+    # hash the keys as a string in sha256
+    return calculate_uuid_based_from_string_with_sha256_seed(str(keys)), keys
 
 
 # def load_state(state_file: str) -> Any:
@@ -979,17 +968,14 @@ def build_state_data_row_key(query_state: dict, key_definitions: List[StateDataK
 #     return value
 
 
-def extract_values_from_query_state_by_key_definition(query_state: dict,
-                                                      key_definitions: List[StateDataKeyDefinition] = None):
+def extract_values_from_query_state_by_key_definition(
+        query_state: dict,
+        key_definitions: List[StateDataKeyDefinition] = None
+):
     # if the key config map does not exist then attempt
     # to use the 'query' key as the key value mapping
     if not key_definitions:
         return None
-
-        # if "query" not in query_state:
-        #     raise Exception(f'query does not exist in query state {query_state}')
-        #
-        # return query_state['query']
 
     # iterate each parameter name and look it up in the state object
     results = {}
@@ -1001,9 +987,9 @@ def extract_values_from_query_state_by_key_definition(query_state: dict,
         # if it does not exist, throw an exception to warn the user that the state input is incorrect.
         if key_name not in query_state:
             if required:
-                raise Exception(f'Invalid state input for parameter: {key_name}, '
-                                f'query_state: {query_state}, '
-                                f'key definition: {key}')
+                raise ValueError(f'Invalid state input for parameter: {key_name}, '
+                                 f'query_state: {query_state}, '
+                                 f'key definition: {key}')
             else:
                 value = None  # skip the value since it does not exist in the original query state
         else:

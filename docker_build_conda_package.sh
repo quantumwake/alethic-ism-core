@@ -1,6 +1,6 @@
 #!/bin/bash
 
-APP_NAME="alethic-ism-api"
+APP_NAME="alethic-ism-core"
 DOCKER_NAMESPACE="krasaee"
 GIT_COMMIT_ID=$(git rev-parse HEAD)
 TAG="$DOCKER_NAMESPACE/$APP_NAME:$GIT_COMMIT_ID"

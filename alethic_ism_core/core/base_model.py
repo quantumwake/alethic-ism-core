@@ -122,7 +122,7 @@ class Processor(BaseModelHashable):
 class ProcessorState(BaseModelHashable):
 
     _internal_id: Optional[int] = None     # internal reference number for tracking of log messages
-
+    id: Optional[str] = None
     processor_id: str
     state_id: str
     direction: ProcessorStateDirection = ProcessorStateDirection.INPUT

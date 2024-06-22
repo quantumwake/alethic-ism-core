@@ -7,7 +7,7 @@ import asyncio
 from typing import Any, Dict, Union
 
 from .base_message_route_model import Route
-from .base_model import ProcessorState, ProcessorStatusCode, ProcessorStateDirection
+from .base_model import ProcessorState, ProcessorStatusCode
 from .processor_state_storage import StateMachineStorage
 
 
@@ -46,31 +46,18 @@ class Monitorable:
 
     async def send_processor_state_update(
             self,
-            processor_state: Union[Dict, str],
+            route_id: str,
             status: ProcessorStatusCode,
             data: dict = None,
-            exception: Exception = None,
-            user_id: str = None,
-            project_id: str = None):
-
-        # convert to dictionary of processor_state from ProcessorState
-        processor_state = processor_state if not isinstance(processor_state, ProcessorState) else \
-            {
-                "processor_id": processor_state.processor_id,
-                "state_id": processor_state.state_id,
-                "direction": processor_state.direction.name,
-                "status": processor_state.status.name
-            }
+            exception: Any = None):
 
         if not self.monitor_route:
             logging.warning(f'no monitor route defined, unable to provide processor state status updates')
             return
 
         monitor_message = json.dumps({
-            "user_id": user_id,
-            "project_id": project_id,
             "type": "processor_state",
-            "processor_state": processor_state,
+            "route_id": route_id,
             "status": status.name,
             "exception": str(exception) if exception else None,
             "data": data
@@ -78,31 +65,33 @@ class Monitorable:
 
         self.monitor_route.send_message(msg=monitor_message)
 
-    async def send_processor_state_from_consumed_message(self, consumer_message_mapping: dict, status: ProcessorStatusCode,
-                                                         direction: ProcessorStateDirection = ProcessorStateDirection.INPUT,
-                                                         exception: Exception = None,
+    async def send_processor_state_from_consumed_message(self,
+                                                         consumer_message_mapping: dict,
+                                                         status: ProcessorStatusCode,
+                                                         exception: Any = None,
                                                          data: dict = None):
 
         cmm = consumer_message_mapping  # for readability short name
+        route_id = cmm['route_id'] if 'route_id' in cmm else None
 
-        user_id = cmm['user_id'] if 'user_id' in cmm else None
-        project_id = cmm['project_id'] if 'project_id' in cmm else None
-        state_id = cmm['input_state_id'] if 'input_state_id' in cmm else None
-        processor_id = cmm['processor_id'] if 'processor_id' in cmm else None
+        # user_id = cmm['user_id'] if 'user_id' in cmm else None
+        # project_id = cmm['project_id'] if 'project_id' in cmm else None
+        # state_id = cmm['input_state_id'] if 'input_state_id' in cmm else None
+        # processor_id = cmm['processor_id'] if 'processor_id' in cmm else None
 
         await self.send_processor_state_update(
-            user_id=user_id,
-            project_id=project_id,
+            # user_id=user_id,
+            # project_id=project_id,
             status=status,
-            processor_state={
-                "processor_id": processor_id,
-                "state_id": state_id,
-                "direction": direction.name
-            },
+            route_id=route_id,
+            # processor_state={
+            #     "processor_id": processor_id,
+            #     "state_id": state_id,
+            #     "direction": direction.name
+            # },
             exception=exception,
             data=data
         )
-
 
     async def pre_execute(self, consumer_message_mapping: dict, **kwargs):
         await self.send_processor_state_from_consumed_message(
@@ -123,7 +112,7 @@ class Monitorable:
             status=ProcessorStatusCode.COMPLETED
         )
 
-    async def fail_validate_input_message(self, consumer_message_mapping: dict, exception: Exception = None):
+    async def fail_validate_input_message(self, consumer_message_mapping: dict, exception: Any = None):
         # failed to execute validate input message, differs from when a processor fails to execute on a query entry
         await self.send_processor_state_from_consumed_message(
             consumer_message_mapping=consumer_message_mapping,
@@ -132,29 +121,15 @@ class Monitorable:
         )
 
     async def fail_execute_processor_state(self,
-                                           processor_state: ProcessorState,
-                                           exception: Exception,
+                                           route_id: str,
+                                           exception: Any,
                                            data: dict = None,
                                            **kwargs):
 
-        # if the user_id and project_id is available, then extract it, each message should
-        # be submitted with the following information for additional tracking in case of root errors
-        user_id = None
-        project_id = None
-        if data:
-            user_id = data['user_id'] if 'user_id' in data else None
-            project_id = data['project_id'] if 'project_id' in data else None
-
         # failed to execute the processor, differs from when a processor fails to execute on a query entry
         await self.send_processor_state_update(
-            user_id=user_id,
-            project_id=project_id,
             status=ProcessorStatusCode.FAILED,
-            processor_state={
-                "processor_id": processor_state.processor_id,
-                "state_id": processor_state.state_id,
-                "direction": processor_state.direction.name
-            },
+            route_id=route_id,
             exception=exception,
             data=data
         )
@@ -180,22 +155,15 @@ class BaseMessagingConsumer(Monitorable):
     def close(self):
         self.messaging_provider.close()
 
-    async def broken(self, exception: Exception, msg: Any):
-        logging.error(f"Message validation error: {exception} on data {msg}")
-        self.messaging_provider.acknowledge_main(msg)
-
     async def _execute(self, message: dict):
         try:
 
-            async def handle_message(consumer, msg):
+            async def handle_message(msg):
                 await self.pre_execute(message)
                 await self.execute(message)
                 await self.post_execute(message)
 
-            # Process the message asynchronously
-            # asyncio.create_task(handle_message(self.messaging_provider.main_consumer, message))
-            #
-            await handle_message(self.messaging_provider.main_consumer, message)
+            await handle_message(message)
             return True
         except ValueError as e:
             await self.fail_validate_input_message(consumer_message_mapping=message, exception=e)
@@ -260,8 +228,7 @@ class BaseMessagingConsumer(Monitorable):
             except ValueError as e:
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
                 continue
-            # except Exception as e:
-            #     await self.broken(exception=e, msg=msg)
+
             finally:
                 pass
 
