@@ -92,7 +92,7 @@ def load_state_from_pickle(file_name: str) -> 'State':
 
 
 class StateConfig(BaseModel):
-    name: str
+    name: Optional[str] = None
     storage_class: Optional[str] = "database"
     primary_key: Optional[List[StateDataKeyDefinition]] = None
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
@@ -101,7 +101,7 @@ class StateConfig(BaseModel):
 
     flag_require_primary_key: Optional[bool] = False
     flag_query_state_inheritance_all: Optional[bool] = True
-    flag_query_state_inheritance_inverse: Optional[bool] = True
+    flag_query_state_inheritance_inverse: Optional[bool] = False
     flag_auto_save_output_state: Optional[bool] = False
     flag_auto_route_output_state: Optional[bool] = False
 

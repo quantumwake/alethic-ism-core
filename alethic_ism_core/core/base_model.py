@@ -113,7 +113,7 @@ class ProcessorProperty(BaseModelHashable):
 
 class Processor(BaseModelHashable):
     id: Optional[str] = None
-    provider_id: str
+    provider_id: Optional[str] = None
     project_id: str
     status: ProcessorStatusCode = ProcessorStatusCode.CREATED
     properties: Optional[List[ProcessorProperty]] = None
