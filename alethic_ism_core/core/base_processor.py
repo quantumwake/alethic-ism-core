@@ -1,4 +1,6 @@
+import json
 import logging as log
+from typing import Any, List, Dict, Optional
 
 from .base_message_route_model import Route
 from .base_message_provider import Monitorable
@@ -17,6 +19,158 @@ from .processor_state import (
 logging = log.getLogger(__name__)
 
 
+class StatePropagationProvider:
+    async def apply_state(self, processor: 'BaseProcessor',
+                          input_query_state: Any,
+                          output_query_states: [dict]) -> [dict]:
+        raise NotImplementedError()
+
+
+class StatePropagationProviderRouter(StatePropagationProvider):
+
+    def __init__(self, route: Route = None):
+        self.route = route
+
+    async def apply_state(self,
+                          processor: 'BaseProcessor',
+                          input_query_state: Any,
+                          output_query_states: [dict]) -> [dict]:
+        """
+        Route the processed new query states from the response to a synchronization topic
+
+        Args:
+            processor (List[Dict]): The processor instance that is processing this input query state entry
+            input_query_state (Any): The initial input query state.
+            output_query_states (List[Dict]): The processed output query states.
+
+        Returns:
+            List[Any]: The result of applying the query states to the output state.
+        """
+
+        # create a new message for routing purposes
+        route_message = {
+            "route_id": processor.output_processor_state.id,
+            "type": "query_state_list",
+            "input_query_state": input_query_state,
+            "query_state_list": output_query_states
+        }
+
+        self.route.send_message(json.dumps(route_message))
+        return output_query_states
+
+
+class StatePropagationProviderRouterStateRouter(StatePropagationProviderRouter):
+    async def apply_state(self, processor: 'BaseProcessor',
+                          input_query_state: Any,
+                          output_query_states: [dict]) -> [dict]:
+
+        output_state = processor.output_state
+
+        # If the flag is set and the flat is false, then skip it
+        if not processor.config.flag_auto_route_output_state:
+            logging.debug(f'skipping auto route of output state events, for state id: {output_state.id}')
+            return output_query_states
+
+        return await super().apply_state(
+            processor=processor,
+            input_query_state=input_query_state,
+            output_query_states=output_query_states,
+        )
+
+
+class StatePropagationProviderRouterStateSyncStore(StatePropagationProviderRouter):
+    async def apply_state(self, processor: 'BaseProcessor',
+                          input_query_state: Any,
+                          output_query_states: [dict]) -> [dict]:
+        """
+        Persists the processed new query states from the response.
+
+        Args:
+            processor (List[Dict]): The processor instance that is processing this input query state entry
+            input_query_state (Any): The initial input query state.
+            output_query_states (List[Dict]): The processed output query states.
+
+        Returns:
+            List[Any]: The result of applying the query states to the output state.
+        """
+
+        # If the flag is set and the flat is false, then skip it
+        if not processor.config.flag_auto_save_output_state:
+            logging.debug(f'skipping persistence of state events, for state id: {processor.output_state.id}')
+            return output_query_states
+
+        return await super().apply_state(
+            processor=processor,
+            input_query_state=input_query_state,
+            output_query_states=output_query_states,
+        )
+
+
+class StatePropagationProviderCore(StatePropagationProvider):
+
+    async def apply_state(self,
+                          processor: 'BaseProcessor',
+                          input_query_state: Any,
+                          output_query_states: [dict]) -> [dict]:
+        """
+        Writes the output_query_states to the state object, in memory
+
+        Args:
+            processor (List[Dict]): The processor instance that is processing this input query state entry
+            input_query_state (Any): The initial input query state.
+            output_query_states (List[Dict]): The processed output query states.
+
+        Returns:
+            List[Any]: The result of applying the query states to the output state.
+        """
+        # Otherwise attempt to persist the data
+        logging.debug(f'persisting processed new query states from response. query states: {output_query_states} ')
+        return [processor.output_state.apply_query_state(  # Iterate each query state and apply it to the output state
+            query_state=query_state,
+            scope_variable_mappings={
+                "provider": processor.provider,
+                "processor": processor.processor,
+                "input_query_state": input_query_state
+            }
+        ) for query_state in output_query_states]
+
+
+class StatePropagationProviderDistributor(StatePropagationProvider):
+
+    def __init__(self, propagators: List[StatePropagationProvider]):
+        self.propagators = propagators
+
+    async def apply_state(
+            self,
+            processor: 'BaseProcessor',
+            input_query_state: Any,
+            output_query_states: [dict]) -> [dict]:
+
+        """
+        Writes the output_query_states to the state object, in memory
+
+        Args:
+            processor (List[Dict]): The processor instance that is processing this input query state entry
+            input_query_state (Any): The initial input query state.
+            output_query_states (List[Dict]): The processed output query states.
+
+        Returns:
+            List[Any]: The result of applying the query states to the output state.
+        """
+        # iteration each propagator and invoke it
+        for propagator in self.propagators:
+            propagated_output_state = await propagator.apply_state(
+                processor=processor,
+                input_query_state=input_query_state,
+                output_query_states=output_query_states
+            )
+
+            output_query_states = {**output_query_states, **propagated_output_state}
+
+        # return the final propagated output query states
+        return output_query_states
+
+
 class BaseProcessor(Monitorable):
 
     def __init__(self,
@@ -25,15 +179,18 @@ class BaseProcessor(Monitorable):
                  provider: ProcessorProvider = None,
                  processor: Processor = None,
                  output_processor_state: ProcessorState = None,
-                 state_router_route: Route = None,
-                 sync_store_route: Route = None,
+                 state_propagation_provider: StatePropagationProvider = StatePropagationProviderCore(),
+                 # state_router_route: Route = None,
+                 # sync_store_route: Route = None,
                  **kwargs):
 
         super().__init__(**kwargs)
 
         # TODO move into a Syncable and StateRouteable feature class
-        self.sync_store_route = sync_store_route
-        self.state_router_route = state_router_route
+        # self.sync_store_route = sync_store_route
+        # self.state_router_route = state_router_route
+
+        self.state_propagation_provider = state_propagation_provider
 
         self.current_status = ProcessorStatusCode.CREATED
         self.output_state = output_state
@@ -98,18 +255,34 @@ class BaseProcessor(Monitorable):
         self.current_status = new_status
 
     async def execute(self, input_query_state: dict, force: bool = False):
+        """
+        Executes the processor state update and processes the input data entry.
+
+        Args:
+            input_query_state (Dict): The input query state to process.
+            force (bool, optional): Flag to force the process. Defaults to False.
+
+        Returns:
+            List[Dict]: The processed output query states.
+
+        Raises:
+            Exception: If an error occurs during execution.
+        """
         try:
             route_id = self.output_processor_state.id
 
+            # RUNNING: the processor is about to execute the instructions
             await self.send_processor_state_update(
                 route_id=route_id,
                 status=ProcessorStatusCode.RUNNING
             )
 
+            # RUNNING (INTRA): the processor is executing the output instructions on the input
             output_query_states = await self.process_input_data_entry(
                 input_query_state=input_query_state,
                 force=force)
 
+            # COMPLETED: the processor has completed execution of instructions
             await self.send_processor_state_update(
                 route_id=route_id,
                 status=ProcessorStatusCode.COMPLETED
@@ -122,6 +295,42 @@ class BaseProcessor(Monitorable):
                 exception=ex,
                 data=input_query_state
             )
+
+    async def finalize_result(self, input_query_state: Any, result: Any, additional_query_state: Any) -> List[Any]:
+        """
+        Finalizes the result by applying the result to the output state.
+
+        Args:
+            input_query_state (Any): The initial input query state.
+            result (Any): The result of the execution.
+            additional_query_state (Any): Any additional output values.
+
+        Returns:
+            List[Any]: The final applied states.
+        """
+
+        # Apply the result from the execution
+        output_query_states = await self.output_state.apply_result(
+            result=result,  # the result of the execution
+            input_query_state=input_query_state,  # the initial input state
+            additional_query_state=additional_query_state  # any additional output values
+        )
+
+        # Apply the new query states to the state propagator, if defined
+        output_query_states = await self.state_propagation_provider.apply_state(
+            processor=self,
+            input_query_state=input_query_state,
+            output_query_states=output_query_states
+        )
+
+        # Apply the new query state to the persistent storage class defined
+        # output_query_states = await self.save_states(
+        #     input_query_state=input_query_state,
+        #     output_query_states=output_query_states
+        # )
+
+        # return the results
+        return output_query_states
 
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         raise NotImplementedError("process the query state entry")

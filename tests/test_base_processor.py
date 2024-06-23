@@ -2,11 +2,24 @@ import asyncio
 
 import pytest
 
-from alethic_ism_core.core.base_model import InstructionTemplate, ProcessorProvider, ProcessorState
+from alethic_ism_core.core.base_model import (
+    InstructionTemplate,
+    ProcessorProvider,
+    ProcessorState,
+    Processor,
+    ProcessorStateDirection
+)
+
+from alethic_ism_core.core.processor_state import (
+    State,
+    StateConfig,
+    StateDataKeyDefinition,
+    StateConfigLM,
+    StateDataColumnDefinition
+)
+
 from alethic_ism_core.core.base_processor import BaseProcessor
 from alethic_ism_core.core.base_processor_lm import BaseProcessorLM
-from alethic_ism_core.core.processor_state import State, StateConfig, StateDataKeyDefinition, StateConfigLM, \
-    StateDataColumnDefinition
 from alethic_ism_core.core.processor_state_storage import StateMachineStorage
 
 input_query_states = [
@@ -52,6 +65,31 @@ class MockProcessor(BaseProcessor):
 
 class MockProcessorLM(BaseProcessorLM):
 
+    def __init__(self, output_state: dict, **kwargs):
+
+        super().__init__(output_state=output_state, **kwargs)
+
+        self.provider = ProcessorProvider(
+            id="test provider id",
+            name="test provider name",
+            version="test-version-1.0",
+            class_name="MockProviders"
+        )
+
+        self.processor = Processor(
+            id="test processor id",
+            provider_id=self.provider.id,
+            project_id="test project id"
+        )
+
+        self.output_processor_state = ProcessorState(
+            id=f"{self.processor.id}:{self.output_state.id}",
+            state_id=self.output_state.id,
+            processor_id=self.processor.id,
+            direction=ProcessorStateDirection.OUTPUT
+        )
+
+
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         question = values['question']
         response_dict = mock_question_response(input_query_state=values)
@@ -73,6 +111,7 @@ class MockProcessorLM(BaseProcessorLM):
 def test_mock_processor_lm():
     storage = MockStateMachineStorage()
     output_state = State(
+        id="test output state mock",
         config=StateConfigLM(
             name="Test Output State",
             storage_class="memory",
@@ -83,24 +122,16 @@ def test_mock_processor_lm():
         )
     )
     output_state.columns = {
-        "provider_name": StateDataColumnDefinition(name="provider_name",value="provider.name",callable=True),
+        "provider_name": StateDataColumnDefinition(name="provider_name",value="provider.name", callable=True),
         "provider_version": StateDataColumnDefinition(name="provider_version", value="provider.version", callable=True),
     }
-
-    provider = ProcessorProvider(
-        id="test provider id",
-        name="test provider name",
-        version="test-version-1.0",
-        class_name="MockProviders"
-    )
 
     def failure_callback_handler(processor_state: ProcessorState, exception: Exception, query_state: dict):
         pass
 
     mock_processor = MockProcessorLM(
-        state_machine_storage=storage,
         output_state=output_state,
-        provider=provider,
+        state_machine_storage=storage,
         failure_callback=failure_callback_handler
     )
 

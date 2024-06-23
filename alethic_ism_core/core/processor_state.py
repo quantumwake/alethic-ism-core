@@ -102,6 +102,8 @@ class StateConfig(BaseModel):
     flag_require_primary_key: Optional[bool] = False
     flag_query_state_inheritance_all: Optional[bool] = True
     flag_query_state_inheritance_inverse: Optional[bool] = True
+    flag_auto_save_output_state: Optional[bool] = False
+    flag_auto_route_output_state: Optional[bool] = False
 
 
 class StateConfigLM(StateConfig):
@@ -743,7 +745,130 @@ class State(BaseModelHashable):
         # Post-state apply - finalize the function and return the resulting state
         return self.post_state_apply(query_state=query_state)
 
+    async def apply_query_state_inheritance(self, input_query_state: Dict, output_query_state: Dict = {}) -> Dict:
+        """
+        Applies query state inheritance based on configuration settings.
+
+        Args:
+            input_query_state (Dict): The input query state dictionary to inherit values from.
+            output_query_state (Dict, optional): The output query state dictionary to inherit values into. Defaults to an empty dictionary.
+
+        Returns:
+            Dict: The updated output query state dictionary with inherited values.
+        """
+
+        # Quick return if no inheritance is set
+        if not self.config.query_state_inheritance:
+            return output_query_state
+
+        # Remove the keys defined in inheritance (as a result of inverse flag)
+        if self.config.flag_query_state_inheritance_inverse:
+            [
+                # Delete the value by key from the output
+                output_query_state.pop(keyDefinition.name, None)
+                for keyDefinition in self.config.query_state_inheritance
+            ]
+        # Extract specific keys from the input query state, to append to the output state
+        else:
+
+            # Extract the values by key from the input source
+            inherited_query_state = extract_values_from_query_state_by_key_definition(
+                key_definitions=self.config.query_state_inheritance,
+                query_state=input_query_state
+            )
+
+            # Apply the additional states to the current query_state
+            if inherited_query_state:
+                output_query_state = {
+                    **output_query_state,
+                    **inherited_query_state
+                }
+
+        return output_query_state
+
+    async def apply_result(self, result: Any, input_query_state: Any, additional_query_state: Any):
+        """
+        Applies the result to the query state by merging additional output values and handling state inheritance.
+
+        Args:
+            result (Any): The result of the process, which must be of type dict, list, or str.
+            input_query_state (Any): The input query state to be merged with the output state.
+            additional_query_state (Any): Additional values to be included in the output state.
+
+        Returns:
+            list: A list of dictionaries representing the output query states.
+
+        Raises:
+            ValueError: If the result is not of type dict, list, or str.
+        """
+
+        # Check if the result is of a valid type
+        if not isinstance(result, (dict, list, str)):
+            raise ValueError(f'the result of the process is not of type dict, list or str. type: {result} invalid')
+
+        # Initialize the output query state
+        output_query_state = {}
+        if additional_query_state:
+            output_query_state = {**additional_query_state}
+
+        # If inheritance of all variables from the previous input state is enabled
+        if self.config.flag_query_state_inheritance_all:
+            output_query_state = {**output_query_state, **input_query_state}
+
+            # Remove specific keys if they exist
+            output_query_state.pop('state_key', None)         # TODO create an internal function for this
+            output_query_state.pop('state_key_plain', None)
+
+        # Apply specific key inheritance if not all variables are inherited (or negated inheritance)
+        if not self.config.query_state_inheritance:
+            output_query_state = await self.apply_query_state_inheritance(
+                input_query_state=input_query_state,
+                output_query_state=output_query_state
+            )
+
+        # Build the output states based on the type of the result
+        query_states = []
+        if isinstance(result, dict):
+            output_query_state = {
+                **output_query_state,
+                **result,
+            }
+
+            query_states.append(output_query_state)
+        elif isinstance(result, list):
+            base_output_query_state = output_query_state
+            for item in list(result):
+                if not isinstance(item, dict):
+                    raise ValueError(f'item in response list of rows must be in of type dict.')
+
+                # state_item_key = calculate_string_dict_hash(item)
+                output_query_state = {
+                    **base_output_query_state,
+                    ** item,
+                }
+
+                # format column names and append the state key
+                query_states.append(output_query_state)
+        else:
+            output_query_state = {
+                **output_query_state,
+                'result': result
+            }
+
+            query_states.append(output_query_state)
+
+        return query_states
+
     def flag_require_primary_key(self):
+        """
+        Checks if a primary key is required and if it is defined, raising an error if necessary.
+
+        Raises:
+            ValueError: If the primary key is required but not defined.
+
+        Returns:
+            bool: True if the primary key is defined, False otherwise.
+        """
         if self.config.flag_require_primary_key and not self.config.primary_key:
             raise ValueError(f'primary key is not defined for state {self.id}')
 
