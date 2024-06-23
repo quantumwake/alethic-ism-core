@@ -5,6 +5,9 @@ DOCKER_NAMESPACE="krasaee"
 GIT_COMMIT_ID=$(git rev-parse HEAD)
 TAG="$DOCKER_NAMESPACE/$APP_NAME:$GIT_COMMIT_ID"
 
+# cleanup data
+rm -f alethic-ism-core.*.tar.gz
+
 #image="quantumwake/alethic-ism-core:latest"
 container_id=`docker create $TAG`
 echo "Container ID: $container_id from image $image" # For debugging

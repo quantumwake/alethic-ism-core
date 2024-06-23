@@ -36,7 +36,7 @@ RUN conda install -y conda-build
 
 # Run the build command (adjust as per your repo's requirements)
 #RUN conda build . --output-folder /app/local-channel
-RUN bash ./build.sh --local-channel-path /app/conda/env/local_channel
+RUN bash ./conda_build.sh --local-channel-path /app/conda/env/local_channel
 
 # package the local channel such that we can extract into an artifact
 
