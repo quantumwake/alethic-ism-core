@@ -234,11 +234,17 @@ class BaseMessagingConsumer(Monitorable):
                 logging.error(f"Stop receiving messages: {e}")
                 break
             except Exception as e:
-                self.messaging_provider.acknowledge_main(msg)
                 friendly_messsage = self.messaging_provider.friendly_message(message=msg)
                 logging.warning(f"critical error trying to process message: {friendly_messsage}")
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
             finally:
+                if msg:
+                    logging.debug(f"finalizing message id {self.messaging_provider.get_message_id(msg)}")
+                else:
+                    logging.warning(f"finalizing message but without a message id, this could be a result of a sudden "
+                                    f"broker/consumer termination, between the messaging bus and or ")
+
+                self.messaging_provider.acknowledge_main(msg)
                 pass
 
     def graceful_shutdown(self, signum, frame):
