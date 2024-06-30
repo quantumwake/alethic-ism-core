@@ -38,6 +38,12 @@ class BaseMessagingConsumerProvider:
     def acknowledge_management(self, message):
         raise NotImplementedError()
 
+    def get_message_id(self, message):
+        raise NotImplementedError()
+
+    def friendly_message(self, message: Any):
+        raise NotImplementedError()
+
 
 class Monitorable:
 
@@ -225,8 +231,10 @@ class BaseMessagingConsumer(Monitorable):
             except InterruptedError as e:
                 logging.error(f"Stop receiving messages: {e}")
                 break
-            except ValueError as e:
+            except Exception as e:
+                friendly_messsage = self.messaging_provider.friendly_message(message=msg)
                 self.messaging_provider.acknowledge_main(msg)
+                logging.warning(f"critical error trying to process message: {friendly_messsage}")
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
             finally:
                 pass

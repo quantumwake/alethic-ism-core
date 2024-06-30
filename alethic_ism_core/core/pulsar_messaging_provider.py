@@ -45,6 +45,23 @@ class PulsarMessagingConsumerProvider(BaseMessagingConsumerProvider):
         if message:
             self.main_consumer.acknowledge(message=message)
 
+    def get_message_id(self, message):
+        if message:
+            return message.message_id
+
+        return None
+
+    def friendly_message(self, message: Any):
+        if not isinstance(message, pulsar.Message):
+            raise ValueError(f"unable to processor message of type {type(message) if message else None}")
+
+        return str({
+            "message_id": message.message_id,
+            "partition_key": message.partition_key,
+            "ordering_key": message.ordering_key(),
+            "topic_name": message.topic_name
+        })
+
     def acknowledge_management(self, message):
         if message:
             self.management_consumer.acknowledge(message=message)

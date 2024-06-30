@@ -145,7 +145,7 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
                     consumer_message_mapping=consumer_message_mapping
                 )
 
-            except Exception as ex:
+            except ValueError as ex:
                 # submit failed execution log to the output processor state
                 await self.fail_execute_processor_state(
                     route_id=output_processor_state.id,
