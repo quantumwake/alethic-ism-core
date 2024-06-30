@@ -223,17 +223,19 @@ class BaseMessagingConsumer(Monitorable):
                 msg, data = self.messaging_provider.receive_main()
                 logging.info(f'Message received with {data}')
                 message_dict = json.loads(data)
-                await self._execute(message_dict)
+                status = await self._execute(message_dict)
+
+                # log message success or failure
+                logging.debug(f"message id: {self.messaging_provider.get_message_id(message=msg)}, status: {status}")
 
                 # send ack that the message was consumed.
                 self.messaging_provider.acknowledge_main(msg)
-
             except InterruptedError as e:
                 logging.error(f"Stop receiving messages: {e}")
                 break
             except Exception as e:
-                friendly_messsage = self.messaging_provider.friendly_message(message=msg)
                 self.messaging_provider.acknowledge_main(msg)
+                friendly_messsage = self.messaging_provider.friendly_message(message=msg)
                 logging.warning(f"critical error trying to process message: {friendly_messsage}")
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
             finally:
