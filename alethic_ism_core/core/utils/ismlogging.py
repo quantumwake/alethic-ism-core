@@ -6,6 +6,7 @@ dotenv.load_dotenv()
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", log.INFO)
 
+print(f"** LOG_LEVEL ** {LOG_LEVEL}")
 log.basicConfig(
     level=LOG_LEVEL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
