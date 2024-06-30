@@ -226,9 +226,8 @@ class BaseMessagingConsumer(Monitorable):
                 logging.error(f"Stop receiving messages: {e}")
                 break
             except ValueError as e:
+                self.messaging_provider.acknowledge_main(msg)
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
-                continue
-
             finally:
                 pass
 
