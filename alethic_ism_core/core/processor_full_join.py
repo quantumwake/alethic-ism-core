@@ -1,13 +1,12 @@
 import copy
-import logging as log
 from typing import List
 
 from .processor_state import State, implicit_count_with_force_count
 from .base_processor import BaseProcessor
 from .utils.general_utils import higher_order_routine
+from .utils.ismlogging import ism_logger
 
-logging = log.getLogger(__name__)
-
+logging = ism_logger(__name__)
 
 class DualStateProcessor(BaseProcessor):
 

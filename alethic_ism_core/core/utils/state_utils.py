@@ -1,7 +1,7 @@
-import logging as log
+from .ismlogging import ism_logger
 from ..base_model import ProcessorStatusCode
 
-logging = log.getLogger(__name__)
+logging = ism_logger(__name__)
 
 
 def validate_processor_state_from_created(new_status: ProcessorStatusCode):

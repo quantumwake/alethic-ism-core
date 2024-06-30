@@ -1,4 +1,3 @@
-import logging as log
 import pickle
 
 from enum import Enum as PyEnum
@@ -14,7 +13,9 @@ from .utils.general_utils import (
     calculate_string_list_hash,
     calculate_uuid_based_from_string_with_sha256_seed
 )
+from .utils.ismlogging import ism_logger
 
+logging = ism_logger(__name__)
 
 class CustomStateUnpickler(pickle.Unpickler):
     def load(self):
@@ -68,7 +69,6 @@ class CustomStateUnpickler(pickle.Unpickler):
             raise e
 
 
-logging = log.getLogger(__name__)
 
 
 class StateDataKeyDefinition(BaseModel):

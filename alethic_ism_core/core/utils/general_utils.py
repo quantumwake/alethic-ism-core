@@ -1,16 +1,14 @@
 import hashlib
 import json
-import logging as log
 import os
 import re
 import uuid
-from typing import Union
-
 import yaml
-
+from typing import Union
+from .ismlogging import ism_logger
 from .map_utils import flatten
 
-logging = log.getLogger(__name__)
+logging = ism_logger(__name__)
 
 # only keep alphanumerical values and spaces, where spaces is converted to an underscore '_'
 clean_char_for_ddl_naming = lambda x: (x.lower() if x.isalnum() or x == '_' else ' ' if x == '.' or x.isspace() else '')

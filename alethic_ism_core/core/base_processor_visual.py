@@ -1,9 +1,9 @@
-import logging as log
 from .processor_state import StateConfigVisual
 from .base_processor import BaseProcessor
 from .utils.general_utils import build_template_text
+from .utils.ismlogging import ism_logger
 
-logging = log.getLogger(__name__)
+logging = ism_logger(__name__)
 
 
 class BaseProcessorVisual(BaseProcessor):

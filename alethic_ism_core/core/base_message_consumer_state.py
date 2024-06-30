@@ -1,9 +1,10 @@
-import logging as logging
-
 from .base_message_provider import BaseMessagingConsumer
 from .base_model import ProcessorStateDirection, ProcessorProvider, Processor, ProcessorStatusCode, ProcessorState
 from .base_processor import BaseProcessor
 from .processor_state import State
+from .utils.ismlogging import ism_logger
+
+logging = ism_logger(__name__)
 
 
 class BaseMessagingConsumerState(BaseMessagingConsumer):

@@ -1,8 +1,8 @@
 import queue
 import threading
-import logging as log
+from alethic_ism_core.core.utils.ismlogging import ism_logger
 
-logging = log.getLogger(__name__)
+logging = ism_logger(__name__)
 
 
 class ThreadQueueManager:

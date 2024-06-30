@@ -1,6 +1,5 @@
 import json
-import logging as log
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Dict
 
 from .base_message_route_model import Route
 from .base_message_provider import Monitorable
@@ -15,8 +14,9 @@ from .processor_state import (
     StateConfig,
     StateDataColumnIndex,
 )
+from .utils.ismlogging import ism_logger
 
-logging = log.getLogger(__name__)
+logging = ism_logger(__name__)
 
 
 class StatePropagationProvider:

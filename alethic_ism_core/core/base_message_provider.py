@@ -1,7 +1,6 @@
 import json
 import signal
 import sys
-import logging as logging
 import asyncio
 
 from typing import Any, Dict, Union
@@ -9,7 +8,9 @@ from typing import Any, Dict, Union
 from .base_message_route_model import Route
 from .base_model import ProcessorState, ProcessorStatusCode
 from .processor_state_storage import StateMachineStorage
+from .utils.ismlogging import ism_logger
 
+logging = ism_logger(__name__)
 
 class BaseMessagingProducerProvider:
 
@@ -221,6 +222,7 @@ class BaseMessagingConsumer(Monitorable):
             loop_count += 1
             try:
                 msg, data = self.messaging_provider.receive_main()
+                print(f"********** MESSAGE RECEIVED ON MESSAGE ID: {self.messaging_provider.get_message_id(msg)}")
                 logging.info(f'Message received with {data}')
                 message_dict = json.loads(data)
                 status = await self._execute(message_dict)
@@ -237,6 +239,7 @@ class BaseMessagingConsumer(Monitorable):
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
             finally:
                 if msg:
+                    print(f"********** MESSAGE FINALIZED ON MESSAGE ID: {self.messaging_provider.get_message_id(msg)}")
                     logging.debug(f"finalizing message id {self.messaging_provider.get_message_id(msg)}")
                 else:
                     logging.warning(f"finalizing message but without a message id, this could be a result of a sudden "

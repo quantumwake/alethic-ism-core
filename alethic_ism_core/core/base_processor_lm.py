@@ -1,18 +1,9 @@
-import logging as log
-from typing import Callable, Dict, Any
-
-from .base_model import ProcessorState
-from .processor_state import (
-    StateConfigLM,
-    extract_values_from_query_state_by_key_definition
-)
-
+from .processor_state import StateConfigLM
+from .utils.ismlogging import ism_logger
 from .base_processor import BaseProcessor
-from .utils.general_utils import (
-    build_template_text,
-)
+from .utils.general_utils import build_template_text
 
-logging = log.getLogger(__name__)
+logging = ism_logger(__name__)
 
 
 class BaseProcessorLM(BaseProcessor):
