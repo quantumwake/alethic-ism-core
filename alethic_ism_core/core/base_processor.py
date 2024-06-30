@@ -50,9 +50,9 @@ class StatePropagationProviderRouter(StatePropagationProvider):
         # create a new message for routing purposes
         route_message = {
             "route_id": processor.output_processor_state.id,
-            "type": "query_state_list",
+            "type": "query_state_route",
             "input_query_state": input_query_state,
-            "query_state_list": output_query_states
+            "query_states": output_query_states
         }
 
         self.route.send_message(json.dumps(route_message))
@@ -159,13 +159,11 @@ class StatePropagationProviderDistributor(StatePropagationProvider):
         """
         # iteration each propagator and invoke it
         for propagator in self.propagators:
-            propagated_output_state = await propagator.apply_state(
+            await propagator.apply_state(
                 processor=processor,
                 input_query_state=input_query_state,
                 output_query_states=output_query_states
             )
-
-            output_query_states = {**output_query_states, **propagated_output_state}
 
         # return the final propagated output query states
         return output_query_states

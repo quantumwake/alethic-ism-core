@@ -122,6 +122,13 @@ class StateConfigDB(StateConfig):
     constant_columns: Optional[List[dict]] = None
 
 
+class StateConfigVisual(StateConfig):
+    template_id: Optional[str] = None
+    width: Optional[int] = 1024
+    height: Optional[int] = 1024
+    quantity: Optional[int] = 1
+
+
 class StateDataColumnDefinition(BaseModel):
     id: Optional[int] = None
     name: str  # Column Name
@@ -248,7 +255,7 @@ class State(BaseModelHashable):
     id: Optional[str] = None  # primary key, can be generated or directly set
     project_id: Optional[str] = None  # project association id
 
-    config: Optional[Union[StateConfig, StateConfigLM, StateConfigDB, StateConfigCode]] = None
+    config: Optional[Union[StateConfig, StateConfigLM, StateConfigDB, StateConfigVisual, StateConfigCode]] = None
     columns: Dict[str, StateDataColumnDefinition] = {}
     data: Dict[str, StateDataRowColumnData] = {}
     mapping: Dict[str, StateDataColumnIndex] = {}
@@ -291,6 +298,8 @@ class State(BaseModelHashable):
             value['config'] = StateConfigDB(**config_value)
         elif state_type == 'StateConfigCode':
             value['config'] = StateConfigCode(**config_value)
+        elif state_type == 'StateConfigVisual':
+            value['config'] = StateConfigVisual(**config_value)
         elif state_type == 'StateConfig':
             value['config'] = StateConfig(**config_value)
         else:
