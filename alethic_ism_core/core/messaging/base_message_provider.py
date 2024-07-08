@@ -3,40 +3,31 @@ import signal
 import sys
 import asyncio
 
-from typing import Any, Dict, Union
-
+from typing import Any
+from pydantic.main import BaseModel
 from .base_message_route_model import Route
-from .base_model import ProcessorState, ProcessorStatusCode
-from .processor_state_storage import StateMachineStorage
-from .utils.ismlogging import ism_logger
+from ..base_model import ProcessorStatusCode
+from ..processor_state_storage import StateMachineStorage
+from ..utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
 
+
 class BaseMessagingProducerProvider:
 
-    def create_route(self, route_config: dict) -> Route:
+    def create_route(self, route: dict) -> Route:
         raise NotImplementedError()
 
 
-class BaseMessagingConsumerProvider:
-
-    def __init__(self, main_consumer: Any = None, manage_consumer: Any = None):
-        self.main_consumer = main_consumer
-        self.manage_consumer = manage_consumer
+class BaseMessagingConsumerProvider(BaseModel):
 
     def close(self):
         raise NotImplementedError()
 
-    def receive_main(self) -> [Any, Any]:
+    def wait(self) -> [Any, Any]:
         raise NotImplementedError()
 
-    def receive_management(self) -> [Any, Any]:
-        raise NotImplementedError()
-
-    def acknowledge_main(self, message):
-        raise NotImplementedError()
-
-    def acknowledge_management(self, message):
+    def ack(self, message):
         raise NotImplementedError()
 
     def get_message_id(self, message):

@@ -2,7 +2,7 @@ import pulsar
 from typing import Any, Optional
 from pulsar.schema import schema
 from pydantic import BaseModel, PrivateAttr
-from .base_message_route_model import Route, RouteMessageStatus, MessageStatus
+from ..messaging.base_message_route_model import Route, RouteMessageStatus, MessageStatus
 
 
 class PulsarRoute(Route, BaseModel):
@@ -10,11 +10,14 @@ class PulsarRoute(Route, BaseModel):
     service_url: str
     subscription: str
     schema: Optional[str] = "schema.StringSchema"
+    topic: str
 
     _client: pulsar.Client = PrivateAttr()
     _producer_topic: Optional[pulsar.Producer] = PrivateAttr(default=None)
-    _producer_manage: Optional[pulsar.Producer] = PrivateAttr(default=None)
 
+    @property
+    def get_topic(self):
+        return self.topic
 
     # @property
     def get_schema(self):
@@ -26,6 +29,7 @@ class PulsarRoute(Route, BaseModel):
 
     def __init__(self, **data):
 
+
         if 'route_config' in data:
             rc = data['route_config']
             data = {
@@ -33,10 +37,13 @@ class PulsarRoute(Route, BaseModel):
                 'schema': rc['schema'] if 'schema' in rc else "schema.StringSchema",
                 'subscription': rc['subscription'],
                 'service_url': rc['service_url'],
+                "selector": rc['selector'] if 'selector' in rc else None,
+                "topic": rc['topic'] if 'topic' in rc else None,
             }
 
             super().__init__(**data)
 
+    async def connect(self):
         # routing client used to actual produce/consume data
         self._client = pulsar.Client(self.service_url)
         self._producer_topic = self._client.create_producer(
@@ -44,12 +51,9 @@ class PulsarRoute(Route, BaseModel):
             schema=self.get_schema()
         )
 
-        self._producer_manage = self._client.create_producer(
-            self.manage_topic,
-            schema=self.get_schema()
-        ) if self.manage_topic else None
+        return True
 
-    def send_message(self, msg: Any) -> RouteMessageStatus:
+    async def send_message(self, msg: Any) -> RouteMessageStatus:
         try:
             msg_id = self._producer_topic.send(msg, None)
             return RouteMessageStatus(
@@ -70,3 +74,8 @@ class PulsarRoute(Route, BaseModel):
             except:
                 pass
 
+    async def disconnect(self):
+        await self._client.close()
+
+    async def flush(self):
+        pass

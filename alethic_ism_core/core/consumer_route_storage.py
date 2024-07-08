@@ -1,4 +1,4 @@
-from .base_message_router import Route
+from ..messaging.base_message_router import Route
 
 class RouterStorage:
 

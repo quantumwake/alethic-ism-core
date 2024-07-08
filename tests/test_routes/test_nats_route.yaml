@@ -1,0 +1,10 @@
+messageConfig:
+    routes:
+      - name: hello
+        url: nats://127.0.0.1:4222
+#        queue: "ism.test"
+#        stream: "ism.test"
+        subject: "ism.test"
+        selector: test/test
+
+

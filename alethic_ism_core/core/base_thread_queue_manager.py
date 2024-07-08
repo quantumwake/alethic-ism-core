@@ -1,6 +1,6 @@
 import queue
 import threading
-from alethic_ism_core.core.utils.ismlogging import ism_logger
+from .utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
 

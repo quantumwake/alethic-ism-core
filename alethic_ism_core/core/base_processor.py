@@ -1,8 +1,8 @@
 import json
 from typing import Any, List, Dict
 
-from .base_message_route_model import Route
-from .base_message_provider import Monitorable
+from .messaging.base_message_route_model import Route
+from .messaging.base_message_provider import Monitorable
 from .processor_state_storage import StateMachineStorage
 from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState
 from .utils.state_utils import validate_processor_status_change
