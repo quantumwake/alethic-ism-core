@@ -1,13 +1,14 @@
-from .base_message_provider import BaseMessagingConsumer
-from ..base_model import ProcessorStateDirection, ProcessorProvider, Processor, ProcessorStatusCode, ProcessorState
+from .base_message_provider import BaseMessageConsumer
+from ..base_model import ProcessorStateDirection, ProcessorProvider, Processor, ProcessorState
 from ..base_processor import BaseProcessor
+from ..monitored_processor_state import MonitoredProcessorState
 from ..processor_state import State
 from ..utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
 
 
-class BaseMessagingConsumerState(BaseMessagingConsumer):
+class BaseMessageConsumerProcessor(BaseMessageConsumer, MonitoredProcessorState):
 
     def create_processor(self,
                          processor: Processor,
@@ -101,7 +102,8 @@ class BaseMessagingConsumerState(BaseMessagingConsumer):
 
                 # load the output state and relevant state instruction
                 output_state = self.storage.load_state(state_id=output_processor_state.state_id, load_data=False)
-                if not output_state: raise ValueError(f'unable to load state {output_processor_state.state_id}')
+                if not output_state:
+                    raise ValueError(f'unable to load state {output_processor_state.state_id}')
 
                 logging.debug(
                     f'creating processor state route: {route_id}, '

@@ -5,10 +5,12 @@ from concurrent.futures import ThreadPoolExecutor
 from alethic_ism_core.core.messaging.base_message_route_model import MessageStatus
 from alethic_ism_core.core.messaging.base_message_router import Router
 from alethic_ism_core.core.messaging.nats_message_consumer_provider import NATSMessagingConsumerProvider
-from alethic_ism_core.core.messaging.nats_message_producer_provider import NATSMessagingProducerProvider
 
 import pytest
-from alethic_ism_core.core.messaging.nats_message_producer_route import NATSRoute
+
+from alethic_ism_core.core.messaging.nats_message_provider import NATSMessageProvider
+from alethic_ism_core.core.messaging.nats_message_route import NATSRoute
+
 
 @pytest.mark.asyncio
 async def test_root():
@@ -32,7 +34,7 @@ async def test_root():
             print(msg)
 
     # Create producer and router, and send messages
-    provider = NATSMessagingProducerProvider()
+    provider = NATSMessageProvider()
     router = Router(provider=provider, yaml_file="./test_routes/test_nats_route.yaml")
     await router.connect()
 

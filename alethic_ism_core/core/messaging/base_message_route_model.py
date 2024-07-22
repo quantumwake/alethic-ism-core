@@ -1,6 +1,5 @@
-from abc import abstractmethod
 from enum import Enum
-from typing import Optional, Any, Type, TypeVar
+from typing import Optional, Any
 from pydantic import BaseModel
 
 
@@ -15,25 +14,8 @@ class RouteMessageStatus(BaseModel):
     status: MessageStatus
     error: Optional[str] = None
 
-#
-# T = TypeVar('T', bound='Serializable')
-#
-# class RouteMessagePayload:
-#     @abstractmethod
-#     def to_bytes(self) -> bytes:
-#         pass
-#
-#     @classmethod
-#     @abstractmethod
-#     def from_bytes(cls: Type[T], byte_data: bytes) -> T:
-#         pass
-#
-# class StringMessagePayload(RouteMessagePayload):
-#
-#     def to_bytes(self) -> bytes:
 
-
-class Route(BaseModel):
+class BaseRoute(BaseModel):
 
     selector: str
 
@@ -43,10 +25,28 @@ class Route(BaseModel):
     async def disconnect(self):
         raise NotImplementedError()
 
-    async def send_message(self, msg: str) -> RouteMessageStatus:
+    async def subscribe(self):
+        raise NotImplementedError()
+
+    async def publish(self, msg: str) -> RouteMessageStatus:
+        raise NotImplementedError()
+
+    async def consume(self) -> [Any, Any]:
+        raise NotImplementedError()
+
+    async def ack(self, message):
         raise NotImplementedError()
 
     async def flush(self):
+        raise NotImplementedError()
+
+    def channel_name(self):
+        raise NotImplementedError()
+
+    def get_message_id(self, message):
+        raise NotImplementedError()
+
+    def friendly_message(self, message: Any):
         raise NotImplementedError()
 
     @property

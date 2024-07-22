@@ -1,8 +1,8 @@
 import json
 from typing import Any, List, Dict
 
-from .messaging.base_message_route_model import Route
-from .messaging.base_message_provider import Monitorable
+from .monitored_processor_state import MonitoredProcessorState
+from .messaging.base_message_route_model import BaseRoute
 from .processor_state_storage import StateMachineStorage
 from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState
 from .utils.state_utils import validate_processor_status_change
@@ -28,7 +28,7 @@ class StatePropagationProvider:
 
 class StatePropagationProviderRouter(StatePropagationProvider):
 
-    def __init__(self, route: Route = None):
+    def __init__(self, route: BaseRoute = None):
         self.route = route
 
     async def apply_state(self,
@@ -169,7 +169,7 @@ class StatePropagationProviderDistributor(StatePropagationProvider):
         return output_query_states
 
 
-class BaseProcessor(Monitorable):
+class BaseProcessor(MonitoredProcessorState):
 
     def __init__(self,
                  output_state: State,
@@ -178,8 +178,6 @@ class BaseProcessor(Monitorable):
                  processor: Processor = None,
                  output_processor_state: ProcessorState = None,
                  state_propagation_provider: StatePropagationProvider = StatePropagationProviderCore(),
-                 # state_router_route: Route = None,
-                 # sync_store_route: Route = None,
                  **kwargs):
 
         super().__init__(**kwargs)

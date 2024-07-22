@@ -8,4 +8,5 @@ dependencies:
   - pyyaml
   - pydantic
   - restrictedpython
+  - nats-py
   - pulsar-client

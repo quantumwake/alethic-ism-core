@@ -1,4 +1,5 @@
-from ..messaging.base_message_router import Route
+from .messaging.base_message_route_model import BaseRoute
+
 
 class RouterStorage:
 
@@ -8,5 +9,5 @@ class RouterStorage:
     def fetch_route(self):
         raise NotImplementedError()
 
-    def register_route(self, route: Route):
+    def register_route(self, route: BaseRoute):
         raise NotImplementedError()

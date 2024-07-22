@@ -1,15 +1,7 @@
 messageConfig:
-    root_route:
-      topic: test_root_topic
-      manage_topic: test_root_manage_topic
-      schema: schema.StringSchema
-#      service_url: mock://localhost:6650
-#      subscription: test_root_topic_subscription
+    routes:
+      - selector: test/test
+        data: "unimportant for test"
 
-    topic_routes:
       - selector: test/route/monitor
-        topic: test_topic
-        manage_topic: test_manage_topic
-        schema: schema.StringSchema
-#        service_url: mock://localhost:6650
-#        subscription: test_topic_subscription
+        data: "unimportant for test"

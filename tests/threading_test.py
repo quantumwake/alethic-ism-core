@@ -1,66 +1,66 @@
 import json
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import uuid
 
-from alethic_ism_core.core.messaging.base_message_route_model import MessageStatus
 from alethic_ism_core.core.messaging.base_message_router import Router
-from alethic_ism_core.core.messaging.nats_message_consumer_provider import NATSMessagingConsumerProvider
-from alethic_ism_core.core.messaging.nats_message_producer_provider import NATSMessagingProducerProvider
+from alethic_ism_core.core.messaging.nats_message_provider import NATSMessageProvider
 
 # Create producer and router, and send messages
-provider = NATSMessagingProducerProvider()
+provider = NATSMessageProvider()
 router = Router(provider=provider, yaml_file="./test_routes/test_nats_route.yaml")
-route = router.find_router(selector="test/test")
+route = router.find_route(selector="test/test")
 
 # Create consumer provider and start listening in a separate thread
-consumer_provider = NATSMessagingConsumerProvider(
-    url=route.url,
-    name=route.name,
-    subject=route.subject
-)
+# consumer_provider = NATSMessagingProvider(
+#     url=route.url,
+#     name=route.name,
+#     subject=route.subject
+# )
 
 # run publisher asynchronously, while waiting for the future to complete (testing purposes)
 loop = asyncio.get_event_loop()
-loop.run_until_complete(router.connect())
+
+loop.run_until_complete(router.connect_all())
 
 
 async def send_messages():
+    # subscribe as a publisher on this route
+    random_uuid = str(uuid.uuid4())
+    random_uuid = random_uuid[:4]
+
+
     for i in range(10):
-        status = await route.send_message(msg=json.dumps({
-            "name": f"hello_{i}",
+        status = await route.publish(msg=json.dumps({
+            "name": f"hello_{i}{random_uuid}",
             "hello": "world",
             "world": "goodbye"
         }))
         print(f'publishing data {status}')
-        # assert status.status == MessageStatus.QUEUED
-        # await asyncio.sleep(0)  # 1 second delay between messages
-
-    # await asyncio.gather(send_messages(route))
-
-# disconnect from the route (wait for completion)
 
 
-async def listen_messages():
-    # Define a function to listen to messages
-    await consumer_provider.connect()
+async def consume_messages():
+    # subscribe as a consumer on this route
+    await route.subscribe()
+
     i = 0
     while True:
-        msg, data = await consumer_provider.wait()
+        msg, data = await route.consume()
 
+        print(f"received data {data}")
         if not msg:
             break
 
         i += 1
-        consumer_provider.ack(msg)
+        await route.ack(msg)
 
     assert i == 10
 
 
+
 async def run_all():
     await send_messages()
-    await listen_messages()
+    await consume_messages()
     await route.disconnect()
-
 
 loop.run_until_complete(run_all())
 
