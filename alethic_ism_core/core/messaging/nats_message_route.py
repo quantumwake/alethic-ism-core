@@ -24,8 +24,34 @@ class NATSRoute(BaseRoute, BaseModel):
     _js: JetStreamContext = PrivateAttr()
     _sub: JetStreamContext.PushSubscription = PrivateAttr()
 
-    def channel_name(self):
-        return self.subject
+    @property
+    def subject_group(self):
+        """
+        Returns the subject associated with this route.
+
+        The subject is used to group related routes under a common topic for message consumption.
+        This allows multiple route selectors to be processed by the same set of consumers.
+
+        For example, different API calls (e.g., for language, image, and audio processing to openai api)
+        might use distinct route selectors but share a common subject. This approach offers
+        several benefits:
+
+        1. Flexibility: We can easily swap out route processors without changing the routing logic.
+        2. Scalability: It allows for load balancing across multiple consumers subscribed to the same subject.
+        3. Maintainability: We can update or replace specific processors without affecting the entire system.
+
+        Example:
+        Route selectors like "language/models/openai/gpt3.5", "language/models/openai/gpt4",
+        and "image/models/openai/dall-e-3", might share the subject "openai.models".
+
+        This allows us to process all three with the same subscriber (aka, the consumer subscribes to subject via
+        the route implementation) or easily redirect one to a new processor if needed.
+
+        Returns:
+            str: The subject identifier for this route implementation
+        """
+        return self.subject  # Assuming the subject is stored in a private attribute
+
 
     async def connect(self):
         try:

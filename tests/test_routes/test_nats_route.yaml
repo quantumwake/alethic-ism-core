@@ -4,6 +4,7 @@ messageConfig:
         name: "monitor"
         url: nats://127.0.0.1:4222
         subject: "ism.monitor"
+
       - selector: test/test
         name: "test"
         url: nats://127.0.0.1:4222
@@ -12,17 +13,17 @@ messageConfig:
       - selector: test/test_group_unique_a
         name: "test_group_unique_a"
         url: nats://127.0.0.1:4222
-        subject: "test.group"
+        subject: "test.subject"
 
       - selector: test/test_group_unique_b
         name: "test_group_unique_b"
         url: nats://127.0.0.1:4222
-        subject: "test.group"
+        subject: "test.subject"
 
       - selector: test/test_group_unique_c
         name: "test_group_unique_c"
         url: nats://127.0.0.1:4222
-        subject: "test.group"
+        subject: "test.subject"
 
 
 

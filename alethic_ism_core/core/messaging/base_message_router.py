@@ -37,7 +37,8 @@ class Router:
 
     async def connect_all(self):
         if not self.routing_table:
-            raise RouteNotFoundError(f'no routes defined, cannot establish connection to any route with no routes defined')
+            raise RouteNotFoundError(
+                f'no routes defined, cannot establish connection to any route with no routes defined')
 
         logging.info(f"connecting to {len(self.routing_table)} routes")
         for _, route in self.routing_table.items():
@@ -59,7 +60,8 @@ class Router:
 
     async def subscribe_all(self, selector: str):
         if not self.routing_table:
-            raise RouteNotFoundError(f'no routes defined, cannot establish connection to any route with no routes defined')
+            raise RouteNotFoundError(
+                f'no routes defined, cannot establish connection to any route with no routes defined')
 
         logging.info(f"connecting to {len(self.routing_table)} routes")
         for _, route in self.routing_table.items():
@@ -69,10 +71,10 @@ class Router:
         route = self.find_route(selector=selector)
         await route.subscribe()
 
-    def create_route_group_by_subject(self, subject: str):
+    def find_route_by_subject(self, subject: str):
         routes = [
             route for selector, route in self.routing_table.items()
-            if route.channel_name() == subject
+            if route.subject_group == subject
         ]
 
         if routes and len(routes) >= 1:
@@ -82,7 +84,7 @@ class Router:
 
             route_config = json.loads(first_route.model_dump_json())
             return self.provider.create_route(
-                route_config={**route_config, **{"selector": subject}}
+                route_config={**route_config, **{"selector": f"subject group: {subject}"}}
             )
 
         return None

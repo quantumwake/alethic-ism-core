@@ -7,12 +7,14 @@ router = Router(
     provider=message_provider
 )
 
+
 def test_basic_find_route():
     test_route = router.find_route('test/test')
     assert test_route
 
+
 def test_basic_grouping():
-    test_group = router.create_route_group_by_subject(subject="test.group")
-    assert test_group.channel_name() == "test.group"
-    print(test_group.channel_name())
-    assert test_group
+    subject_group = router.find_route_by_subject(subject="test.subject")
+    assert subject_group.subject_group == "test.subject"
+    print(subject_group.subject_group)
+    assert subject_group

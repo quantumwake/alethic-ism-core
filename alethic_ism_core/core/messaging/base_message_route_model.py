@@ -40,14 +40,17 @@ class BaseRoute(BaseModel):
     async def flush(self):
         raise NotImplementedError()
 
-    def channel_name(self):
-        raise NotImplementedError()
-
     def get_message_id(self, message):
         raise NotImplementedError()
 
     def friendly_message(self, message: Any):
         raise NotImplementedError()
+
+    @property
+    def subject_group(self):
+        raise NotImplementedError('the subject property must be defined per route class type, '
+                                  'in NATS for example its called a subject, in pulsar or kafka a topic, '
+                                  'in kinesis or sqs, something else.')
 
     @property
     def get_selector_name(self):
