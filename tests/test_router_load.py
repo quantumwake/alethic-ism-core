@@ -18,3 +18,4 @@ def test_basic_grouping():
     assert subject_group.subject_group == "test.subject"
     print(subject_group.subject_group)
     assert subject_group
+

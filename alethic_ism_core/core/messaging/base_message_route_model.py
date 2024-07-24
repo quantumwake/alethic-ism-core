@@ -31,7 +31,7 @@ class BaseRoute(BaseModel):
     async def publish(self, msg: str) -> RouteMessageStatus:
         raise NotImplementedError()
 
-    async def consume(self) -> [Any, Any]:
+    async def consume(self, wait: bool = True) -> [Any, Any]:
         raise NotImplementedError()
 
     async def ack(self, message):

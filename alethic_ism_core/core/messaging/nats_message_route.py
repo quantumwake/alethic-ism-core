@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
+from nats.js.errors import NotFoundError
 from pydantic import BaseModel, PrivateAttr
 from nats.aio.client import Client as NATS
 from nats.aio.errors import ErrConnectionClosed, ErrTimeout, ErrNoServers
@@ -20,9 +21,9 @@ class NATSRoute(BaseRoute, BaseModel):
     stream: Optional[str] = None
     queue: Optional[str] = None
 
-    _nc: NATS = PrivateAttr()
-    _js: JetStreamContext = PrivateAttr()
-    _sub: JetStreamContext.PushSubscription = PrivateAttr()
+    _nc: NATS = PrivateAttr(default=None)
+    _js: JetStreamContext = PrivateAttr(default=None)
+    _sub: JetStreamContext.PushSubscription = PrivateAttr(default=None)
 
     @property
     def subject_group(self):
@@ -52,8 +53,10 @@ class NATSRoute(BaseRoute, BaseModel):
         """
         return self.subject  # Assuming the subject is stored in a private attribute
 
-
     async def connect(self):
+        if self._nc and self._nc.is_connected:
+            return True
+
         try:
             # connect to the nats core server
             self._nc = NATS()
@@ -61,14 +64,19 @@ class NATSRoute(BaseRoute, BaseModel):
                 servers=[self.url]
             )
 
-            # Create JetStream context given the nats client connection
+            # Create JetStream context given the nats client connection, if it doesn't exist already
             self._js = self._nc.jetstream()
+            try:
+                await self._js.find_stream_name_by_subject(self.subject)
+            except NotFoundError:
+                await self._js.add_stream(name=self.name, subjects=[self.subject])
 
-            # Persist messages onto subject.
-            await self._js.add_stream(name=self.name, subjects=[self.subject])
-
+            return True
         except Exception as e:
             logging.warning(f"connect and flush of route {self.subject} failed", e)
+
+        return False
+
 
     async def publish(self, msg: Any) -> RouteMessageStatus:
 
@@ -80,6 +88,9 @@ class NATSRoute(BaseRoute, BaseModel):
             raise ValueError("Unsupported message type")
 
         try:
+            await self.connect()
+
+
             awk = await self._js.publish(subject=self.subject, payload=msg, stream=self.stream)
             return RouteMessageStatus(
                 id=str(awk),
@@ -96,20 +107,27 @@ class NATSRoute(BaseRoute, BaseModel):
             pass
 
     async def subscribe(self):
+        self.connect()
         self._sub = await self._js.subscribe(subject=self.subject, durable="psub")
 
-    async def consume(self) -> [Any, Any]:
-        try:
-            msg = await self._sub.next_msg(timeout=2)
-            data = msg.data.decode("utf-8")
-            return msg, data
-        except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
-            raise InterruptedError(e)
-        except TimeoutError as timeout:
-            return None, None
-            # threading.Thread.sl
-        except Exception as e2:
-            raise ValueError(e2)
+    async def consume(self, wait: bool = True) -> [Any, Any]:
+        max_iter_exit = 0
+        while wait or max_iter_exit <= 3000:     # 3000 at 0.1 seconds = 300 seconds or 5 minutes
+            try:
+                msg = await self._sub.next_msg(timeout=0.1)
+                data = msg.data.decode("utf-8")
+                return msg, data
+            except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
+                raise InterruptedError(e)
+            except TimeoutError as e1:
+                if not wait:
+                    break
+
+                max_iter_exit += 1
+            except Exception as e2:
+                raise ValueError(e2)
+
+        return None, None
 
     async def ack(self, message):
         if message:

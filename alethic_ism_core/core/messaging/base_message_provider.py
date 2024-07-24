@@ -1,4 +1,5 @@
 import json
+import os
 import signal
 import sys
 
@@ -7,6 +8,7 @@ from ..utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
 
+FLAG_CONSUMER_WAIT = os.environ.get("FLAG_CONSUMER_WAIT", True)
 
 class BaseRouteProvider:
 
@@ -54,7 +56,7 @@ class BaseMessageConsumer:
             msg = None
             loop_count += 1
             try:
-                msg, data = await self.route.consume()
+                msg, data = await self.route.consume(wait=FLAG_CONSUMER_WAIT)
                 if not msg and not data:        # timed out, returns blank, wait for next iteration
                     continue
 

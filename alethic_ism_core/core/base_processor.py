@@ -55,7 +55,7 @@ class StatePropagationProviderRouter(StatePropagationProvider):
             "query_states": output_query_states
         }
 
-        self.route.send_message(json.dumps(route_message))
+        await self.route.publish(json.dumps(route_message))
         return output_query_states
 
 
@@ -79,7 +79,8 @@ class StatePropagationProviderRouterStateRouter(StatePropagationProviderRouter):
 
 
 class StatePropagationProviderRouterStateSyncStore(StatePropagationProviderRouter):
-    async def apply_state(self, processor: 'BaseProcessor',
+    async def apply_state(self,
+                          processor: 'BaseProcessor',
                           input_query_state: Any,
                           output_query_states: [dict]) -> [dict]:
         """

@@ -20,7 +20,7 @@ route = router.find_route(selector="test/test")
 # run publisher asynchronously, while waiting for the future to complete (testing purposes)
 loop = asyncio.get_event_loop()
 
-loop.run_until_complete(router.connect_all())
+# loop.run_until_complete(router.connect_all())
 
 
 async def send_messages():

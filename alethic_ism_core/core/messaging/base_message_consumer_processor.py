@@ -1,14 +1,21 @@
 from .base_message_provider import BaseMessageConsumer
+from .base_message_route_model import BaseRoute
 from ..base_model import ProcessorStateDirection, ProcessorProvider, Processor, ProcessorState
 from ..base_processor import BaseProcessor
 from ..monitored_processor_state import MonitoredProcessorState
 from ..processor_state import State
+from ..processor_state_storage import StateMachineStorage
 from ..utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
 
 
 class BaseMessageConsumerProcessor(BaseMessageConsumer, MonitoredProcessorState):
+
+    def __init__(self, route: BaseRoute, monitor_route: BaseRoute, storage: StateMachineStorage, **kwargs):
+        BaseMessageConsumer.__init__(self, route=route)
+        MonitoredProcessorState.__init__(self, monitor_route=monitor_route)
+        self.storage = storage
 
     def create_processor(self,
                          processor: Processor,

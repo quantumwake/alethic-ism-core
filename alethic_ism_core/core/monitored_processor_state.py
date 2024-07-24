@@ -2,6 +2,8 @@ import json
 
 from typing import Any
 
+from nats.aio.msg import Msg
+
 from .messaging.base_message_route_model import BaseRoute
 from .base_model import ProcessorStatusCode
 from .utils.ismlogging import ism_logger
@@ -33,7 +35,7 @@ class MonitoredProcessorState:
             "data": data
         })
 
-        self.monitor_route.send_message(msg=monitor_message)
+        await self.monitor_route.publish(msg=monitor_message)
 
     async def send_processor_state_from_consumed_message(self,
                                                          consumer_message_mapping: dict,
@@ -42,6 +44,13 @@ class MonitoredProcessorState:
                                                          data: dict = None):
 
         cmm = consumer_message_mapping  # for readability short name
+        if isinstance(cmm, Msg):
+            try:
+                data = cmm.data.decode("utf-8")
+                cmm = json.loads(data)
+            except:
+                raise ValueError(f'unable to extract dictionary from msg {cmm}')
+
         route_id = cmm['route_id'] if 'route_id' in cmm else None
 
         await self.send_processor_state_update(
