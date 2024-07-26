@@ -56,7 +56,7 @@ class NATSRoute(BaseRoute, BaseModel):
     async def connect(self):
         logging.info(f'connecting to route: {self.name}, subject: {self.subject}')
         if self._nc and self._nc.is_connected:
-            logging.debug(f'route is already connected, skipping connect on route: {self.name}, subject: {self.subject}' ')
+            logging.debug(f'route is already connected, skipping connect on route: {self.name}, subject: {self.subject}')
             return True
 
         try:
@@ -167,11 +167,11 @@ class NATSRoute(BaseRoute, BaseModel):
 
     async def disconnect(self):
         try:
-            logging.info(f"disconnect:start from route: {self.route}, subject: {self.subject}")
+            logging.info(f"disconnect:start from route: {self.name}, subject: {self.subject}")
             if self._nc and self._nc.is_connected:
                 self._nc.drain()
 
-            logging.info(f"disconnect:complete from route: {self.route}, subject: {self.subject}")
+            logging.info(f"disconnect:complete from route: {self.name}, subject: {self.subject}")
 
         except Exception as e:
             logging.warning("route disconnect error", e)
