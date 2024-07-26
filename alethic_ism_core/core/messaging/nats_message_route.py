@@ -54,26 +54,36 @@ class NATSRoute(BaseRoute, BaseModel):
         return self.subject  # Assuming the subject is stored in a private attribute
 
     async def connect(self):
+        logging.info(f'connecting to route: {self.name}, subject: {self.subject}')
         if self._nc and self._nc.is_connected:
+            logging.debug(f'route is already connected, skipping connect on route: {self.name}, subject: {self.subject}' ')
             return True
 
         try:
             # connect to the nats core server
             self._nc = NATS()
+
+            logging.debug(f'preparing to connect route: {self.name}, subject: {self.subject}, url {self.url}')
             await self._nc.connect(
                 servers=[self.url]
             )
 
+            logging.info(f'connected to route: {self.name}, subject: {self.subject}, url {self.url}')
+
             # Create JetStream context given the nats client connection, if it doesn't exist already
             self._js = self._nc.jetstream()
+
             try:
+                logging.info(f'initialize:start jetstream for route: {self.name}, subject: {self.subject}')
                 await self._js.find_stream_name_by_subject(self.subject)
             except NotFoundError:
+                logging.info(f'initialize:complete jetstream for route: {self.name}, subject: {self.subject}')
                 await self._js.add_stream(name=self.name, subjects=[self.subject])
 
             return True
         except Exception as e:
-            logging.warning(f"connect and flush of route {self.subject} failed", e)
+            logging.warning(f"warning, failed to connect and or "
+                            f"flush of route: {self.name}, subject: {self.subject}", e)
 
         return False
 
@@ -90,7 +100,7 @@ class NATSRoute(BaseRoute, BaseModel):
         try:
             await self.connect()
 
-
+            logging.debug(f'preparing to publish data onto route: {self.name}, subject: {self.subject}')
             awk = await self._js.publish(subject=self.subject, payload=msg, stream=self.stream)
             return RouteMessageStatus(
                 id=str(awk),
@@ -108,10 +118,14 @@ class NATSRoute(BaseRoute, BaseModel):
 
     async def subscribe(self):
         self.connect()
+        logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}')
         self._sub = await self._js.subscribe(subject=self.subject, durable="psub")
+        logging.info(f'subscriber:complete for route: {self.name}, subject: {self.subject}')
+
 
     async def consume(self, wait: bool = True) -> [Any, Any]:
         max_iter_exit = 0
+        logging.info(f'subscriber:consume for route: {self.name}, subject: {self.subject}')
         while wait or max_iter_exit <= 3000:     # 3000 at 0.1 seconds = 300 seconds or 5 minutes
             try:
                 msg = await self._sub.next_msg(timeout=0.1)
@@ -153,8 +167,12 @@ class NATSRoute(BaseRoute, BaseModel):
 
     async def disconnect(self):
         try:
+            logging.info(f"disconnect:start from route: {self.route}, subject: {self.subject}")
             if self._nc and self._nc.is_connected:
                 self._nc.drain()
+
+            logging.info(f"disconnect:complete from route: {self.route}, subject: {self.subject}")
+
         except Exception as e:
             logging.warning("route disconnect error", e)
             pass

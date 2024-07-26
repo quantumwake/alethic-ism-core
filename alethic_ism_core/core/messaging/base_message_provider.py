@@ -92,7 +92,7 @@ class BaseMessageConsumer:
         signal.signal(signal.SIGTERM, self.graceful_shutdown)
 
     async def start_consumer(self, max_loops: int = None):
-        logging.info('starting up pulsar consumer')
+        logging.info(f'starting up consumer {type(self)}')
         await self.route.connect()
         await self.route.subscribe()
         await self.consumer_loop(max_loops=max_loops)
