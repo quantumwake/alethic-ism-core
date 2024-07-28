@@ -128,6 +128,7 @@ class NATSRoute(BaseRoute, BaseModel):
         logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}')
         self._sub = await self._js.subscribe(
             subject=self.subject,
+            queue=self.queue,
             durable=durable_name,
             config=ConsumerConfig(
                 ack_wait=90,
