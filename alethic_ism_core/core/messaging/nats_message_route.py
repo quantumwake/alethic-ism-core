@@ -122,9 +122,13 @@ class NATSRoute(BaseRoute, BaseModel):
             pass
 
     async def subscribe(self, consumer_no: int = 1):
-        durable_name = f"{self.name}_sub_{consumer_no}"
+        await self.connect()
 
-        self.connect()
+        if self.queue:      # cannot have durable consumers on consumer-queues, other consumers will pick up the slack
+            durable_name = None
+        else:
+            durable_name = f"{self.name}_sub_{consumer_no}"
+
         logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}')
         self._sub = await self._js.subscribe(
             subject=self.subject,
