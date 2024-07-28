@@ -9,4 +9,3 @@ dependencies:
   - pydantic
   - restrictedpython
   - nats-py
-  - pulsar-client

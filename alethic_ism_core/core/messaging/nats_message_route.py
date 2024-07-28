@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
+from nats.js.api import ConsumerConfig
 from nats.js.errors import NotFoundError
 from pydantic import BaseModel, PrivateAttr
 from nats.aio.client import Client as NATS
@@ -15,15 +16,19 @@ logging = ism_logger(__name__)
 
 
 class NATSRoute(BaseRoute, BaseModel):
-    name: str
-    url: str
-    subject: str
-    stream: Optional[str] = None
-    queue: Optional[str] = None
+    # required for NATS subscriber / publisher model
+    name: str           # the name of the jetstream
+    url: str            # the connection url to the jetstream server
+    subject: str        # the channel or subject to listen on
+    queue: Optional[str] = None     # the group of consumers to join
 
-    _nc: NATS = PrivateAttr(default=None)
-    _js: JetStreamContext = PrivateAttr(default=None)
-    _sub: JetStreamContext.PushSubscription = PrivateAttr(default=None)
+    # internal tracking
+    consumer_no: Optional[int] = 1      # a number to identify the subscriber index on the queue
+
+    # internal objects handling the publishing / subscriber model
+    _nc: NATS = PrivateAttr(default=None)               # connection
+    _js: JetStreamContext = PrivateAttr(default=None)   # jetstream recv/send
+    _sub: JetStreamContext.PushSubscription = PrivateAttr(default=None)     # subscriber
 
     @property
     def subject_group(self):
@@ -101,12 +106,12 @@ class NATSRoute(BaseRoute, BaseModel):
             await self.connect()
 
             logging.debug(f'preparing to publish data onto route: {self.name}, subject: {self.subject}')
-            awk = await self._js.publish(subject=self.subject, payload=msg, stream=self.stream)
+            awk = await self._js.publish(subject=self.subject, payload=msg)
             return RouteMessageStatus(
                 id=str(awk),
                 status=MessageStatus.QUEUED
             )
-        except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
+        except (ErrConnectionClosed, ErrTimeout, ErrNoServers, Exception) as e:
             print("Failed to send message:", e)
             return RouteMessageStatus(
                 message=msg,
@@ -116,10 +121,18 @@ class NATSRoute(BaseRoute, BaseModel):
         finally:
             pass
 
-    async def subscribe(self):
+    async def subscribe(self, consumer_no: int = 1):
+        durable_name = f"{self.name}_sub_{consumer_no}"
+
         self.connect()
         logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}')
-        self._sub = await self._js.subscribe(subject=self.subject, durable="psub")
+        self._sub = await self._js.subscribe(
+            subject=self.subject,
+            durable=durable_name,
+            config=ConsumerConfig(
+                ack_wait=90,
+            )
+        )
         logging.info(f'subscriber:complete for route: {self.name}, subject: {self.subject}')
 
 

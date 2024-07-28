@@ -6,7 +6,7 @@ messageConfig:
         subject: "ism.monitor"
 
       - selector: test/test
-        name: "test"
+        name: "ism_test"
         url: nats://127.0.0.1:4222
         subject: "ism.test"
 

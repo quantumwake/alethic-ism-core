@@ -60,6 +60,9 @@ class BaseMessageConsumer:
                 if not msg and not data:        # timed out, returns blank, wait for next iteration
                     continue
 
+                # TODO the ack should happen after the process has been completed
+                # await self.route.ack(msg)
+
                 logging.debug(f'Message received with {data}')
                 message_dict = json.loads(data)
                 status = await self._execute(message_dict)
@@ -79,6 +82,7 @@ class BaseMessageConsumer:
                     logging.warning(f"finalizing message but without a message id, this could be a result of a sudden "
                                     f"broker/consumer termination, between the messaging bus and or ")
 
+                # TODO the ack should be happening at this stage
                 await self.route.ack(msg)
 
     def graceful_shutdown(self, signum, frame):
@@ -91,8 +95,8 @@ class BaseMessageConsumer:
         logging.info("setting SIGTERM signal handler")
         signal.signal(signal.SIGTERM, self.graceful_shutdown)
 
-    async def start_consumer(self, max_loops: int = None):
+    async def start_consumer(self, max_loops: int = None, consumer_no: int = 1):
         logging.info(f'starting up consumer {type(self)}')
         await self.route.connect()
-        await self.route.subscribe()
+        await self.route.subscribe(consumer_no=consumer_no)
         await self.consumer_loop(max_loops=max_loops)

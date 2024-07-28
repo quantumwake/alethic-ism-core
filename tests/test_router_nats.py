@@ -1,53 +1,43 @@
-import json
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import json
 
 from alethic_ism_core.core.messaging.base_message_route_model import MessageStatus
 from alethic_ism_core.core.messaging.base_message_router import Router
-from alethic_ism_core.core.messaging.nats_message_consumer_provider import NATSMessagingConsumerProvider
-
-import pytest
 
 from alethic_ism_core.core.messaging.nats_message_provider import NATSMessageProvider
-from alethic_ism_core.core.messaging.nats_message_route import NATSRoute
 
-
-@pytest.mark.asyncio
-async def test_root():
-    # Define a function to send messages
-    async def send_messages(route):
-        for i in range(10):
-            status = await route.send_message(msg=json.dumps({
-                "name": f"hello_{i}",
-                "hello": "world",
-                "world": "goodbye"
-            }))
-            assert status.status == MessageStatus.QUEUED
-            await asyncio.sleep(1)  # 1 second delay between messages
-        await route.disconnect()
-
-    # Define a function to listen to messages
-    def listen_messages(consumer_provider):
-        asyncio.run(consumer_provider.connect())
-        while True:
-            msg = asyncio.run(consumer_provider.wait())
-            print(msg)
-
-    # Create producer and router, and send messages
+def test_nats_route_1():
     provider = NATSMessageProvider()
-    router = Router(provider=provider, yaml_file="./test_routes/test_nats_route.yaml")
-    await router.connect()
-
-    route = router.find_router(selector="test/test")
-    assert isinstance(route, NATSRoute)
-    await asyncio.gather(send_messages(route))
-
-    # Create consumer provider and start listening in a separate thread
-    consumer_provider = NATSMessagingConsumerProvider(
-        url=route.url,
-        name=route.name,
-        subject=route.subject
+    router = Router(
+        provider=provider,
+        yaml_file="./test_routes/test_nats_route.yaml"
     )
 
-    with ThreadPoolExecutor() as executor:
-        executor.submit(listen_messages, consumer_provider)
+    async def run_test():
+        route = router.find_route_by_subject(subject="ism.test")
+        await route.connect()
+        await route.subscribe()
+
+        async def consumer_loop():
+            message = await route.consume(wait=60)
+            print(message)
+
+        consumer_task = asyncio.create_task(consumer_loop())
+
+        status = await route.publish(
+            msg=json.dumps({
+                "name": "hello",
+                "hello": "world",
+                "world": "goodbye"
+            })
+        )
+
+        # Optionally, wait for the consumer task to complete if you need the result
+        await consumer_task
+
+        return status
+
+    asyncio.get_event_loop().run_until_complete(run_test())
+
+
+
