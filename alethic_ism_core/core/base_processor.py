@@ -52,7 +52,7 @@ class StatePropagationProviderRouter(StatePropagationProvider):
             "route_id": processor.output_processor_state.id,
             "type": "query_state_route",
             "input_query_state": input_query_state,
-            "query_states": output_query_states
+            "query_state": output_query_states
         }
 
         await self.route.publish(json.dumps(route_message))
