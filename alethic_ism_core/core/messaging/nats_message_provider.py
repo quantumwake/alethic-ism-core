@@ -21,7 +21,7 @@ class NATSMessageProvider(BaseRouteProvider):
             url=route_config['url'],
             subject=route_config['subject'],
             queue=route_config['queue'] if 'queue' in route_config else None,
-            group=route_config['group'] if 'group' in route_config else None,
+            # group=route_config['group'] if 'group' in route_config else None,
         )
 
 

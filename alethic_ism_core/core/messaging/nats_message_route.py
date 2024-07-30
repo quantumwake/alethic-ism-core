@@ -20,7 +20,7 @@ class NATSRoute(BaseRoute, BaseModel):
     name: str           # the name of the jetstream
     url: str            # the connection url to the jetstream server
     subject: str        # the channel or subject to listen on
-    queue: Optional[str] = None     # the group of consumers to join
+    queue: Optional[str] = None     # the consumer queue / group to join
 
     # internal tracking
     consumer_no: Optional[int] = 1      # a number to identify the subscriber index on the queue
@@ -30,7 +30,7 @@ class NATSRoute(BaseRoute, BaseModel):
     _js: JetStreamContext = PrivateAttr(default=None)   # jetstream recv/send
     _sub: JetStreamContext.PushSubscription = PrivateAttr(default=None)     # subscriber
 
-    @property
+    @property # TODO needed? I don't think so
     def subject_group(self):
         """
         Returns the subject associated with this route.

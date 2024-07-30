@@ -23,10 +23,6 @@ class MonitoredProcessorState:
             data: dict = None,
             exception: Any = None):
 
-        if not self.monitor_route:
-            logging.warning(f'no monitor route defined, unable to provide processor state status updates')
-            return
-
         monitor_message = json.dumps({
             "type": "processor_state",
             "route_id": route_id,
@@ -34,6 +30,11 @@ class MonitoredProcessorState:
             "exception": str(exception) if exception else None,
             "data": data
         })
+
+        if not self.monitor_route:
+            logging.warning(f'no monitor route defined, unable to provide processor state status updates, '
+                            f'here is the monitor message dump instead: {monitor_message}')
+            return
 
         await self.monitor_route.publish(msg=monitor_message)
 

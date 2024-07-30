@@ -251,6 +251,19 @@ class BaseProcessor(MonitoredProcessorState):
 
         self.current_status = new_status
 
+    async def can_processor_process_data(self, input_query_state_entry: dict):
+        processor_status = self.storage.fetch_processor(processor_id=self.processor.id)
+
+        # ensure that the processor status is not in terminated state
+        if processor_status in [ProcessorStatusCode.TERMINATE,
+                                ProcessorStatusCode.FAILED,
+                                ProcessorStatusCode.STOPPED]:
+            logging.debug(f'processor received input, however it is not in an active state, '
+                          f'ignoring input_query_state entry {input_query_state_entry}')
+            return False
+
+        return True
+
     async def execute(self, input_query_state: dict, force: bool = False):
         """
         Executes the processor state update and processes the input data entry.
@@ -265,6 +278,10 @@ class BaseProcessor(MonitoredProcessorState):
         Raises:
             Exception: If an error occurs during execution.
         """
+        if not self.can_processor_process_data(input_query_state_entry=input_query_state):
+            return
+
+        # execute the input entry given the processor implementation
         try:
             route_id = self.output_processor_state.id
 

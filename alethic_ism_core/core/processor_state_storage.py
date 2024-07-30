@@ -227,11 +227,20 @@ class ProcessorStorage:
             -> Optional[Processor]:
         raise NotImplementedError()
 
+    def change_processor_status(self, processor_id: str, status: ProcessorStatusCode) -> int:
+        raise NotImplementedError()
+
     def insert_processor(self, processor: Processor) \
             -> Processor:
         raise NotImplementedError()
 
     def fetch_processor_properties(self, processor_id: str) -> Optional[List[ProcessorProperty]]:
+        raise NotImplementedError()
+
+    def fetch_processor_property_by_name(self, processor_id: str, property_name: str):
+        raise NotImplementedError()
+
+    def update_processor_property(self, processor_id: str, property_name: str, property_value: str) -> int:
         raise NotImplementedError()
 
     def insert_processor_properties(self, properties: List[ProcessorProperty]) -> List[ProcessorProperty]:
@@ -245,6 +254,10 @@ class ProcessorStateRouteStorage:
 
     def fetch_processor_state_routes_by_project_id(self, project_id) \
             -> Optional[List[ProcessorState]]:
+        raise NotImplementedError()
+
+    def fetch_processor_state_route_by_route_id(self, route_id: str) \
+            -> Optional[ProcessorState]:
         raise NotImplementedError()
 
     def fetch_processor_state_route(self,

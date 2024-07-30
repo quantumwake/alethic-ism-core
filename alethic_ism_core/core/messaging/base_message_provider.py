@@ -4,6 +4,7 @@ import signal
 import sys
 
 from .base_message_route_model import BaseRoute
+from ..monitored_processor_state import MonitoredProcessorState
 from ..utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
@@ -16,14 +17,15 @@ class BaseRouteProvider:
         raise NotImplementedError()
 
 
-class BaseMessageConsumer:
+class BaseMessageConsumer(MonitoredProcessorState):
 
-    def __init__(self, route: BaseRoute):
+    def __init__(self, route: BaseRoute, monitor_route: BaseRoute):
         # flag that determines whether to shut down the consumers
         self.RUNNING = False
 
         # consumer config
         self.route = route
+        self.monitor_route = monitor_route
 
     async def _execute(self, message: dict):
         try:
@@ -61,7 +63,7 @@ class BaseMessageConsumer:
                     continue
 
                 # TODO the ack should happen after the process has been completed
-                # await self.route.ack(msg)
+                await self.route.ack(msg)
 
                 logging.debug(f'Message received with {data}')
                 message_dict = json.loads(data)
@@ -83,7 +85,7 @@ class BaseMessageConsumer:
                                     f"broker/consumer termination, between the messaging bus and or ")
 
                 # TODO the ack should be happening at this stage
-                await self.route.ack(msg)
+                # await self.route.ack(msg)
 
     def graceful_shutdown(self, signum, frame):
         logging.info("Received SIGTERM signal. Gracefully shutting down.")

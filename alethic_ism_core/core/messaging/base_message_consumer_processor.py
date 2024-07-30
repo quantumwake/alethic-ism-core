@@ -10,11 +10,12 @@ from ..utils.ismlogging import ism_logger
 logging = ism_logger(__name__)
 
 
-class BaseMessageConsumerProcessor(BaseMessageConsumer, MonitoredProcessorState):
+class BaseMessageConsumerProcessor(BaseMessageConsumer):
 
     def __init__(self, route: BaseRoute, monitor_route: BaseRoute, storage: StateMachineStorage, **kwargs):
-        BaseMessageConsumer.__init__(self, route=route)
-        MonitoredProcessorState.__init__(self, monitor_route=monitor_route)
+        # BaseMessageConsumer.__init__(self, route=route, monitor_route=monitor_route)
+        # MonitoredProcessorState.__init__(self, monitor_route=monitor_route)
+        super().__init__(route=route, monitor_route=monitor_route)
         self.storage = storage
 
     def create_processor(self,
@@ -82,6 +83,7 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer, MonitoredProcessorState)
             raise exception
 
         return output_processor_states
+
 
     async def execute(self, consumer_message_mapping: dict):
 
