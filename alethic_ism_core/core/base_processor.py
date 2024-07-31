@@ -252,14 +252,17 @@ class BaseProcessor(MonitoredProcessorState):
         self.current_status = new_status
 
     async def can_processor_process_data(self, input_query_state_entry: dict):
-        processor_status = self.storage.fetch_processor(processor_id=self.processor.id)
+        processor = self.storage.fetch_processor(processor_id=self.processor.id)
+
+        if not processor:
+            logging.error(f'critical, unable to find processor id: {self.processor.id}, '
+                          f'likely a storage implementation issue, should have not got this far.')
+            return False
 
         # ensure that the processor status is not in terminated state
-        if processor_status in [ProcessorStatusCode.TERMINATE,
+        if processor.status in [ProcessorStatusCode.TERMINATE,
                                 ProcessorStatusCode.FAILED,
                                 ProcessorStatusCode.STOPPED]:
-            logging.debug(f'processor received input, however it is not in an active state, '
-                          f'ignoring input_query_state entry {input_query_state_entry}')
             return False
 
         return True
@@ -278,8 +281,11 @@ class BaseProcessor(MonitoredProcessorState):
         Raises:
             Exception: If an error occurs during execution.
         """
-        if not self.can_processor_process_data(input_query_state_entry=input_query_state):
-            return
+        is_allowed_to_process = await self.can_processor_process_data(input_query_state_entry=input_query_state)
+        if not is_allowed_to_process:
+            logging.debug(f'processor {self.processor.id} for {self.provider.id}'
+                          f'is in a stopped state, skipping input query processing')
+            return []
 
         # execute the input entry given the processor implementation
         try:
