@@ -41,6 +41,9 @@ class Router:
 
     def create_route(self, selector: str, route_config: dict):
         route = self.provider.create_route(route_config=route_config)
+        if not route:
+            raise NotImplementedError(f"route selector: {selector} not found")
+
         self.routing_table[selector] = route
 
     def clone_route(self, selector: str, route_config_updates: dict):
@@ -54,7 +57,6 @@ class Router:
             route_config=route_json
         )
         return new_route
-
 
     async def connect_all(self):
         if not self.routing_table:

@@ -193,6 +193,7 @@ class BaseProcessor(MonitoredProcessorState):
                  processor: Processor = None,
                  output_processor_state: ProcessorState = None,
                  state_propagation_provider: StatePropagationProvider = StatePropagationProviderCore(),
+                 stream_route: BaseRoute = None,
                  **kwargs):
 
         super().__init__(**kwargs)
@@ -209,6 +210,7 @@ class BaseProcessor(MonitoredProcessorState):
         self.provider = provider
         self.processor = processor
         self.output_processor_state = output_processor_state
+        self.stream_route = stream_route
 
         logging.info(f'setting up processor: {self.processor.id if processor else None},'
                      f'provider id: {self.provider.id if provider else None}, '
@@ -380,6 +382,9 @@ class BaseProcessor(MonitoredProcessorState):
         raise NotImplementedError()
 
     async def stream_input_data_entry(self, input_query_state: dict):
+        if not self.stream_route:
+            raise ValueError(f"streams are not supported by provider: {self.output_processor_state.id}, route_id {self.output_processor_state.id}")
+
         if not input_query_state:
             raise ValueError("invalid input state, cannot be empty")
 
@@ -388,7 +393,17 @@ class BaseProcessor(MonitoredProcessorState):
 
         status, template = build_template_text(self.template, input_query_state)
 
+        # this is a bit of a hack to use a session id for a given processor state stream
+        if 'session_id' in input_query_state:
+            session_id = input_query_state["session_id"]
+            subject = f"processor.state.{self.output_state.id}.{session_id}"
+        else:
+            subject = f"processor.state.{self.output_state.id}"
+
+        name = f"{subject}".replace("-", "_")
+
         # begin the processing of the prompts
+        logging.debug(f"entered streaming mode, state_id: {self.output_state.id}")
         try:
             # # execute the underlying model function
             stream = self._stream(
@@ -396,19 +411,25 @@ class BaseProcessor(MonitoredProcessorState):
                 template=template,
             )
 
-            message_provider = NATSMessageProvider()
-            router = Router(provider=message_provider, yaml_file="../routing-nats.yaml")
-            state_route = router.clone_route(
-                selector="processor/state",
+            stream_route = self.stream_route.clone(
                 route_config_updates={
-                    "subject": f"processor.state.{self.output_state.id}"
+                    "subject": subject,
+                    "name": name
                 }
             )
 
             async for content in stream:
-                await state_route.publish(content)
+                if content:
+                    # print(content)
+                    await stream_route.publish(content)
 
-            await state_route.disconnect()
+            await stream_route.publish("<<>>DONE<<>>")
+            await stream_route.flush()
+
+            # should gracefully close the connection
+            await stream_route.disconnect()
+
+            logging.debug(f"exit streaming mode, state_id: {self.output_state.id}")
         except Exception as exception:
             await self.fail_execute_processor_state(
                 # self.output_processor_state,
@@ -416,6 +437,7 @@ class BaseProcessor(MonitoredProcessorState):
                 exception=exception,
                 data=input_query_state
             )
+
 
     #
     # async def stream_input_data_entry(self, input_query_state: dict):

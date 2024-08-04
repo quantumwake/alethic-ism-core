@@ -1,3 +1,4 @@
+import json
 from datetime import datetime as dt
 from enum import Enum
 from typing import Optional, Any
@@ -46,6 +47,9 @@ class BaseRoute(BaseModel):
         raise NotImplementedError()
 
     def friendly_message(self, message: Any):
+        raise NotImplementedError()
+
+    def clone(self, route_config_updates: dict):
         raise NotImplementedError()
 
     @property

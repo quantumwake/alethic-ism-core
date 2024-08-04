@@ -208,6 +208,14 @@ class NATSRoute(BaseRoute, BaseModel):
         #     "topic_name": message.topic_name()
         # })
 
+    def clone(self, route_config_updates: dict):
+        route_json = json.loads(self.model_dump_json())
+        route_json = {
+            **route_json,
+            **route_config_updates
+        }
+        return NATSRoute(**route_json)
+
     async def disconnect(self):
         try:
             logging.info(f"disconnect:start from route: {self.name}, subject: {self.subject}")
