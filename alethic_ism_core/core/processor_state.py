@@ -91,9 +91,14 @@ def load_state_from_pickle(file_name: str) -> 'State':
         return obj
 
 
-class StateConfig(BaseModel):
+class BaseStateConfig(BaseModel):
     name: Optional[str] = None
     storage_class: Optional[str] = "database"
+
+
+class StateConfig(BaseStateConfig):
+    name: Optional[str] = None
+    # storage_class: Optional[str] = "database"
     primary_key: Optional[List[StateDataKeyDefinition]] = None
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
@@ -109,6 +114,12 @@ class StateConfig(BaseModel):
 class StateConfigLM(StateConfig):
     user_template_id: str
     system_template_id: Optional[str] = None
+
+
+class StateConfigStream(BaseStateConfig):
+    url: Optional[str] = None
+    template_id: Optional[str] = None
+    # storage_class = "stream"
 
 
 class StateConfigCode(StateConfig):
@@ -255,7 +266,14 @@ class State(BaseModelHashable):
     id: Optional[str] = None  # primary key, can be generated or directly set
     project_id: Optional[str] = None  # project association id
 
-    config: Optional[Union[StateConfig, StateConfigLM, StateConfigDB, StateConfigVisual, StateConfigCode]] = None
+    config: Optional[Union[
+        StateConfig,
+        StateConfigLM,
+        StateConfigDB,
+        StateConfigVisual,
+        StateConfigCode,
+        StateConfigStream
+    ]] = None
     columns: Dict[str, StateDataColumnDefinition] = {}
     data: Dict[str, StateDataRowColumnData] = {}
     mapping: Dict[str, StateDataColumnIndex] = {}
@@ -287,7 +305,7 @@ class State(BaseModelHashable):
         config_value = value['config']
 
         # if it is a state config type, then return the root object, nothing to do here
-        if isinstance(config_value, StateConfig):
+        if isinstance(config_value, BaseStateConfig):
             return value
 
         # Reconstructs the config type based on the state_type
@@ -300,6 +318,8 @@ class State(BaseModelHashable):
             value['config'] = StateConfigCode(**config_value)
         elif state_type == 'StateConfigVisual':
             value['config'] = StateConfigVisual(**config_value)
+        elif state_type == 'StateConfigStream':
+            value['config'] = StateConfigStream(**config_value)
         elif state_type == 'StateConfig':
             value['config'] = StateConfig(**config_value)
         else:

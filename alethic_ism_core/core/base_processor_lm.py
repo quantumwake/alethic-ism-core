@@ -1,4 +1,6 @@
-from .processor_state import StateConfigLM
+from typing import Union
+
+from .processor_state import StateConfigLM, StateConfigStream
 from .utils.ismlogging import ism_logger
 from .base_processor import BaseProcessor
 from .utils.general_utils import build_template_text
@@ -11,12 +13,23 @@ class BaseProcessorLM(BaseProcessor):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        # ensure that the configuration passed is of StateConfigLM
+        if (not isinstance(self.output_state.config, StateConfigLM) and not
+                isinstance(self.output_state.config, StateConfigStream)):
+
+            raise ValueError(f'invalid state config, '
+                             f'got {type(self.output_state.config)}, '
+                             f'expected {StateConfigLM} or {StateConfigStream}')
+
     @property
-    def config(self) -> StateConfigLM:
+    def config(self) -> Union[StateConfigLM, StateConfigStream]:
         return self.output_state.config
 
     @property
     def user_template(self):
+        if not isinstance(self.config, StateConfigLM):
+            raise ValueError("system template cannot be set for streaming configuration, use template instead")
+
         if self.config.user_template_id:
             template = self.storage.fetch_template(self.config.user_template_id)
             return template.template_content
@@ -24,19 +37,14 @@ class BaseProcessorLM(BaseProcessor):
 
     @property
     def system_template(self):
+        if not isinstance(self.config, StateConfigLM):
+            raise ValueError("system template cannot be set for streaming configuration, use template instead")
+
         if self.config.system_template_id:
             template = self.storage.fetch_template(self.config.system_template_id)
             return template.template_content
         return None
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-        # ensure that the configuration passed is of StateConfigLM
-        if not isinstance(self.output_state.config, StateConfigLM):
-            raise ValueError(f'invalid state config, '
-                             f'got {type(self.output_state.config)}, '
-                             f'expected {StateConfigLM}')
 
     def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         raise NotImplementedError(f'You must implement the _execute(..) method')
@@ -93,4 +101,3 @@ class BaseProcessorLM(BaseProcessor):
                 exception=exception,
                 data=input_query_state
             )
-

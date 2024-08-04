@@ -26,6 +26,10 @@ class Router:
 
         self.routing_table = Dict[str, BaseRoute]
 
+        self.create_routing_table()
+
+    def create_routing_table(self):
+
         # if there are topic selectors then build a dictionary of selector path to the route
         if 'routes' in self.message_config:
             routes = self.message_config['routes']
@@ -34,6 +38,23 @@ class Router:
                     self.provider.create_route(route_config=route_config)
                 for route_config in routes
             }
+
+    def create_route(self, selector: str, route_config: dict):
+        route = self.provider.create_route(route_config=route_config)
+        self.routing_table[selector] = route
+
+    def clone_route(self, selector: str, route_config_updates: dict):
+        route = self.find_route(selector=selector)
+        route_json = json.loads(route.model_dump_json())
+        route_json = {
+            **route_json,
+            **route_config_updates
+        }
+        new_route = self.provider.create_route(
+            route_config=route_json
+        )
+        return new_route
+
 
     async def connect_all(self):
         if not self.routing_table:

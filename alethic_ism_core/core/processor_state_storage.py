@@ -12,7 +12,7 @@ from .base_model import (
     ProcessorState,
     ProcessorProvider,
     ProcessorStateDirection,
-    ProcessorProperty, MonitorLogEvent, ProcessorStatusCode
+    ProcessorProperty, MonitorLogEvent, ProcessorStatusCode, UsageUnit
 )
 from .processor_state import (
     State,
@@ -217,6 +217,14 @@ class StateStorage:
         raise NotImplementedError()
 
 
+class UsageStorage:
+    def insert_usage_unit(self, usage_unit: UsageUnit):
+        raise NotImplementedError()
+
+    def fetch_usage_units(self, project_id: str):
+        raise NotImplementedError()
+
+
 class ProcessorStorage:
 
     def fetch_processors(self, provider_id: str = None, project_id: str = None) \
@@ -353,6 +361,7 @@ class StateMachineStorage(StateStorage,
                           UserProfileStorage,
                           UserProjectStorage,
                           MonitorLogEventStorage,
+                          UsageStorage,
                           metaclass=ForwardingStateMachineStorageMeta):
     def __init__(self,
                  state_storage: StateStorage = None,
@@ -363,7 +372,8 @@ class StateMachineStorage(StateStorage,
                  template_storage: TemplateStorage = None,
                  user_profile_storage: UserProfileStorage = None,
                  user_project_storage: UserProjectStorage = None,
-                 monitor_log_event_storage: MonitorLogEventStorage = None):
+                 monitor_log_event_storage: MonitorLogEventStorage = None,
+                 usage_storage: UsageStorage = None):
 
         # Assign the delegates dynamically via constructor parameters
         self._delegate_state_storage = state_storage
@@ -375,3 +385,4 @@ class StateMachineStorage(StateStorage,
         self._delegate_user_profile_storage = user_profile_storage
         self._delegate_user_project_storage = user_project_storage
         self._delegate_monitor_log_event_storage = monitor_log_event_storage
+        self._delegate_usage_storage = usage_storage

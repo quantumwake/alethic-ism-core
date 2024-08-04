@@ -3,6 +3,8 @@
 logs/*.log
 .env
 *.swp
+tmp
+*.tar.gz
 __pycache__
 .DS_Store
 

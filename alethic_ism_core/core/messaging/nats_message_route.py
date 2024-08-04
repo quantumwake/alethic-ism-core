@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from typing import Any, Optional
 
 from nats.aio.msg import Msg
@@ -21,6 +22,7 @@ class NATSRoute(BaseRoute, BaseModel):
     url: str            # the connection url to the jetstream server
     subject: str        # the channel or subject to listen on
     queue: Optional[str] = None     # the consumer queue / group to join
+    jetstream_enabled: Optional[bool] = True
 
     # internal tracking
     consumer_no: Optional[int] = 1      # a number to identify the subscriber index on the queue
@@ -70,20 +72,22 @@ class NATSRoute(BaseRoute, BaseModel):
 
             logging.debug(f'preparing to connect route: {self.name}, subject: {self.subject}, url {self.url}')
             await self._nc.connect(
-                servers=[self.url]
+                servers=[self.url],
             )
 
             logging.info(f'connected to route: {self.name}, subject: {self.subject}, url {self.url}')
 
-            # Create JetStream context given the nats client connection, if it doesn't exist already
-            self._js = self._nc.jetstream()
+            # jetstream enablement flag must be set to true for jetstream to work
+            if self.jetstream_enabled:
+                # Create JetStream context given the nats client connection, if it doesn't exist already
+                self._js = self._nc.jetstream()
 
-            try:
-                logging.info(f'initialize:start jetstream for route: {self.name}, subject: {self.subject}')
-                await self._js.find_stream_name_by_subject(self.subject)
-            except NotFoundError:
-                logging.info(f'initialize:complete jetstream for route: {self.name}, subject: {self.subject}')
-                await self._js.add_stream(name=self.name, subjects=[self.subject])
+                try:
+                    logging.info(f'initialize:start jetstream for route: {self.name}, subject: {self.subject}')
+                    await self._js.find_stream_name_by_subject(self.subject)
+                except NotFoundError:
+                    logging.info(f'initialize:complete jetstream for route: {self.name}, subject: {self.subject}')
+                    await self._js.add_stream(name=self.name, subjects=[self.subject])
 
             return True
         except Exception as e:
@@ -92,8 +96,10 @@ class NATSRoute(BaseRoute, BaseModel):
 
         return False
 
-
     async def publish(self, msg: Any) -> RouteMessageStatus:
+
+        if not msg:
+            return None
 
         if isinstance(msg, str):
             msg = msg.encode('utf-8')
@@ -105,8 +111,13 @@ class NATSRoute(BaseRoute, BaseModel):
         try:
             await self.connect()
 
-            logging.debug(f'preparing to publish data onto route: {self.name}, subject: {self.subject}')
-            awk = await self._js.publish(subject=self.subject, payload=msg)
+            if self.jetstream_enabled:
+                logging.debug(f'preparing to publish data onto route: {self.name}, subject: {self.subject}')
+                awk = await self._js.publish(subject=self.subject, payload=msg)
+            else:
+                await self._nc.publish(subject=self.subject, payload=msg)
+                awk = "N/A"
+
             return RouteMessageStatus(
                 id=str(awk),
                 status=MessageStatus.QUEUED
@@ -124,29 +135,40 @@ class NATSRoute(BaseRoute, BaseModel):
     async def subscribe(self, consumer_no: int = 1):
         await self.connect()
 
-        if self.queue:      # cannot have durable consumers on consumer-queues, other consumers will pick up the slack
-            durable_name = None
-        else:
-            durable_name = f"{self.name}_sub_{consumer_no}"
+        logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}, jetstream_enabled: {self.jetstream_enabled}')
+        if self.jetstream_enabled:
+            if self.queue:      # cannot have durable consumers on consumer-queues, other consumers will pick up the slack
+                durable_name = None
+            else:
+                durable_name = f"{self.name}_sub_{consumer_no}"
 
-        logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}')
-        self._sub = await self._js.subscribe(
-            subject=self.subject,
-            queue=self.queue,
-            durable=durable_name,
-            config=ConsumerConfig(
-                ack_wait=90,
+            logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}')
+            self._sub = await self._js.subscribe(
+                subject=self.subject,
+                queue=self.queue,
+                durable=durable_name,
+                config=ConsumerConfig(
+                    ack_wait=90,
+                )
             )
-        )
-        logging.info(f'subscriber:complete for route: {self.name}, subject: {self.subject}')
+        else:
+            self._sub = await self._nc.subscribe(subject=self.subject, queue=self.queue)
 
+        logging.info(f'subscriber:complete for route: {self.name}, subject: {self.subject}, '
+                     f'jetstream_enabled: {self.jetstream_enabled}')
 
     async def consume(self, wait: bool = True) -> [Any, Any]:
         max_iter_exit = 0
-        logging.info(f'subscriber:consume for route: {self.name}, subject: {self.subject}')
+        logging.info(f'subscriber:consume for route: {self.name}, subject: {self.subject}, jetstream_enabled: {self.jetstream_enabled}')
         while wait or max_iter_exit <= 3000:     # 3000 at 0.1 seconds = 300 seconds or 5 minutes
             try:
-                msg = await self._sub.next_msg(timeout=0.1)
+                if self.jetstream_enabled:
+                    # JetStream consumption
+                    msg = await self._sub.next_msg(timeout=0.1)
+                else:
+                    # Standard NATS consumption
+                    msg = await self._nc.request(self.subject, b'', timeout=0.1)
+
                 data = msg.data.decode("utf-8")
                 return msg, data
             except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
@@ -162,6 +184,9 @@ class NATSRoute(BaseRoute, BaseModel):
         return None, None
 
     async def ack(self, message):
+        if not self.jetstream_enabled:
+            return  # there is no ack for regular consumer routes
+
         if message:
             await message.ack()
         else:
@@ -187,7 +212,17 @@ class NATSRoute(BaseRoute, BaseModel):
         try:
             logging.info(f"disconnect:start from route: {self.name}, subject: {self.subject}")
             if self._nc and self._nc.is_connected:
-                self._nc.drain()
+                is_draining1 = self._nc.is_draining
+                await self._nc.drain()
+                is_draining2 = self._nc.is_draining
+                logging.debug(f"route {self.subject} is draining")
+
+                while self._nc.is_draining:
+                    logging.debug(f"route {self.subject} is draining")
+                    time.sleep(1)
+
+                if not self._nc.is_closed:
+                    await self._nc.close()
 
             logging.info(f"disconnect:complete from route: {self.name}, subject: {self.subject}")
 
@@ -202,4 +237,5 @@ class NATSRoute(BaseRoute, BaseModel):
             logging.warning(f"unable flush route", e)
 
     def __del__(self):
-        asyncio.run(self.disconnect())
+        pass
+        # asyncio.get_event_loop().run_until_complete(self.disconnect())

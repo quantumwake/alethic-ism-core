@@ -1,10 +1,13 @@
 import json
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Union
 
-from .monitored_processor_state import MonitoredProcessorState
+from .messaging.base_message_router import Router
 from .messaging.base_message_route_model import BaseRoute
+from .messaging.nats_message_provider import NATSMessageProvider
+from .monitored_processor_state import MonitoredProcessorState
 from .processor_state_storage import StateMachineStorage
 from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState
+from .utils.general_utils import build_template_text
 from .utils.state_utils import validate_processor_status_change
 from .processor_state import (
     State,
@@ -12,7 +15,7 @@ from .processor_state import (
     StateDataColumnDefinition,
     StateDataKeyDefinition,
     StateConfig,
-    StateDataColumnIndex,
+    StateDataColumnIndex, StateConfigStream,
 )
 from .utils.ismlogging import ism_logger
 
@@ -172,6 +175,17 @@ class StatePropagationProviderDistributor(StatePropagationProvider):
 
 class BaseProcessor(MonitoredProcessorState):
 
+    @property
+    def template(self):
+        if not isinstance(self.config, StateConfigStream):
+            raise ValueError("system template cannot be set for streaming configuration, use template instead")
+
+        if self.config.template_id:
+            template = self.storage.fetch_template(self.config.template_id)
+            return template.template_content
+
+        return None
+
     def __init__(self,
                  output_state: State,
                  state_machine_storage: StateMachineStorage,
@@ -203,7 +217,7 @@ class BaseProcessor(MonitoredProcessorState):
                      f'config: {self.config}')
 
     @property
-    def config(self):
+    def config(self) -> Union[StateConfig, StateConfigStream]:
         return self.output_state.config
 
     @config.setter
@@ -297,10 +311,17 @@ class BaseProcessor(MonitoredProcessorState):
                 status=ProcessorStatusCode.RUNNING
             )
 
+            output_query_states = []        # TODO not sure if we should do something with if the config is a streams?
+
             # RUNNING (INTRA): the processor is executing the output instructions on the input
-            output_query_states = await self.process_input_data_entry(
-                input_query_state=input_query_state,
-                force=force)
+            if isinstance(self.config, StateConfigStream):
+                await self.stream_input_data_entry(
+                    input_query_state=input_query_state
+                )
+            else:
+                output_query_states = await self.process_input_data_entry(
+                    input_query_state=input_query_state,
+                    force=force)
 
             # COMPLETED: the processor has completed execution of instructions
             await self.send_processor_state_update(
@@ -353,7 +374,52 @@ class BaseProcessor(MonitoredProcessorState):
         return output_query_states
 
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
-        raise NotImplementedError("process the query state entry")
+        raise NotImplementedError("event processing is not supported by this processor")
+
+    async def _stream(self, input_data: Any, template: str):
+        raise NotImplementedError()
+
+    async def stream_input_data_entry(self, input_query_state: dict):
+        if not input_query_state:
+            raise ValueError("invalid input state, cannot be empty")
+
+        if not isinstance(self.config, StateConfigStream):
+            raise NotImplementedError()
+
+        status, template = build_template_text(self.template, input_query_state)
+
+        # begin the processing of the prompts
+        try:
+            # # execute the underlying model function
+            stream = self._stream(
+                input_data=input_query_state,
+                template=template,
+            )
+
+            message_provider = NATSMessageProvider()
+            router = Router(provider=message_provider, yaml_file="../routing-nats.yaml")
+            state_route = router.clone_route(
+                selector="processor/state",
+                route_config_updates={
+                    "subject": f"processor.state.{self.output_state.id}"
+                }
+            )
+
+            async for content in stream:
+                await state_route.publish(content)
+
+            await state_route.disconnect()
+        except Exception as exception:
+            await self.fail_execute_processor_state(
+                # self.output_processor_state,
+                route_id=self.output_processor_state.id,
+                exception=exception,
+                data=input_query_state
+            )
+
+    #
+    # async def stream_input_data_entry(self, input_query_state: dict):
+    #     raise NotImplementedError("stream processing is not supported by this processor")
 
 
 if __name__ == '__main__':

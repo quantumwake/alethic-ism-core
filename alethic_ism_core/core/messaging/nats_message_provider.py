@@ -21,6 +21,7 @@ class NATSMessageProvider(BaseRouteProvider):
             url=route_config['url'],
             subject=route_config['subject'],
             queue=route_config['queue'] if 'queue' in route_config else None,
+            jetstream_enabled=route_config['jetstream_enabled'] if 'jetstream_enabled' in route_config else True,
             # group=route_config['group'] if 'group' in route_config else None,
         )
 

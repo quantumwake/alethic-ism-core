@@ -50,6 +50,9 @@ class ProcessorStateDirection(Enum):
     OUTPUT = "OUTPUT"
 
 
+class UsageUnitType(Enum):
+    TOKEN = "TOKEN"
+
 class ProcessorStatusCode(Enum):
     # Represents that an entity or task has been created or initialized,
     # but no further action has been taken yet.
@@ -87,6 +90,26 @@ class ProcessorStatusCode(Enum):
     # or processing of the entity or task, preventing it from being completed successfully.
     FAILED = "FAILED"
 
+
+class UsageUnit(BaseModel):
+    id: Optional[int] = None     # serial id
+    transaction_time: Optional[datetime.datetime] = None
+    project_id: str
+    unit_type: UsageUnitType = UsageUnitType.TOKEN
+    unit_count: int
+    unit_cost: float
+    unit_total: float
+    reference_id: Optional[str] = None
+    reference_label: Optional[str] = None
+
+    # id serial not null primary key,
+    # transaction_time timestamp,
+    # unit_type usage_unit_type not null,
+    # unit_count int not null default 0,
+    # unit_cost float null default 0,
+    # unit_total  float null default 0,
+    # reference_id varchar(36),
+    # reference_label varchar(4000)
 
 class InstructionTemplate(BaseModelHashable):
     template_id: Optional[str] = None

@@ -1,3 +1,4 @@
+from datetime import datetime as dt
 from enum import Enum
 from typing import Optional, Any
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ class RouteMessageStatus(BaseModel):
 class BaseRoute(BaseModel):
 
     selector: str
+    creation_date: Optional[dt] = dt.utcnow()
 
     async def connect(self):
         raise NotImplementedError()
