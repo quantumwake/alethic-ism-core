@@ -1,5 +1,4 @@
-./from alethic_ism_db.db.embedding.semantic_distance import BasicSemanticSearch
-from alethic_ism_db.db.embedding.syntactic_accuracy import calculate_bleu, calculate_meteor
+from alethic_ism_core.core.datasource.semantic_distance import BasicSemanticSearch
 
 reference_sentence = 'Cows are thoughtful, intelligent beings with family structures.'
 other_sentences = ['Cows are sentient intelligent beings',
@@ -31,15 +30,16 @@ for semantic in semantics:
         print(f' - {distance}\t\t{other_sentences[idx]}')
 
 
-print(f''.join(['-' for _ in range(1, 80)]))
-print(f"Calculated BLEU, METEOR and TER scores from reference sentence: {reference_sentence}")
-for idx, sentence in enumerate(other_sentences):
-    bleu_score = calculate_bleu(reference_sentence, sentence)
-    meteor_score = calculate_meteor(reference_sentence, sentence)
-    # ter_score = calculate_ter(reference_sentence, sentence)
-
-    formatted_bleu = "{:.2e}".format(bleu_score)  # Scientific notation with 2 decimal places
-    formatted_meteor = "{:.4f}".format(meteor_score)  # Standard decimal with 4 decimal places
-    # formatted_ter = "{:.4f}".format(ter_score)  # Standard decimal with 4 decimal places
-    formatted_ter = "N/A"
-    print(f' - blue: {formatted_bleu}\t meteor: {formatted_meteor}\t ter: {formatted_ter}\t\t{other_sentences[idx]}')
+#
+# print(f''.join(['-' for _ in range(1, 80)]))
+# print(f"Calculated BLEU, METEOR and TER scores from reference sentence: {reference_sentence}")
+# for idx, sentence in enumerate(other_sentences):
+#     bleu_score = calculate_bleu(reference_sentence, sentence)
+#     meteor_score = calculate_meteor(reference_sentence, sentence)
+#     # ter_score = calculate_ter(reference_sentence, sentence)
+#
+#     formatted_bleu = "{:.2e}".format(bleu_score)  # Scientific notation with 2 decimal places
+#     formatted_meteor = "{:.4f}".format(meteor_score)  # Standard decimal with 4 decimal places
+#     # formatted_ter = "{:.4f}".format(ter_score)  # Standard decimal with 4 decimal places
+#     formatted_ter = "N/A"
+#     print(f' - blue: {formatted_bleu}\t meteor: {formatted_meteor}\t ter: {formatted_ter}\t\t{other_sentences[idx]}')

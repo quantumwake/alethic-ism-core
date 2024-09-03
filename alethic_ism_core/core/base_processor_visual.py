@@ -1,6 +1,6 @@
 from .processor_state import StateConfigVisual
 from .base_processor import BaseProcessor
-from .utils.general_utils import build_template_text
+from .utils.general_utils import build_template_text_v2
 from .utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
@@ -19,7 +19,8 @@ class BaseProcessorVisual(BaseProcessor):
     def template(self):
         if self.config.template_id:
             template = self.storage.fetch_template(self.config.template_id)
-            return template.template_content
+            return template
+
         return None
 
     def __init__(self, **kwargs):
@@ -39,7 +40,7 @@ class BaseProcessorVisual(BaseProcessor):
             return
 
         # build final user and system prompts using the query state entry as the input data
-        status, template = build_template_text(self.template, input_query_state)
+        template = build_template_text_v2(self.template, input_query_state)
 
         # begin the processing of the prompts
         try:

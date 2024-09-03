@@ -1,7 +1,7 @@
 import json
 from datetime import datetime as dt
 from enum import Enum
-from typing import Optional, Any
+from typing import Optional, Any, Callable, Awaitable
 from pydantic import BaseModel
 
 
@@ -28,7 +28,13 @@ class BaseRoute(BaseModel):
     async def disconnect(self):
         raise NotImplementedError()
 
-    async def subscribe(self):
+    async def subscribe(self, callback: Optional[Callable[[Any], Awaitable[None]]] = None, consumer_no: int = 1):
+        raise NotImplementedError()
+
+    async def request(self, msg: Any) -> Any:
+        raise NotImplementedError()
+
+    async def reply(self, msg: Any, reply: str) -> None:
         raise NotImplementedError()
 
     async def publish(self, msg: str) -> RouteMessageStatus:
@@ -41,6 +47,9 @@ class BaseRoute(BaseModel):
         raise NotImplementedError()
 
     async def flush(self):
+        raise NotImplementedError()
+
+    async def drain(self):
         raise NotImplementedError()
 
     def get_message_id(self, message):

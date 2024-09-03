@@ -89,8 +89,7 @@ class MockProcessorLM(BaseProcessorLM):
             direction=ProcessorStateDirection.OUTPUT
         )
 
-
-    def _execute(self, user_prompt: str, system_prompt: str, values: dict):
+    async def _execute(self, user_prompt: str, system_prompt: str, values: dict):
         question = values['question']
         response_dict = mock_question_response(input_query_state=values)
         return response_dict, dict, str(response_dict)
@@ -122,7 +121,7 @@ def test_mock_processor_lm():
         )
     )
     output_state.columns = {
-        "provider_name": StateDataColumnDefinition(name="provider_name",value="provider.name", callable=True),
+        "provider_name": StateDataColumnDefinition(name="provider_name", value="provider.name", callable=True),
         "provider_version": StateDataColumnDefinition(name="provider_version", value="provider.version", callable=True),
     }
 

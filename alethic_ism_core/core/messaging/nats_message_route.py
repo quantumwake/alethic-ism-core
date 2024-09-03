@@ -1,8 +1,9 @@
 import asyncio
 import json
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Callable, Awaitable
 
+import nats
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
 from nats.js.api import ConsumerConfig
@@ -96,6 +97,34 @@ class NATSRoute(BaseRoute, BaseModel):
 
         return False
 
+    async def request(self, msg: Any) -> Any:
+        if not msg:
+            return None
+
+        if isinstance(msg, str):
+            msg = msg.encode('utf-8')
+        elif isinstance(msg, dict):
+            msg = json.dumps(msg).encode('utf-8')
+        else:
+            raise ValueError("Unsupported message type")
+
+        try:
+            await self.connect()
+            res = await self._nc.request(self.subject, msg, timeout=10.0)
+            return res
+        except (ErrConnectionClosed, ErrTimeout, ErrNoServers, Exception) as e:
+            print("Failed to request-reply message:", e)
+        finally:
+            pass
+
+        return None
+
+    async def reply(self, msg: Any, reply: str) -> None:
+        if not isinstance(msg, Msg):
+            raise ValueError(f"invalid msg type received, expected nats.aio.Msg got {type(msg)}")
+
+        await msg.respond(reply)
+
     async def publish(self, msg: Any) -> RouteMessageStatus:
 
         if not msg:
@@ -132,8 +161,12 @@ class NATSRoute(BaseRoute, BaseModel):
         finally:
             pass
 
-    async def subscribe(self, consumer_no: int = 1):
+    async def subscribe(self, callback: Optional[Callable[[Any], Awaitable[None]]] = None, consumer_no: int = 1):
         await self.connect()
+
+        if callback:
+            self._nc.subscribe(subject=self.subject, queue=self.queue, cb=callback)
+            return
 
         logging.info(f'subscriber:start to route: {self.name}, subject: {self.subject}, jetstream_enabled: {self.jetstream_enabled}')
         if self.jetstream_enabled:
@@ -156,7 +189,9 @@ class NATSRoute(BaseRoute, BaseModel):
 
         logging.info(f'subscriber:complete for route: {self.name}, subject: {self.subject}, '
                      f'jetstream_enabled: {self.jetstream_enabled}')
-
+    #
+    # async def unsubscribe(self):
+    #     self._js.cl
     async def consume(self, wait: bool = True) -> [Any, Any]:
         max_iter_exit = 0
         logging.info(f'subscriber:consume for route: {self.name}, subject: {self.subject}, jetstream_enabled: {self.jetstream_enabled}')
@@ -218,22 +253,12 @@ class NATSRoute(BaseRoute, BaseModel):
 
     async def disconnect(self):
         try:
-            logging.info(f"disconnect:start from route: {self.name}, subject: {self.subject}")
-            if self._nc and self._nc.is_connected:
-                is_draining1 = self._nc.is_draining
-                await self._nc.drain()
-                is_draining2 = self._nc.is_draining
-                logging.debug(f"route {self.subject} is draining")
-
-                while self._nc.is_draining:
-                    logging.debug(f"route {self.subject} is draining")
-                    time.sleep(1)
-
+            logging.info(f"starting: disconnect from route: {self.name}, subject: {self.subject}")
+            if await self.drain():
                 if not self._nc.is_closed:
                     await self._nc.close()
 
-            logging.info(f"disconnect:complete from route: {self.name}, subject: {self.subject}")
-
+            logging.info(f"completed: disconnect from route: {self.name}, subject: {self.subject}")
         except Exception as e:
             logging.warning("route disconnect error", e)
             pass
@@ -243,6 +268,17 @@ class NATSRoute(BaseRoute, BaseModel):
             await self._nc.flush()
         except Exception as e:
             logging.warning(f"unable flush route", e)
+
+    async def drain(self):
+        if self._nc and self._nc.is_connected:
+            logging.debug(f"starting: route {self.subject} draining")
+            await self._nc.drain()
+            while self._nc.is_draining:
+                time.sleep(1)
+            logging.debug(f"completed: route {self.subject} draining")
+            return True
+
+        return False
 
     def __del__(self):
         pass

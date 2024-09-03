@@ -4,9 +4,11 @@ import os
 import re
 import uuid
 import yaml
-from typing import Union
+from typing import Union, Dict, Any
+
 from .ismlogging import ism_logger
 from .map_utils import flatten
+from ..base_model import InstructionTemplate
 
 logging = ism_logger(__name__)
 
@@ -150,12 +152,35 @@ def calculate_string_dict_hash(item: dict):
     return calculate_uuid_based_from_string_with_sha256_seed(plain)
 
 
-def build_template_text(template: Union[dict, str], query_state: dict, strip_newlines: bool = True):
-
+def build_template_text_mako(template: [str, dict], data: dict, error_callback: callable = None) -> str:
     if not template:
-        warning = f'template is not set with query state {query_state}'
+        warning = f'called build template but template is not set'
         logging.warning(warning)
-        return False, None
+        return None
+
+    content = get_template_content(template)
+
+    # mako template processing
+    try:
+        from mako.template import Template
+        from mako.runtime import Context
+        from io import StringIO
+
+        # Create a Template object
+        mako_template = Template(content, error_handler=error_callback)
+
+        # Render the template with the data
+        result = mako_template.render(**data)
+        return result
+    except Exception as e:
+        error = f'failed to process mako template {template} with error: {e}'
+        logging.error(error)
+        raise ValueError(error)
+
+
+def get_template_content(template: Union[dict, str]):
+    if isinstance(template, str):
+        return template
 
     if isinstance(template, dict):
         error = None
@@ -178,36 +203,102 @@ def build_template_text(template: Union[dict, str], query_state: dict, strip_new
         if 'parameters' not in template:
             logging.info(f'no parameters founds for {template_name}')
             return template_content
-    elif isinstance(template, str):
-        template_content = template
-    else:
-        raise NotImplementedError(f'template of type {type(template)} not supported')
+
+        return template_content
+
+    raise NotImplementedError(f'template of type {type(template)} not supported')
+
+
+def build_template_text_v2(template: InstructionTemplate, data: dict, error_callback: callable = None) -> str:
+    if not template:
+        return str(data)
+
+    if template.template_type == "mako":
+        return build_template_text_mako(
+            template=template.template_content,
+            data=data, error_callback=error_callback)
+    elif template.template_type == "jinja2":
+        raise NotImplementedError('jinja2 not implemented yet')
+        # return build_template_text_jinja2(template=template.template_content, data=data)
+    elif template.template_type == "python":
+        raise NotImplementedError('python not implemented yet')
+    elif template.template_type == "simple" or not template.template_type:
+        return build_template_text(
+            template=template.template_content,
+            query_state=data
+        )
+
+
+def build_template_text(template: Union[dict, str], query_state: dict, strip_newlines: bool = True) -> str:
+
+    if not template:
+        warning = f'template is not set with query state {query_state}'
+        logging.warning(warning)
+        return None
+
+    # get the template content
+    content = get_template_content(template)
 
     # process the template text
-    completed_template = build_template_text_content(template_content=template_content,
-                                                     query_state=query_state,
-                                                     strip_newlines=strip_newlines)
+    completed_template = build_template_text_content(
+        template_content=content,
+        query_state=query_state,
+        strip_newlines=strip_newlines)
 
-    return True, completed_template
+    return completed_template
+
+#
+# def build_template_text_content(template_content: str, query_state: dict, strip_newlines: bool = True):
+#     def replace_variable(match):
+#         variable_name = match.group(1)  # Extract variable name within {{...}}
+#         if variable_name not in query_state and 'justification' in variable_name:
+#
+#             # TODO we need to evaluate whether this key is optional or mandatory
+#             #  for now we just hard code this key "justification" as an optional parameter
+#             return ""
+#
+#         # otherwise throw an exception or fetch the variable
+#         value = query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
+#         if isinstance(value, str) and strip_newlines:
+#             value = value.replace('\\n', '\n').replace('\n', ' ')
+#
+#         return value  # Replace or keep original
+#
+#     completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
+#     return completed_template
+
+#
+# def build_template_text_jinja2(template_content: str, data: Dict[str, Any]) -> str:
+#     # Create a Template object
+#     template = Template(template_content)
+#
+#     # Render the template with the data
+#     result = template.render(data)
+#
+#     return result
 
 
-def build_template_text_content(template_content: str, query_state: dict, strip_newlines: bool = True):
-    def replace_variable(match):
+def build_template_text_content(
+        template_content: str,
+        query_state: Dict[str, Any],
+        strip_newlines: bool = True,
+        optional_fields: set = {}
+) -> str:
+    def process_value(value: Any) -> str:
+        if isinstance(value, str) and strip_newlines:
+            return value.replace('\\n', '\n').replace('\n', ' ')
+        return str(value)
+
+    def replace_variable(match: re.Match) -> str:
         variable_name = match.group(1)  # Extract variable name within {{...}}
-        if variable_name not in query_state and 'justification' in variable_name:
 
-            # TODO we need to evaluate whether this key is optional or mandatory
-            #  for now we just hard code this key "justification" as an optional parameter
-            return ""
+        if variable_name not in query_state:
+            if variable_name in optional_fields:
+                return ""
+            return "{" + variable_name + "}"
 
-        # otherwise throw an exception or fetch the variable
-        value = query_state.get(variable_name, "{" + variable_name + "}")  # Replace or keep original
-        if value and strip_newlines:
-            value = value.replace('\\n', '\n').replace('\n', ' ')
-
-        return value  # Replace or keep original
-
-
+        value = query_state[variable_name]
+        return process_value(value)
 
     completed_template = re.sub(r'\{(\w+)\}', replace_variable, template_content)
     return completed_template

@@ -1,6 +1,7 @@
 name: alethic-ism-core
 channels:
   - conda-forge
+  - pytorch
   - defaults
 dependencies:
   - python=3.11
@@ -9,3 +10,6 @@ dependencies:
   - pydantic
   - restrictedpython
   - nats-py
+  - redis-py
+  - mako
+  - pytorch::pytorch

@@ -4,7 +4,7 @@ import os
 
 dotenv.load_dotenv()
 
-LOG_LEVEL = os.environ.get("LOG_LEVEL", log.INFO)
+LOG_LEVEL = os.environ.get("LOG_LEVEL", log.DEBUG)
 
 print(f"** LOG_LEVEL ** {LOG_LEVEL}")
 log.basicConfig(

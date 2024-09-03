@@ -5,7 +5,7 @@ from datetime import datetime as dt
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel, model_validator
 
-from .base_model import ProcessorStatusCode, InstructionTemplate, BaseModelHashable
+from .base_model import ProcessorStatusCode, InstructionTemplate
 from .utils.evaluate import safer_evaluate
 from .utils.general_utils import (
     build_template_text_content,
@@ -94,6 +94,8 @@ def load_state_from_pickle(file_name: str) -> 'State':
 class BaseStateConfig(BaseModel):
     name: Optional[str] = None
     storage_class: Optional[str] = "database"
+    flag_append_to_session: Optional[bool] = False
+    flag_dedup_drop_enabled: Optional[bool] = False
 
 
 class StateConfig(BaseStateConfig):
@@ -109,6 +111,7 @@ class StateConfig(BaseStateConfig):
     flag_query_state_inheritance_inverse: Optional[bool] = False
     flag_auto_save_output_state: Optional[bool] = False
     flag_auto_route_output_state: Optional[bool] = False
+    flag_auto_route_output_state_after_save: Optional[bool] = False
 
 
 class StateConfigLM(StateConfig):
@@ -262,7 +265,7 @@ class StateDataRowColumnData(BaseModel):
         return self.values
 
 
-class State(BaseModelHashable):
+class State(BaseModel):
     id: Optional[str] = None  # primary key, can be generated or directly set
     project_id: Optional[str] = None  # project association id
 

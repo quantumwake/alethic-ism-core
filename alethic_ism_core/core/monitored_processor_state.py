@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 
 from typing import Any
@@ -5,15 +6,48 @@ from typing import Any
 from nats.aio.msg import Msg
 
 from .messaging.base_message_route_model import BaseRoute
-from .base_model import ProcessorStatusCode
+from .base_model import ProcessorStatusCode, Usage, UnitType, UnitSubType
 from .utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
 
 
+class MonitoredUsage:
+    def __init__(self, usage_route: BaseRoute = None, **kwargs):
+        self.usage_route = usage_route
+
+    async def publish_usage(self, usage: Usage):
+        if not self.usage_route:
+            logging.error(f"no usage route set, cannot send processor usage details to downstream usage consumer")
+            return
+
+        json_dump = usage.model_dump_json()
+        result = await self.usage_route.publish(json_dump)
+        return result
+
+    async def send_usage_input_tokens(self, count: int):
+        # track input token count
+        usage = Usage(
+            resource_id=self.processor.id, resource_type=self.provider.id,
+            transaction_time=dt.datetime.utcnow(), project_id=self.processor.project_id,
+            unit_type=UnitType.TOKEN, unit_subtype=UnitSubType.INPUT, unit_count=count,
+        )
+        await self.publish_usage(usage)
+
+    async def send_usage_output_tokens(self, count: int):
+        # track output token count
+        usage = Usage(
+            resource_id=self.processor.id, resource_type=self.provider.id,
+            transaction_time=dt.datetime.utcnow(), project_id=self.processor.project_id,
+            unit_type=UnitType.TOKEN, unit_subtype=UnitSubType.OUTPUT, unit_count=count,
+        )
+        await self.publish_usage(usage)
+
+
 class MonitoredProcessorState:
 
     def __init__(self, monitor_route: BaseRoute = None, **kwargs):
+        super().__init__(**kwargs)
         self.monitor_route = monitor_route
 
     async def send_processor_state_update(

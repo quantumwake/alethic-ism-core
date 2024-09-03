@@ -1,4 +1,5 @@
 import json
+from types import NoneType
 from typing import Any, List, Dict, Union
 
 from .messaging.base_message_router import Router
@@ -6,8 +7,9 @@ from .messaging.base_message_route_model import BaseRoute
 from .messaging.nats_message_provider import NATSMessageProvider
 from .monitored_processor_state import MonitoredProcessorState
 from .processor_state_storage import StateMachineStorage
-from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState
-from .utils.general_utils import build_template_text
+from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState, ProcessorStateDirection, \
+    InstructionTemplate
+from .utils.general_utils import build_template_text, build_template_text_v2
 from .utils.state_utils import validate_processor_status_change
 from .processor_state import (
     State,
@@ -63,22 +65,68 @@ class StatePropagationProviderRouter(StatePropagationProvider):
 
 
 class StatePropagationProviderRouterStateRouter(StatePropagationProviderRouter):
-    async def apply_state(self, processor: 'BaseProcessor',
+
+    def __init__(self, route: BaseRoute, storage: StateMachineStorage):
+        """
+            route (BaseRoute): the route to propagate messages to, as per conditions in apply_state(..)
+            storage (StateMachineStorage): The storage system used fetch a list of state id -> processors
+
+        :param route:
+        :param storage:
+        """
+        super().__init__(route=route)
+        self.storage = storage
+
+    async def apply_state(self,
+                          processor: 'BaseProcessor',
                           input_query_state: Any,
                           output_query_states: [dict]) -> [dict]:
+        """
+        Persists the processed new query states from the response.
+
+        Args:
+            processor (List[Dict]): Processor instance that is processing this input query state entry
+            input_query_state (Any): Initial input query state.
+            output_query_states (List[Dict]): Processed output states given the input, for a processor id.
+
+        Returns:
+            List[Any]: The result of applying the query states to the output state.
+        """
 
         output_state = processor.output_state
 
-        # If the flag is set and the flat is false, then skip it
+        # If the flag is set to false, then skip it
         if not processor.config.flag_auto_route_output_state:
             logging.debug(f'skipping auto route of output state events, for state id: {output_state.id}')
             return output_query_states
 
-        return await super().apply_state(
-            processor=processor,
-            input_query_state=input_query_state,
-            output_query_states=output_query_states,
+        # I know this is confusing: the current processor handles an input -> task -> output
+        #
+        # the `output state id` of this processor IS an `input state id' of other processor(s)
+        # thus if we want the data to route from the current state to downstream states through their
+        # respective processors, we need to:
+        #   1. find all processors that have an `input state id` == `output state id`
+        #   2. iterate each processor state route id (state -> processor)
+        #   3. for each route publish current state data processed to next route hop (as per processor)
+        #
+        forward_routes = self.storage.fetch_processor_state_route(
+            state_id=output_state.id,
+            direction=ProcessorStateDirection.INPUT
         )
+
+        # ensure there are forwarding hop(s)
+        if not forward_routes:
+            logging.debug(f'no forward routes found for state id: {processor.output_state.id}')
+            return
+
+        # iterate and send query states to next hops
+        [await self.route.publish(json.dumps(
+            {
+                "type": "query_state_entry",
+                "route_id": forward_route.id,
+                "query_state": output_query_states,
+            }
+        )) for forward_route in forward_routes]
 
 
 class StatePropagationProviderRouterStateSyncStore(StatePropagationProviderRouter):
@@ -149,7 +197,6 @@ class StatePropagationProviderDistributor(StatePropagationProvider):
             processor: 'BaseProcessor',
             input_query_state: Any,
             output_query_states: [dict]) -> [dict]:
-
         """
         Writes the output_query_states to the state object, in memory
 
@@ -176,13 +223,13 @@ class StatePropagationProviderDistributor(StatePropagationProvider):
 class BaseProcessor(MonitoredProcessorState):
 
     @property
-    def template(self):
+    def template(self) -> InstructionTemplate:
         if not isinstance(self.config, StateConfigStream):
             raise ValueError("system template cannot be set for streaming configuration, use template instead")
 
         if self.config.template_id:
             template = self.storage.fetch_template(self.config.template_id)
-            return template.template_content
+            return template
 
         return None
 
@@ -241,6 +288,40 @@ class BaseProcessor(MonitoredProcessorState):
     @property
     def mapping(self):
         return self.output_state.mapping
+
+    def fetch_session_data(self, input_data):
+        if not isinstance(input_data, dict):
+            return []
+
+        if 'session_id' not in input_data:
+            return []
+
+        user_id = input_data['source']
+        session_id = input_data['session_id']
+        session_history = self.storage.fetch_session_messages(
+            user_id=user_id, session_id=session_id
+        )
+
+        if not session_history:
+            return []
+
+        messages_dict = [json.loads(entry.original_content) for entry in session_history]
+
+        # messages_dict = []
+        # for entry in session_history:
+        #     try:
+        #         entry = json.loads(entry)
+        #     except:
+        #         pass
+        #
+        #     if isinstance(entry, dict):
+        #         # role = entry['role'] if 'role' in entry else 'history'
+        #         # content = entry['content'].strip() if 'content' in entry else str(entry)
+        #         messages_dict.append(entry)
+        #     else:
+        #         messages_dict.append({"role": "user", "content": str(entry)})
+
+        return messages_dict
 
     def has_query_state(self, query_state_key: str, force: bool = False):
         # make sure that the state is initialized and that there is a data key
@@ -303,19 +384,25 @@ class BaseProcessor(MonitoredProcessorState):
                           f'is in a stopped state, skipping input query processing')
             return []
 
+        if self.config.flag_dedup_drop_enabled:
+            pass  # TODO need to check input for deduplication (need to keep the hash of the input if this is enabled)
+
         # execute the input entry given the processor implementation
         try:
             route_id = self.output_processor_state.id
 
+            #
             # RUNNING: the processor is about to execute the instructions
+            #
             await self.send_processor_state_update(
                 route_id=route_id,
                 status=ProcessorStatusCode.RUNNING
             )
 
-            output_query_states = []        # TODO not sure if we should do something with if the config is a streams?
-
+            #
             # RUNNING (INTRA): the processor is executing the output instructions on the input
+            #
+            output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if isinstance(self.config, StateConfigStream):
                 await self.stream_input_data_entry(
                     input_query_state=input_query_state
@@ -325,7 +412,9 @@ class BaseProcessor(MonitoredProcessorState):
                     input_query_state=input_query_state,
                     force=force)
 
+            #
             # COMPLETED: the processor has completed execution of instructions
+            #
             await self.send_processor_state_update(
                 route_id=route_id,
                 status=ProcessorStatusCode.COMPLETED
@@ -383,7 +472,9 @@ class BaseProcessor(MonitoredProcessorState):
 
     async def stream_input_data_entry(self, input_query_state: dict):
         if not self.stream_route:
-            raise ValueError(f"streams are not supported by provider: {self.output_processor_state.id}, route_id {self.output_processor_state.id}")
+            raise ValueError(
+                f"streams are not supported by provider: {self.output_processor_state.id}, "
+                f"route_id {self.output_processor_state.id}")
 
         if not input_query_state:
             raise ValueError("invalid input state, cannot be empty")
@@ -391,7 +482,7 @@ class BaseProcessor(MonitoredProcessorState):
         if not isinstance(self.config, StateConfigStream):
             raise NotImplementedError()
 
-        status, template = build_template_text(self.template, input_query_state)
+        template = build_template_text_v2(self.template, input_query_state)
 
         # this is a bit of a hack to use a session id for a given processor state stream
         if 'session_id' in input_query_state:
@@ -405,12 +496,8 @@ class BaseProcessor(MonitoredProcessorState):
         # begin the processing of the prompts
         logging.debug(f"entered streaming mode, state_id: {self.output_state.id}")
         try:
-            # # execute the underlying model function
-            stream = self._stream(
-                input_data=input_query_state,
-                template=template,
-            )
 
+            # submit to the fully qualified subject, which may include a session id
             stream_route = self.stream_route.clone(
                 route_config_updates={
                     "subject": subject,
@@ -418,12 +505,77 @@ class BaseProcessor(MonitoredProcessorState):
                 }
             )
 
-            async for content in stream:
-                if content:
-                    # print(content)
-                    await stream_route.publish(content)
+            # submit the original request to the stream, such that it is broadcasted to all subscribers of the subject
+            # TODO this needs to be invoked at the LM processor level, pre-stream-processing
+            if 'source' in input_query_state:
+                await stream_route.publish(input_query_state['source'])
+                await stream_route.publish("<<>>SOURCE<<>>")
 
-            await stream_route.publish("<<>>DONE<<>>")
+            if 'input' in input_query_state:
+                await stream_route.publish(input_query_state['input'])
+                await stream_route.publish("<<>>INPUT<<>>")
+
+            # flush the stream to ensure the messages are sent to the stream server
+            await stream_route.flush()
+
+            # execute the underlying model function
+            stream = self._stream(
+                input_data=input_query_state,
+                template=template,
+            )
+            #
+            # try:
+            #     # Use explicit async iteration
+            #     iterator = stream.__aiter__()
+            #     while True:
+            #         try:
+            #             content = await iterator.__anext__()
+            #         except StopAsyncIteration:
+            #             break
+            #         except Exception as iter_exception:
+            #             # Log any exceptions encountered during iteration
+            #             logging.warning(f'Exception during iteration: {iter_exception}', exc_info=True)
+            #             continue
+            #
+            #         # Process the content if valid
+            #         try:
+            #             if isinstance(content, str):
+            #                 await stream_route.publish(content)
+            #                 await stream_route.flush()
+            #             elif content is None:
+            #                 # Log or handle the None case if necessary
+            #                 logging.warning('Received NoneType content, skipping...')
+            #             else:
+            #                 # Handle unexpected types
+            #                 logging.warning(f'Unexpected content type: {type(content)}')
+            #         except Exception as process_exception:
+            #             # Log exceptions encountered during processing
+            #             logging.critical(f'Exception encountered during content processing: {process_exception}',
+            #                              exc_info=True)
+            #
+            #
+            # except Exception as critical:
+            #     # Log any exceptions that occur in the overall streaming process
+            #     logging.critical(f'Exception encountered during streaming: {critical}', exc_info=True)
+
+            async for content in stream:
+                try:
+                    if isinstance(content, str):
+                        await stream_route.publish(content)
+                        await stream_route.flush()
+                    elif content is None:
+                        # Log or handle the None case if necessary
+                        logging.warning('Received NoneType content, skipping...')
+                    else:
+                        # Handle unexpected types
+                        logging.warning(f'Unexpected content type: {type(content)}')
+                except Exception as critical:
+                    # Provide more detailed exception handling
+                    logging.critical(f'Exception encountered during streaming: {critical}', exc_info=True)
+
+            # TODO this needs to be invoked at the LM processor level, post-stream-processing
+            # submit the response message to the stream.
+            await stream_route.publish("<<>>ASSISTANT<<>>")
             await stream_route.flush()
 
             # should gracefully close the connection
@@ -431,13 +583,15 @@ class BaseProcessor(MonitoredProcessorState):
 
             logging.debug(f"exit streaming mode, state_id: {self.output_state.id}")
         except Exception as exception:
+            # submit the response message to the stream.
+            await stream_route.publish("<<>>ERROR<<>>")
+            await stream_route.flush()
             await self.fail_execute_processor_state(
                 # self.output_processor_state,
                 route_id=self.output_processor_state.id,
                 exception=exception,
                 data=input_query_state
             )
-
 
     #
     # async def stream_input_data_entry(self, input_query_state: dict):

@@ -1,6 +1,7 @@
+import redis
 import types
 from functools import wraps
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, OrderedDict, Any
 
 from .base_model import (
     UserProject,
@@ -12,7 +13,7 @@ from .base_model import (
     ProcessorState,
     ProcessorProvider,
     ProcessorStateDirection,
-    ProcessorProperty, MonitorLogEvent, ProcessorStatusCode, UsageUnit
+    ProcessorProperty, MonitorLogEvent, ProcessorStatusCode, UsageUnit, UsageReport, Session, SessionMessage
 )
 from .processor_state import (
     State,
@@ -20,6 +21,18 @@ from .processor_state import (
     StateDataRowColumnData,
     StateDataColumnDefinition,
     StateDataColumnIndex)
+from .utils.ismlogging import ism_logger, LOG_LEVEL
+
+logging = ism_logger(__name__)
+
+
+class FieldConfig:
+    def __init__(self, field_name: str, value: Optional[Any], use_in_where: bool, use_in_group_by: bool):
+        self.field_name = field_name  # Add field name to the class
+        self.value = value
+        self.use_in_where = use_in_where
+        self.use_in_group_by = use_in_group_by
+
 
 
 class UserProfileStorage:
@@ -218,11 +231,26 @@ class StateStorage:
 
 
 class UsageStorage:
-    def insert_usage_unit(self, usage_unit: UsageUnit):
+
+    def fetch_usage_report(
+            self,
+            user_id: FieldConfig,
+            project_id: Optional[FieldConfig] = None,
+            resource_id: Optional[FieldConfig] = None,
+            resource_type: Optional[FieldConfig] = None,
+            year: Optional[FieldConfig] = None,
+            month: Optional[FieldConfig] = None,
+            day: Optional[FieldConfig] = None,
+            unit_type: Optional[FieldConfig] = None,
+            unit_subtype: Optional[FieldConfig] = None
+    ) -> List[UsageReport]:
         raise NotImplementedError()
 
-    def fetch_usage_units(self, project_id: str):
-        raise NotImplementedError()
+    # def fetch_usage_report_user(self, user_id: str) -> List[UsageReport]:
+    #     raise NotImplementedError()
+    #
+    # def fetch_usage_report_project(self, project_id: str) -> List[UsageReport]:
+    #     raise NotImplementedError()
 
 
 class ProcessorStorage:
@@ -352,6 +380,79 @@ class ForwardingStateMachineStorageMeta(type):
         return instance
 
 
+class SessionStorage:
+
+    def create_session(self, user_id: str) -> Session:
+        raise NotImplementedError()
+
+    def fetch_session(self, user_id: str, session_id: str) -> Optional[Session]:
+        raise NotImplementedError()
+
+    def fetch_user_sessions(self, user_id: str) -> Optional[List[Session]]:
+        raise NotImplementedError()
+
+    def user_join_session(self, user_id: str, session_id: str) -> bool:
+        raise NotImplementedError()
+
+    def user_unjoin_session(self, user_id: str, session_id:str) -> bool:
+        raise NotImplementedError()
+
+    def insert_session_message(self, message: SessionMessage) -> SessionMessage:
+        raise NotImplementedError()
+
+    def fetch_session_messages(self, user_id: str, session_id: str) -> Optional[List[SessionMessage]]:
+        raise NotImplementedError()
+
+    def delete_session(self, session_id: str) -> int:
+        raise NotImplementedError()
+
+
+class SessionIdentContext:
+    identity: Optional[str] = None
+
+
+class SessionContext:
+    session_id: str
+
+    pass
+
+class RedisSessionStorage(SessionStorage):
+
+    def __init__(self, host='localhost', port=6379, password: str = None, db=0):
+        # Initialize the Redis client connection
+        self.client = redis.Redis(host=host, port=port, password=password, db=db)
+
+    # def fetch_session_list_by_user(self, session_id: str, user: str):
+    #     self.client.hgetall()
+    # def insert_session_message_2(self, context: SessionContext):
+    #     self.client
+
+    def insert_session_message(self, key, message):
+        try:
+            # Use RPUSH to append elements to the end of the list in Redis
+            logging.info(f"ready to push data onto the cache {key}: {message}")
+            print(f"***hello world: start*** {LOG_LEVEL}")
+            self.client.rpush(key, message)
+            print("***hello world: end***")
+            logging.debug(f"successfully r-pushed message to list '{key}': {message}")
+        except redis.RedisError as e:
+            logging.error(f"error pushing message to Redis: {e}")
+            print(f"***hello world: error {e}***")
+
+    def fetch_session_list(self, key):
+        try:
+            # Retrieve the list stored in Redis under the specified key
+            # Use the LRANGE command to get the entire list (start=0, end=-1)
+            list_data = self.client.lrange(key, 0, -1)
+            logging.debug(f"successfully fetched message list: '{key}")
+
+            # Decode bytes to strings (assuming UTF-8 encoding)
+            return [item.decode('utf-8') for item in list_data]
+        except redis.RedisError as e:
+            logging.debug(f"error pushing message to Redis: {e}")
+            return []
+
+
 class StateMachineStorage(StateStorage,
                           ProcessorStorage,
                           ProcessorStateRouteStorage,
@@ -362,6 +463,7 @@ class StateMachineStorage(StateStorage,
                           UserProjectStorage,
                           MonitorLogEventStorage,
                           UsageStorage,
+                          SessionStorage,
                           metaclass=ForwardingStateMachineStorageMeta):
     def __init__(self,
                  state_storage: StateStorage = None,
@@ -373,7 +475,8 @@ class StateMachineStorage(StateStorage,
                  user_profile_storage: UserProfileStorage = None,
                  user_project_storage: UserProjectStorage = None,
                  monitor_log_event_storage: MonitorLogEventStorage = None,
-                 usage_storage: UsageStorage = None):
+                 usage_storage: UsageStorage = None,
+                 session_storage: SessionStorage = None):
 
         # Assign the delegates dynamically via constructor parameters
         self._delegate_state_storage = state_storage
@@ -386,3 +489,4 @@ class StateMachineStorage(StateStorage,
         self._delegate_user_project_storage = user_project_storage
         self._delegate_monitor_log_event_storage = monitor_log_event_storage
         self._delegate_usage_storage = usage_storage
+        self._delegate_session_storage = session_storage

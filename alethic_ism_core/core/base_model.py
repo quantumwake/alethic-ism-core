@@ -1,29 +1,26 @@
-import datetime
+import datetime as dt
 from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel
 
-from .utils.general_utils import calculate_sha256
+# from .utils.general_utils import calculate_sha256
 
 
-class BaseModelHashable(BaseModel):
-    def hash(self) -> str:
-        return calculate_sha256(
-            str(self.model_dump_json())
-        )
-
-
-class UserProfile(BaseModelHashable):
+class UserProfile(BaseModel):
     user_id: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    created_date: Optional[dt.datetime] = dt.datetime.utcnow()
 
 
-class UserProject(BaseModelHashable):
+class UserProject(BaseModel):
     project_id: Optional[str] = None
     project_name: str
     user_id: str
+    created_date: Optional[dt.datetime] = dt.datetime.utcnow()
 
 
-class WorkflowNode(BaseModelHashable):
+class WorkflowNode(BaseModel):
     node_id: Optional[str] = None
     node_type: str
     node_label: Optional[str] = None
@@ -35,7 +32,7 @@ class WorkflowNode(BaseModelHashable):
     height: Optional[float] = None
 
 
-class WorkflowEdge(BaseModelHashable):
+class WorkflowEdge(BaseModel):
     source_node_id: str
     target_node_id: str
     source_handle: str
@@ -93,7 +90,7 @@ class ProcessorStatusCode(Enum):
 
 class UsageUnit(BaseModel):
     id: Optional[int] = None     # serial id
-    transaction_time: Optional[datetime.datetime] = None
+    transaction_time: Optional[dt.datetime] = None
     project_id: str
     unit_type: UsageUnitType = UsageUnitType.TOKEN
     unit_count: int
@@ -111,7 +108,7 @@ class UsageUnit(BaseModel):
     # reference_id varchar(36),
     # reference_label varchar(4000)
 
-class InstructionTemplate(BaseModelHashable):
+class InstructionTemplate(BaseModel):
     template_id: Optional[str] = None
     template_path: str
     template_content: str
@@ -119,7 +116,7 @@ class InstructionTemplate(BaseModelHashable):
     project_id: Optional[str] = None
 
 
-class ProcessorProvider(BaseModelHashable):
+class ProcessorProvider(BaseModel):
     id: Optional[str] = None
     name: str
     version: str
@@ -128,13 +125,13 @@ class ProcessorProvider(BaseModelHashable):
     project_id: Optional[str] = None
 
 
-class ProcessorProperty(BaseModelHashable):
+class ProcessorProperty(BaseModel):
     processor_id: str
     name: str
     value: Optional[str] = None
 
 
-class Processor(BaseModelHashable):
+class Processor(BaseModel):
     id: Optional[str] = None
     provider_id: Optional[str] = None
     project_id: str
@@ -142,7 +139,7 @@ class Processor(BaseModelHashable):
     properties: Optional[List[ProcessorProperty]] = None
 
 
-class ProcessorState(BaseModelHashable):
+class ProcessorState(BaseModel):
 
     _internal_id: Optional[int] = None     # internal reference number for tracking of log messages
     id: Optional[str] = None
@@ -167,15 +164,95 @@ class ProcessorState(BaseModelHashable):
         self._internal_id = internal_id
 
 
-class MonitorLogEvent(BaseModelHashable):
+class MonitorLogEvent(BaseModel):
     log_id: Optional[int] = None
     log_type: str
-    log_time: Optional[datetime.datetime] = None
+    log_time: Optional[dt.datetime] = None
     internal_reference_id: Optional[int] = None
     user_id: Optional[str] = None
     project_id: Optional[str] = None
     exception: Optional[str] = None
     data: Optional[str] = None
+
+
+class UnitType(Enum):
+    # You'll need to define the possible values for UsageType here
+    # For example:
+    TOKEN = "TOKEN"
+    COMPUTE = "COMPUTE"
+    STORAGE = "STORAGE"
+
+
+class UnitSubType(Enum):
+    # You'll need to define the possible values for UsageType here
+    # For example:
+    INPUT = "INPUT"
+    OUTPUT = "OUTPUT"
+    # Add other types as needed
+
+
+class Usage(BaseModel):
+    id: Optional[int] = None
+    transaction_time: Optional[dt.datetime] = dt.datetime.now()
+
+    project_id: Optional[str] = None
+
+    resource_id: str
+    resource_type: str
+
+    unit_type: UnitType
+    unit_subtype: UnitSubType
+    unit_count: int
+
+    metadata: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UsageReport(BaseModel):
+    user_id: str
+    resource_id: Optional[str] = None
+    resource_type: Optional[str] = None
+    project_id: Optional[str] = None
+    day: Optional[int] = None
+    month: Optional[int] = None
+    year: Optional[int] = None
+    unit_type: Optional[str] = None
+    unit_subtype: Optional[str] = None
+    total: int
+    total_cost: Optional[float] = 0.0
+
+
+# Enum for user_session_access_level
+class UserSessionAccessLevel(Enum):
+    DEFAULT = 'default'
+    ADMIN = 'admin'
+
+
+# BaseModel for the 'session' table
+class Session(BaseModel):
+    session_id: str
+    created_date: dt.datetime
+    owner_user_id: str
+
+
+# BaseModel for the 'session_message' table
+class SessionMessage(BaseModel):
+    message_id: Optional[int] = None
+    session_id: str
+    user_id: str        # originated by
+    original_content: Optional[str] = None
+    executed_content: Optional[str] = None
+    message_date: dt.datetime
+
+
+# BaseModel for the 'user_session_access' table
+class UserSessionAccess(BaseModel):
+    user_id: str
+    session_id: str
+    access_level: UserSessionAccessLevel = UserSessionAccessLevel.DEFAULT
+    access_date: dt.datetime
 
 
 class ProcessorStateDetail(ProcessorState, Processor):
