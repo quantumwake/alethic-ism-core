@@ -221,7 +221,9 @@ def build_template_text_v2(template: InstructionTemplate, data: dict, error_call
         raise NotImplementedError('jinja2 not implemented yet')
         # return build_template_text_jinja2(template=template.template_content, data=data)
     elif template.template_type == "python":
-        raise NotImplementedError('python not implemented yet')
+        return build_template_text_mako(
+            template=template.template_content,
+            data=data, error_callback=error_callback)
     elif template.template_type == "simple" or not template.template_type:
         return build_template_text(
             template=template.template_content,
