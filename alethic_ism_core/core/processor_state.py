@@ -127,7 +127,6 @@ class StateConfigStream(BaseStateConfig):
 
 class StateConfigCode(StateConfig):
     template_id: Optional[str] = None
-    language: str
 
 
 class StateConfigDB(StateConfig):

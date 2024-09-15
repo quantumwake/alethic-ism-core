@@ -1,6 +1,6 @@
 # Use an x86 base image
 # Stage 1: Base Image with Miniconda
-FROM continuumio/miniconda3 as core
+FROM continuumio/miniconda3:24.5.0-0 as core
 
 # Set the working directory
 WORKDIR /app
@@ -20,7 +20,7 @@ SHELL ["/bin/bash", "--login", "-c"]
 RUN conda install -y conda-build
 
 # Initialize the conda environment 
-RUN conda env create -f environment.yaml
+RUN conda env create -f environment-prod.yaml
 
 # Initialize conda in bash config files:
 RUN conda init bash
