@@ -968,6 +968,8 @@ class State(BaseModel):
         return output_query_state
 
     def pre_state_apply(self, query_state: dict) -> dict:
+        # clean up column names ensure they are standardized
+        query_state = {clean_string_for_ddl_naming(key): val for key, val in query_state.items()}
 
         # remapped query state before applying it to the state
         query_state = self.remap_query_state(query_state=query_state)
