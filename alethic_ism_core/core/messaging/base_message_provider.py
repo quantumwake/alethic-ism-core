@@ -62,9 +62,6 @@ class BaseMessageConsumer(MonitoredProcessorState):
                 if not msg and not data:        # timed out, returns blank, wait for next iteration
                     continue
 
-                # TODO the ack should happen after the process has been completed
-                await self.route.ack(msg)
-
                 logging.debug(f'Message received with {data}')
                 message_dict = json.loads(data)
                 status = await self._execute(message_dict)
@@ -77,6 +74,7 @@ class BaseMessageConsumer(MonitoredProcessorState):
                 logging.warning(f"critical error trying to process message: {friendly_messsage}")
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
             finally:
+                await self.route.ack(msg)
                 if msg:
                     print(f"********** MESSAGE FINALIZED ON MESSAGE ID: {self.route.get_message_id(msg)}")
                     logging.debug(f"finalizing message id {self.route.get_message_id(msg)}")
