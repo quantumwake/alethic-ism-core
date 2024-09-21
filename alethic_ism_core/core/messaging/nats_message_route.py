@@ -181,7 +181,7 @@ class NATSRoute(BaseRoute, BaseModel):
                 queue=self.queue,
                 durable=durable_name,
                 config=ConsumerConfig(
-                    ack_wait=90,
+                    ack_wait=5,
                 )
             )
         else:

@@ -11,6 +11,7 @@ logging = ism_logger(__name__)
 
 FLAG_CONSUMER_WAIT = os.environ.get("FLAG_CONSUMER_WAIT", True)
 
+
 class BaseRouteProvider:
 
     def create_route(self, route_config: dict) -> BaseRoute:
@@ -76,7 +77,7 @@ class BaseMessageConsumer(MonitoredProcessorState):
             finally:
                 await self.route.ack(msg)
                 if msg:
-                    print(f"********** MESSAGE FINALIZED ON MESSAGE ID: {self.route.get_message_id(msg)}")
+                    logging.info(f"********** MESSAGE FINALIZED ON MESSAGE ID: {self.route.get_message_id(msg)}")
                     logging.debug(f"finalizing message id {self.route.get_message_id(msg)}")
                 else:
                     logging.warning(f"finalizing message but without a message id, this could be a result of a sudden "

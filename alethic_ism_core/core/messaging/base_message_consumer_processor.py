@@ -1,13 +1,41 @@
+import datetime as dt
+
+from typing import Dict
 from .base_message_provider import BaseMessageConsumer
 from .base_message_route_model import BaseRoute
 from ..base_model import ProcessorStateDirection, ProcessorProvider, Processor, ProcessorState
 from ..base_processor import BaseProcessor
-from ..monitored_processor_state import MonitoredProcessorState
 from ..processor_state import State
 from ..processor_state_storage import StateMachineStorage
+from ..utils import general_utils
+from ..utils.general_utils import stopwatch, async_stopwatch
 from ..utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
+
+class RouteStateItem:
+    inputs: Dict[str, dt.datetime]
+    last_updated_at: dt.datetime
+
+    def has_input(self, input_hash: str) -> bool:
+        return input_hash in self.inputs
+
+    def add_input(self, input_hash: str):
+        self.inputs[input_hash] = dt.datetime.now()
+        self.last_updated_at = dt.datetime.now()
+
+
+filter_states: Dict[str, RouteStateItem] = {}
+
+def check_route_input(route_id, message: dict) -> bool:
+    input_hash = general_utils.calculate_string_dict_hash(message)
+    if route_id in filter_states:
+        if filter_states[route_id].has_input(input_hash):
+            logging.debug(f'filtered input state found, skipping: {message}')
+            return
+
+    filter_states[route_id] = RouteStateItem()
+    filter_states[route_id].add_input(input_hash)
 
 
 class BaseMessageConsumerProcessor(BaseMessageConsumer):
@@ -18,6 +46,7 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
         super().__init__(route=route, monitor_route=monitor_route)
         self.storage = storage
 
+    @stopwatch
     def create_processor(self,
                          processor: Processor,
                          provider: ProcessorProvider,
@@ -84,7 +113,7 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
 
         return output_processor_states
 
-
+    @async_stopwatch
     async def execute(self, consumer_message_mapping: dict):
 
         # identifies all the output states for this new input state entry(s)
@@ -108,6 +137,10 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
         # iterate each output state and forward the query state input
         for output_processor_state in output_processor_states:
             try:
+
+                if check_route_input(output_processor_state.id, query_states):
+                    logging.debug(f'filtered input state, already processed, skipping: {query_states}')
+                    continue
 
                 # load the output state and relevant state instruction
                 output_state = self.storage.load_state(state_id=output_processor_state.state_id, load_data=False)
