@@ -27,15 +27,17 @@ class RouteStateItem:
 
 filter_states: Dict[str, RouteStateItem] = {}
 
-def check_route_input(route_id, message: dict) -> bool:
+
+def is_dedup_route_input(route_id, message: dict) -> bool:
     input_hash = general_utils.calculate_string_list_hash(message)
     if route_id in filter_states:
         if filter_states[route_id].has_input(input_hash):
             logging.debug(f'filtered input state found, skipping: {message}')
-            return
+            return True
 
     filter_states[route_id] = RouteStateItem()
     filter_states[route_id].add_input(input_hash)
+    return False
 
 
 class BaseMessageConsumerProcessor(BaseMessageConsumer):
@@ -138,7 +140,7 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
         for output_processor_state in output_processor_states:
             try:
 
-                if check_route_input(output_processor_state.id, query_states):
+                if is_dedup_route_input(output_processor_state.id, query_states):
                     logging.debug(f'filtered input state, already processed, skipping: {query_states}')
                     continue
 
