@@ -28,7 +28,7 @@ class RouteStateItem:
 filter_states: Dict[str, RouteStateItem] = {}
 
 def check_route_input(route_id, message: dict) -> bool:
-    input_hash = general_utils.calculate_string_dict_hash(message)
+    input_hash = general_utils.calculate_string_list_hash(message)
     if route_id in filter_states:
         if filter_states[route_id].has_input(input_hash):
             logging.debug(f'filtered input state found, skipping: {message}')
