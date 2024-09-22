@@ -72,7 +72,7 @@ class BaseMessageConsumer(MonitoredProcessorState):
                 break
             except Exception as e:
                 friendly_messsage = self.route.friendly_message(message=msg)
-                logging.warning(f"critical error trying to process message: {friendly_messsage}")
+                logging.warning(f"critical error trying to process message: {friendly_messsage} error: {e}")
                 await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
             finally:
                 await self.route.ack(msg)

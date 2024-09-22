@@ -14,8 +14,9 @@ from ..utils.ismlogging import ism_logger
 logging = ism_logger(__name__)
 
 class RouteStateItem:
-    inputs: Dict[str, dt.datetime]
-    last_updated_at: dt.datetime
+    def __init__(self):
+        self.inputs: Dict[str, dt.datetime] = {}
+        self.last_updated_at = dt.datetime.now()
 
     def has_input(self, input_hash: str) -> bool:
         return input_hash in self.inputs
