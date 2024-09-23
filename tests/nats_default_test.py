@@ -26,7 +26,7 @@ async def run_consumer():
     async def stop_consumer():
         await asyncio.sleep(5)  # Use asyncio.sleep instead of time.sleep
         # await nat_route.disconnect()
-        nat_route.active = False
+        nat_route.consumer_active = False
 
     asyncio.create_task(stop_consumer())
 

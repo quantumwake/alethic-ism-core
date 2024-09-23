@@ -127,7 +127,7 @@ class NATSRoute(BaseRoute, BaseModel):
             subject=self.subject,
             durable=durable_name,
             config=ConsumerConfig(
-                ack_wait=5,
+                ack_wait=90,
                 deliver_policy=DeliverPolicy.ALL,
                 ack_policy=AckPolicy.EXPLICIT,
                 max_ack_pending=1000,
@@ -223,7 +223,7 @@ class NATSRoute(BaseRoute, BaseModel):
         # Backoff parameters
         backoff_base = 0.1  # Starting backoff time in seconds
         backoff_factor = 2  # Exponential backoff factor
-        max_backoff = 5     # Maximum backoff time in seconds
+        max_backoff = 1     # Maximum backoff time in seconds
         backoff_time = backoff_base
         self.consumer_active = True  # the consumer is actively consuming data
         while wait and self.consumer_active:  # 50 * 0.1 but exponential backoff can increase this
