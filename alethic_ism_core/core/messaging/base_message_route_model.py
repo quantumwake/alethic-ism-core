@@ -25,6 +25,9 @@ class BaseRoute(BaseModel):
     # callback function when messages arrive
     callback: Callable[['BaseRoute', Any, Any], Awaitable[None]] = None
 
+    # consumer is actively consuming data flag
+    consumer_active: Optional[bool] = False
+
     # when the consumer was created
     creation_date: Optional[dt] = dt.utcnow()
 

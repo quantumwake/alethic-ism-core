@@ -46,20 +46,20 @@ class BaseMessageConsumer(MonitoredProcessorState):
     async def execute(self, consumer_message_mapping: dict):
         raise NotImplementedError()
 
-    async def on_receive(self, msg: Any, data: Any):
+    async def on_receive(self, route: BaseRoute, msg: Any, data: Any):
         try:
-            id = self.route.get_message_id(msg)
-            logging.debug(f'received with message id: {id}')
+            _id = route.get_message_id(msg)
+            logging.debug(f'received with message id: {_id}')
             message_dict = json.loads(data)
             status = await self._execute(message_dict)
-            logging.debug(f"message id: {id}, status: {status}")
+            logging.debug(f"message id: {_id}, status: {status}")
         except Exception as e:
-            friendly_msg = self.route.friendly_message(message=msg)
+            friendly_msg = route.friendly_message(message=msg)
             logging.warning(f"critical error trying to process message: {friendly_msg} error: {e}")
             await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
         finally:
-            acked = await self.route.ack(msg)
-            logging.debug(f"finalizing message id {self.route.get_message_id(msg)}, acked: {acked}")
+            acked = await route.ack(msg)
+            logging.debug(f"finalizing message id: {_id}, acked: {acked}")
 
     async def consumer_loop(self, max_loops: int = None):
         self.RUNNING = True
@@ -85,7 +85,8 @@ class BaseMessageConsumer(MonitoredProcessorState):
     def graceful_shutdown(self, signum, frame):
         logging.info("Received SIGTERM signal. Gracefully shutting down.")
         self.RUNNING = False
-        sys.exit(0)
+        self.route.consumer_active = False
+        # sys.exit(0)
 
     def setup_shutdown_signal(self):
         # Attach the SIGTERM signal handler
@@ -97,4 +98,4 @@ class BaseMessageConsumer(MonitoredProcessorState):
         self.route.callback = self.on_receive
         await self.route.connect()
         await self.route.subscribe()
-        # await self.consumer_loop()
+        await self.consumer_loop()

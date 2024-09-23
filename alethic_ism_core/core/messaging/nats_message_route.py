@@ -29,9 +29,6 @@ class NATSRoute(BaseRoute, BaseModel):
     # internal tracking for consumers, as each consumer needs to be unique
     consumer_id: Optional[str] = "1"  # a number to identify the subscriber index on the queue
 
-    # consumer is actively consuming data flag
-    active: Optional[bool] = False
-
     # internal objects handling the publishing / subscriber model
     _nc: NATS = PrivateAttr(default=None)  # connection
     _js: JetStreamContext = PrivateAttr(default=None)  # jetstream recv/send
@@ -228,8 +225,8 @@ class NATSRoute(BaseRoute, BaseModel):
         backoff_factor = 2  # Exponential backoff factor
         max_backoff = 5     # Maximum backoff time in seconds
         backoff_time = backoff_base
-        self.active = True  # the consumer is actively consuming data
-        while wait and self.active:  # 50 * 0.1 but exponential backoff can increase this
+        self.consumer_active = True  # the consumer is actively consuming data
+        while wait and self.consumer_active:  # 50 * 0.1 but exponential backoff can increase this
             try:
                 if self.jetstream_enabled:
                     # JetStream consumption
@@ -261,11 +258,11 @@ class NATSRoute(BaseRoute, BaseModel):
                 # increase backoff time exponentially
                 backoff_time = min(backoff_time * backoff_factor, max_backoff)
             except Exception as e2:
-                if self.active:
+                if self.consumer_active:
                     raise ValueError(e2)
 
         # the consumer is not actively consuming data
-        self.active = False
+        self.consumer_active = False
 
     async def ack(self, message):
         # TODO should probably check durability rather then jetstream? kind of confusing but yeah. will figure this out at some point
@@ -296,7 +293,7 @@ class NATSRoute(BaseRoute, BaseModel):
         return NATSRoute(**route_json)
 
     async def disconnect(self):
-        self.active = False
+        self.consumer_active = False
 
         try:
             logger.info(f"starting: disconnect from route: {self.name}, subject: {self.subject}")
