@@ -19,7 +19,13 @@ class RouteMessageStatus(BaseModel):
 
 class BaseRoute(BaseModel):
 
+    # route selector
     selector: str
+
+    # callback function when messages arrive
+    callback: Callable[['BaseRoute', Any, Any], Awaitable[None]] = None
+
+    # when the consumer was created
     creation_date: Optional[dt] = dt.utcnow()
 
     async def connect(self):
@@ -28,7 +34,7 @@ class BaseRoute(BaseModel):
     async def disconnect(self):
         raise NotImplementedError()
 
-    async def subscribe(self, callback: Optional[Callable[[Any], Awaitable[None]]] = None, consumer_no: int = 1):
+    async def subscribe(self):
         raise NotImplementedError()
 
     async def request(self, msg: Any) -> Any:
@@ -40,7 +46,7 @@ class BaseRoute(BaseModel):
     async def publish(self, msg: str) -> RouteMessageStatus:
         raise NotImplementedError()
 
-    async def consume(self, wait: bool = True) -> [Any, Any]:
+    async def consume(self, wait: bool = True):
         raise NotImplementedError()
 
     async def ack(self, message):

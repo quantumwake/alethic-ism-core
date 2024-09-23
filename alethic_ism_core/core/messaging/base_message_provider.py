@@ -2,6 +2,7 @@ import json
 import os
 import signal
 import sys
+from typing import Any
 
 from .base_message_route_model import BaseRoute
 from ..monitored_processor_state import MonitoredProcessorState
@@ -45,6 +46,21 @@ class BaseMessageConsumer(MonitoredProcessorState):
     async def execute(self, consumer_message_mapping: dict):
         raise NotImplementedError()
 
+    async def on_receive(self, msg: Any, data: Any):
+        try:
+            id = self.route.get_message_id(msg)
+            logging.debug(f'received with message id: {id}')
+            message_dict = json.loads(data)
+            status = await self._execute(message_dict)
+            logging.debug(f"message id: {id}, status: {status}")
+        except Exception as e:
+            friendly_msg = self.route.friendly_message(message=msg)
+            logging.warning(f"critical error trying to process message: {friendly_msg} error: {e}")
+            await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
+        finally:
+            acked = await self.route.ack(msg)
+            logging.debug(f"finalizing message id {self.route.get_message_id(msg)}, acked: {acked}")
+
     async def consumer_loop(self, max_loops: int = None):
         self.RUNNING = True
 
@@ -59,32 +75,12 @@ class BaseMessageConsumer(MonitoredProcessorState):
             msg = None
             loop_count += 1
             try:
-                msg, data = await self.route.consume(wait=FLAG_CONSUMER_WAIT)
-                if not msg and not data:        # timed out, returns blank, wait for next iteration
+                await self.route.consume(wait=FLAG_CONSUMER_WAIT)
+                if not msg:        # timed out, returns blank, wait for next iteration
                     continue
-
-                logging.debug(f'Message received with {data}')
-                message_dict = json.loads(data)
-                status = await self._execute(message_dict)
-                logging.debug(f"message id: {self.route.get_message_id(message=msg)}, status: {status}")
             except InterruptedError as e:
                 logging.error(f"Stop receiving messages: {e}")
                 break
-            except Exception as e:
-                friendly_messsage = self.route.friendly_message(message=msg)
-                logging.warning(f"critical error trying to process message: {friendly_messsage} error: {e}")
-                await self.fail_validate_input_message(consumer_message_mapping=msg, exception=e)
-            finally:
-                await self.route.ack(msg)
-                if msg:
-                    logging.info(f"********** MESSAGE FINALIZED ON MESSAGE ID: {self.route.get_message_id(msg)}")
-                    logging.debug(f"finalizing message id {self.route.get_message_id(msg)}")
-                else:
-                    logging.warning(f"finalizing message but without a message id, this could be a result of a sudden "
-                                    f"broker/consumer termination, between the messaging bus and or ")
-
-                # TODO the ack should be happening at this stage
-                # await self.route.ack(msg)
 
     def graceful_shutdown(self, signum, frame):
         logging.info("Received SIGTERM signal. Gracefully shutting down.")
@@ -96,8 +92,9 @@ class BaseMessageConsumer(MonitoredProcessorState):
         logging.info("setting SIGTERM signal handler")
         signal.signal(signal.SIGTERM, self.graceful_shutdown)
 
-    async def start_consumer(self, max_loops: int = None, consumer_no: int = 1):
+    async def start_consumer(self):
         logging.info(f'starting up consumer {type(self)}')
+        self.route.callback = self.on_receive
         await self.route.connect()
-        await self.route.subscribe(consumer_no=consumer_no)
-        await self.consumer_loop(max_loops=max_loops)
+        await self.route.subscribe()
+        # await self.consumer_loop()

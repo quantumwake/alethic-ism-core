@@ -1,42 +1,61 @@
 import asyncio
+import time
+from typing import Any
 
-from nats.aio.client import Client as NATS
-from nats.aio.errors import ErrConnectionClosed, ErrTimeout, ErrNoServers
+from alethic_ism_core.core.messaging.base_message_route_model import BaseRoute
+from alethic_ism_core.core.messaging.nats_message_route import NATSRoute
 
-nc = NATS()
+async def run_consumer():
+    async def callback(route: BaseRoute, msg: Any, data: Any):
+        print(msg, data)
+        await route.ack(msg)
 
-async def do_router():
-
-    route = NATSRoute(
-
+    nat_route = NATSRoute(
+        selector="test/route",
+        name="test_route",
+        subject="test.route",
+        url="nats://localhost:4222",
+        jetstream=True,
+        callback=callback,
     )
 
-async def do_jetstream():
-    subject = "test"
+    connected = await nat_route.connect()
+    assert connected
+    await nat_route.subscribe()
 
-    nc = NATS()
-    await nc.connect()
+    async def stop_consumer():
+        await asyncio.sleep(5)  # Use asyncio.sleep instead of time.sleep
+        # await nat_route.disconnect()
+        nat_route.active = False
 
-    # Create JetStream context.
-    js = nc.jetstream()
+    asyncio.create_task(stop_consumer())
 
-    # Persist messages on 'foo's subject.
-    await js.add_stream(name="test", subjects=[subject])
-    puback = await js.publish(subject=subject, payload=b"hello world")
-    print(puback)
+    await nat_route.consume(wait=True)
 
 
-async def do_something():
-    # Do something with the connection
-    await nc.connect(servers=["nats://localhost:4222"])
+async def run_publisher():
+    nat_route = NATSRoute(
+        selector="test/route",
+        name="test_route",
+        subject="test.route",
+        url="nats://localhost:4222",
+        jetstream=True,
+    )
 
-    nc.publish("test.me", b"hello world")
+    connected = await nat_route.connect()
+    assert connected
 
-    await nc.close()
+    for index in range(10):
+        print(f"Publishing message {index}")
+        await nat_route.publish(f"Hello World {index}")
+        await nat_route.flush()
+        await asyncio.sleep(0.1)  # Add a small delay if necessary
 
+
+async def main():
+    publisher_task = asyncio.create_task(run_publisher())
+    consumer_task = asyncio.create_task(run_consumer())
+    await asyncio.gather(publisher_task, consumer_task)
 
 if __name__ == '__main__':
-    asyncio.get_event_loop().run_until_complete(do_jetstream())
-    # asyncio.run(do_jetstream()
-
-    # asyncio.run(do_something())
+    asyncio.run(main())
