@@ -23,7 +23,7 @@ class BaseRoute(BaseModel):
     selector: str
 
     # callback function when messages arrive
-    callback: Callable[['BaseRoute', Any, Any], Awaitable[None]] = None
+    callback: Optional[Callable[['BaseRoute', Any, Any], Awaitable[None]]] = None
 
     # consumer is actively consuming data flag
     consumer_active: Optional[bool] = False

@@ -6,7 +6,7 @@ from typing import Any, Optional, Callable, Awaitable
 import nats
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
-from nats.js.api import ConsumerConfig, DeliverPolicy, AckPolicy, StorageType
+from nats.js.api import ConsumerConfig, DeliverPolicy, AckPolicy, StorageType, RetentionPolicy
 from nats.js.errors import NotFoundError
 from pydantic import BaseModel, PrivateAttr
 from nats.aio.client import Client as NATS
@@ -77,6 +77,7 @@ class NATSRoute(BaseRoute, BaseModel):
                 name=self.name,
                 subjects=[self.subject],
                 storage=StorageType.FILE,
+                retention=RetentionPolicy.WORK_QUEUE
             )
 
             await self._js.add_stream(stream_config)
