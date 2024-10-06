@@ -222,7 +222,6 @@ class UsageReport(BaseModel):
     unit_type: Optional[str] = None
     unit_subtype: Optional[str] = None
     total: int
-    maximum: int
     total_cost: Optional[float] = 0.0
 
 
