@@ -141,9 +141,9 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
         for output_processor_state in output_processor_states:
             try:
 
-                if is_dedup_route_input(output_processor_state.id, query_states):
-                    logging.debug(f'filtered input state, already processed, skipping: {query_states}')
-                    continue
+                # if is_dedup_route_input(output_processor_state.id, query_states):
+                #     logging.debug(f'filtered input state, already processed, skipping: {query_states}')
+                #     continue
 
                 # load the output state and relevant state instruction
                 output_state = self.storage.load_state(state_id=output_processor_state.state_id, load_data=False)

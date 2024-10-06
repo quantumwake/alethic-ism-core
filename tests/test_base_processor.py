@@ -67,7 +67,10 @@ class MockProcessorLM(BaseProcessorLM):
 
     def __init__(self, output_state: dict, **kwargs):
 
-        super().__init__(output_state=output_state, **kwargs)
+        super().__init__(
+            monitor_route=None,
+            output_state=output_state,
+            **kwargs)
 
         self.provider = ProcessorProvider(
             id="test provider id",

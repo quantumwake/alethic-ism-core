@@ -7,6 +7,7 @@ from nats.aio.msg import Msg
 
 from .messaging.base_message_route_model import BaseRoute
 from .base_model import ProcessorStatusCode, Usage, UnitType, UnitSubType
+from .processor_state_storage import StateMachineStorage, FieldConfig
 from .utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)

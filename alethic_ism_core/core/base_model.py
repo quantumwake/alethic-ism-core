@@ -10,6 +10,7 @@ class UserProfile(BaseModel):
     user_id: str
     email: Optional[str] = None
     name: Optional[str] = None
+    max_agentic_units: Optional[int] = 10000    # HARD STOP - maximum compute units during a billing cycle
     created_date: Optional[dt.datetime] = dt.datetime.utcnow()
 
 
@@ -221,6 +222,14 @@ class UsageReport(BaseModel):
     unit_type: Optional[str] = None
     unit_subtype: Optional[str] = None
     total: int
+    maximum: int
+    total_cost: Optional[float] = 0.0
+
+
+class UsageReportInstant(BaseModel):
+    user_id: Optional[str] = None
+    project_id: Optional[str] = None
+    total: Optional[float] = 0.0
     total_cost: Optional[float] = 0.0
 
 

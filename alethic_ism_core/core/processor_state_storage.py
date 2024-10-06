@@ -13,7 +13,8 @@ from .base_model import (
     ProcessorState,
     ProcessorProvider,
     ProcessorStateDirection,
-    ProcessorProperty, MonitorLogEvent, ProcessorStatusCode, UsageUnit, UsageReport, Session, SessionMessage
+    ProcessorProperty, MonitorLogEvent, ProcessorStatusCode, UsageUnit, UsageReport, Session, SessionMessage,
+    UsageReportInstant
 )
 from .processor_state import (
     State,
@@ -36,6 +37,10 @@ class FieldConfig:
 
 
 class UserProfileStorage:
+
+    def fetch_user_profile(self, user_id: str) -> Optional[UserProfile]:
+        raise NotImplementedError()
+
     def insert_user_profile(self, user_profile: UserProfile):
         raise NotImplementedError()
 
@@ -231,6 +236,13 @@ class StateStorage:
 
 
 class UsageStorage:
+
+    # def fetch_usage_instant(self,
+    #                         user_id: FieldConfig,
+    #                         project_id: Optional[FieldConfig] = None,
+    #                         start_date: Optional[FieldConfig] = None,
+    #                         end_date: Optional[FieldConfig] = None) -> Optional[UsageReportInstant]:
+    #     raise NotImplementedError()
 
     def fetch_usage_report(
             self,

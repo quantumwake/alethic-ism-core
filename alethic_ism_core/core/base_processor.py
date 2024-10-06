@@ -6,7 +6,7 @@ from .messaging.base_message_router import Router
 from .messaging.base_message_route_model import BaseRoute
 from .messaging.nats_message_provider import NATSMessageProvider
 from .monitored_processor_state import MonitoredProcessorState
-from .processor_state_storage import StateMachineStorage
+from .processor_state_storage import StateMachineStorage, FieldConfig
 from .base_model import ProcessorStatusCode, ProcessorProvider, Processor, ProcessorState, ProcessorStateDirection, \
     InstructionTemplate
 from .utils.general_utils import build_template_text, build_template_text_v2
@@ -360,6 +360,29 @@ class BaseProcessor(MonitoredProcessorState):
         if processor.status in [ProcessorStatusCode.TERMINATE,
                                 ProcessorStatusCode.FAILED,
                                 ProcessorStatusCode.STOPPED]:
+            return False
+
+        # check usage limits
+        project = self.storage.fetch_user_project(project_id=processor.project_id)
+        if not project:
+            logging.error(f'critical, unable to find project id: {processor.project_id}, '
+                          f'likely a storage implementation issue, should have not got this far.')
+            return False
+
+        user = self.storage.fetch_user_profile(user_id=project.user_id)
+        usage = self.storage.fetch_usage_report(
+            user_id=FieldConfig(
+                field_name="user_id",
+                value=project.user_id,
+                use_in_group_by=True,
+                use_in_where=True
+            )
+        )
+
+        if usage and usage[0].total >= user.max_agentic_units:
+            # self.send_processor_state_update()
+            logging.warning(f'usage limit reached for user: {user.user_id}, '
+                            f'total: {usage[0].total}, max limit: {user.max_agentic_units}')
             return False
 
         return True
