@@ -672,6 +672,11 @@ class State(BaseModel):
                 # back-fill data rows, with empty values, for new column
                 # TODO try and back fill data if there is a column value expression, derived values, using safer_evaluate(..)
                 self.data[column_name] = StateDataRowColumnData(values=[None for _ in range(current_row_count)])
+            elif column_name in self.data and len(self.data[column_name].values) < current_row_count:
+                # balance the column values to fit the number of rows by back-filling data rows, with empty values that are missing
+                # TODO should probably execute callable functions if any.
+                current_column_row_count = len(self.data[column_name].values)
+                self.data[column_name].add_column_data_values(values=[None for _ in range(current_row_count - current_column_row_count)])
 
             # append the new row to the state.data
             self.data[column_name].add_column_data_values(row_column_data.values)
