@@ -1,9 +1,14 @@
+import hashlib
+import json
+import math
+import random
 import signal
 import resource
 import threading
 from abc import ABC, abstractmethod
+from datetime import time, datetime
 from fnmatch import fnmatch
-from typing import List, Dict, Any, Set, Type
+from typing import List, Dict, Any, Set, Type, re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 from contextlib import contextmanager
@@ -526,6 +531,15 @@ class SecureRunnableBuilder:
             'context': self.context,
             # 'print': print,
 
+            # More restricted utilities
+            'math': math,
+            'random': random,
+            'hashlib': hashlib,
+            'json': json,
+            'time': time,
+            'datetime': datetime,
+            're': re,
+
             # Type hints
             'List': List,
             'Dict': Dict,
@@ -661,16 +675,73 @@ class Runnable(BaseSecureRunnable):
         yield json.dumps(query, indent=2)
     
     """
+
+    user_code3 = """
+class Runnable(BaseSecureRunnable):
+    def init(self):
+        self.context['counter'] = 0
+
+    def get_stock_data(self, ticker: str):
+        api_key = "DQKR5A3F12FOI7UV"  # Replace with your actual API key
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={ticker}&interval=5min&apikey={api_key}"
+        
+        logger.info(f"here is the url {url}, requests: {requests}")
+        
+        # Create a session
+        response = requests.get(url)
+
+        logger.info(f"here is the session {response}")
+              
+        # Check if the request was successful
+        if response.status_code == 200:
+            data = response.json()  # Parse the response as JSON
+            return data  # Return the JSON data for further processing
+        else:
+            return f"Error: Received status code {response.status_code}"
+
+    def query_stock(self, query: Dict):
+        self.logger.info("test message")
+        # ticker = "AAPL
+        is_stock_question = bool(query['is_stock_question'])
+        if not is_stock_question:
+            return
+        
+        ticker = query['stock_ticker']
+        self.logger.info("stock ticker info")
+        
+        stock_data = self.get_stock_data(ticker)
+        if stock_data:
+            stock_data = stock_data['Time Series (5min)']
+            stock_data = list(stock_data.items())[0]
+            stock_data = stock_data[1]
+
+        return { "ticker": ticker, **stock_data }
+
+
+    def process(self, queries: List[Any]) -> List[Any]:
+        return [{
+            **self.query_stock(query),
+            **query
+        } for query in queries]
+
+    def process_stream(self, query: Dict) -> Any:
+        yield json.dumps(query, indent=2)
+    
+"""
+
     try:
         # Create builder
         builder = SecureRunnableBuilder(config)
 
         # Compile and instantiate the runnable
-        runnable = builder.compile(user_code2)
+        runnable = builder.compile(user_code3)
 
         # Use the runnable
         # for i in range(5):
-        result = runnable.process(queries=[{'test': 'data'}])
+        #   result = runnable.process(queries=[{'test': 'data'}])
+        #   print(f"Query result: {result}")
+
+        result = runnable.process(queries=[{'is_stock_question': 'true', 'stock_ticker': 'AAPL'}])
         print(f"Query result: {result}")
 
         # batch_result = runnable.process_async([
@@ -678,6 +749,5 @@ class Runnable(BaseSecureRunnable):
         #     {'test': 'data2'}
         # ])
         # print(f"Batch result: {batch_result}")
-
     except Exception as e:
         print(f"Error: {str(e)}")
