@@ -2,6 +2,7 @@ import signal
 import resource
 import threading
 from abc import ABC, abstractmethod
+from fnmatch import fnmatch
 from typing import List, Dict, Any, Set, Type
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -52,7 +53,7 @@ class SecurityConfig:
     max_memory_mb: int = 10
     max_cpu_time_seconds: int = 5
     max_requests: int = 50
-    # allowed_domains: List[str] = None
+    allowed_domains: List[str] = None
     execution_timeout: int = 10
     max_string_length: int = 1000000
     max_container_length: int = 10000
@@ -68,18 +69,24 @@ class SecureLogger:
     def info(self, message: str):
         if len(str(message)) > 1000:  # Prevent log flooding
             message = f"{str(message)[:1000]}... (truncated)"
-        self._logger.info(message)
+        # self._logger.info(message)
+        print(message)
 
     def error(self, message: str):
         if len(str(message)) > 1000:
             message = f"{str(message)[:1000]}... (truncated)"
-        self._logger.error(message)
+        # self._logger.error(message)
+        print(message)
 
+
+from urllib.parse import urlparse
+import requests
+import threading
 
 class RestrictedRequests:
     """Secure wrapper for requests with rate limiting and domain restrictions"""
 
-    def __init__(self, security_config: SecurityConfig):
+    def __init__(self, security_config):
         self._config = security_config
         self._request_count = 0
         self._lock = threading.Lock()
@@ -89,15 +96,17 @@ class RestrictedRequests:
             return False
 
         domain = urlparse(url).netloc
-        return any(allowed in domain for allowed in self._config.allowed_domains)
+
+        # Check if the domain matches any allowed domain with potential wildcards
+        return any(fnmatch(domain, allowed) for allowed in self._config.allowed_domains)
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         with self._lock:
             if self._request_count >= self._config.max_requests:
                 raise Exception("Maximum request limit exceeded")
 
-            # if not self._validate_url(url):
-            #     raise Exception(f"Domain not allowed. Must match: {self._config.allowed_domains}")
+            if not self._validate_url(url):
+                raise Exception(f"Domain not allowed. Must match: {self._config.allowed_domains}")
 
             self._request_count += 1
 
@@ -106,6 +115,24 @@ class RestrictedRequests:
             return response
         except Exception as e:
             raise Exception(f"Request failed: {str(e)}")
+
+    # Add specific HTTP methods
+    def get(self, url: str, **kwargs) -> requests.Response:
+        """Sends a GET request."""
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs) -> requests.Response:
+        """Sends a POST request."""
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs) -> requests.Response:
+        """Sends a PUT request."""
+        return self.request("PUT", url, **kwargs)
+
+    def delete(self, url: str, **kwargs) -> requests.Response:
+        """Sends a DELETE request."""
+        return self.request("DELETE", url, **kwargs)
+
 
 
 class ResourceLimiter:
@@ -497,6 +524,7 @@ class SecureRunnableBuilder:
             'requests': self.requests,
             'logger': self.logger,
             'context': self.context,
+            # 'print': print,
 
             # Type hints
             'List': List,
@@ -563,7 +591,7 @@ if __name__ == "__main__":
         max_memory_mb=100,
         max_cpu_time_seconds=5,
         max_requests=50,
-        # allowed_domains=["api.example.com"],
+        allowed_domains=["*"],
         execution_timeout=10,
         enable_resource_limits=False
     )
@@ -591,17 +619,59 @@ class Runnable(BaseSecureRunnable):
 
 """.lstrip()
 
+    user_code2 = """
+class Runnable(BaseSecureRunnable):
+    def init(self):
+        self.context['counter'] = 0
+
+    def get_stock_data(self, ticker: str):
+        api_key = "DQKR5A3F12FOI7UV"  # Replace with your actual API key
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={ticker}&interval=5min&apikey={api_key}"
+        
+        logger.info(f"here is the url {url}, requests: {requests}")
+        
+        # Create a session
+        response = requests.get(url)
+
+        logger.info(f"here is the session {response}")
+              
+        # Check if the request was successful
+        if response.status_code == 200:
+            data = response.json()  # Parse the response as JSON
+            return data  # Return the JSON data for further processing
+        else:
+            return f"Error: Received status code {response.status_code}"
+
+    def process(self, queries: List[Any]) -> List[Any]:
+        self.logger.info("test message")
+        ticker = "AAPL"
+        stock_data = self.get_stock_data(ticker)
+        if stock_data:
+            stock_data = stock_data['Time Series (5min)']
+            stock_data = list(stock_data.items())[0]
+            stock_data = stock_data[1]
+
+        return [{
+            'ticker': ticker,
+            **stock_data,
+            **query
+        } for query in queries]
+
+    def process_stream(self, query: Dict) -> Any:
+        yield json.dumps(query, indent=2)
+    
+    """
     try:
         # Create builder
         builder = SecureRunnableBuilder(config)
 
         # Compile and instantiate the runnable
-        runnable = builder.compile(user_code)
+        runnable = builder.compile(user_code2)
 
         # Use the runnable
-        for i in range(5):
-            result = runnable.process(queries=[{'test': 'data'}])
-            print(f"Query result: {result}")
+        # for i in range(5):
+        result = runnable.process(queries=[{'test': 'data'}])
+        print(f"Query result: {result}")
 
         # batch_result = runnable.process_async([
         #     {'test': 'data1'},
