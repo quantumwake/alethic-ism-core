@@ -1,5 +1,6 @@
 import math
 import random
+import hashlib
 
 from RestrictedPython import compile_restricted
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
@@ -12,6 +13,11 @@ def compile_code(code):
     return compiled_code
 
 
+def hashit(input_string, length=8):
+    full_hash = hashlib.sha256(input_string.encode()).hexdigest()
+    return full_hash[:length]
+
+
 def safer_evaluate(code, allowed_vars=None, allowed_funcs=None):
     compiled_code = compile_code(code)
     restricted_globals = {
@@ -21,11 +27,13 @@ def safer_evaluate(code, allowed_vars=None, allowed_funcs=None):
             'range': range,
             'math': math,
             'random': random,
+            'hashlib': hashlib,
         },
         '_getattr_': safer_getattr,  # allow gets
         "_getitem_": default_guarded_getitem,
         "_getiter_": default_guarded_getiter,
         '_iter_unpack_sequence_': guarded_iter_unpack_sequence,
+        'hashit': hashit  # Add hash function to globals
     }
 
     if allowed_funcs:
