@@ -24,11 +24,11 @@ logger = getLogger(__name__)
 class BaseSecureRunnable(ABC):
     """Base class for secure runnables that user code will extend"""
 
-    def __init__(self, secure_config: 'SecurityConfig'):
-        self._config = config
+    def __init__(self, security_config: 'SecurityConfig'):
+        self._config = security_config
         self.context = SecureContext()
         self.logger = SecureLogger(logger)
-        self.requests = RestrictedRequests(secure_config)
+        self.requests = RestrictedRequests(security_config)
 
     @abstractmethod
     def process(self, queries: List[Dict]) -> List[Dict]:
@@ -384,6 +384,7 @@ def create_secure_write_guard(additional_safe_types: Set[Type] = None):
 
     return guard
 
+
 def inplacevar_wrapper(op, x, y):
     """Safe wrapper for augmented assignment"""
     if op == '+=':
@@ -450,7 +451,7 @@ class SecureRunnableBuilder:
         secure_write_guard = create_secure_write_guard({
             SecureContext,  # Allow writes to our container
             dict,  # Allow dict operations
-            list   # Allow list operations
+            list  # Allow list operations
         })
 
         restricted = safe_globals.copy()
@@ -544,7 +545,7 @@ class SecureRunnableBuilder:
 
             # Instantiate the class
             instance = runnable_class(
-                secure_config=self._config
+                security_config=self._config
             )
 
             # Initialize the instance
@@ -572,13 +573,13 @@ if __name__ == "__main__":
 class Runnable(BaseSecureRunnable):
     def init(self):
         self.context['counter'] = 0
-        
+
     def process(self, queries: List[Any]) -> List[Any]:
-        
+
         c = self.context['counter']
         self.context['counter'] = c + 1
         self.context['other'] = f"other_{c}"
-        
+
         return [{
             'index': self.context['counter'],
             **query
@@ -587,7 +588,7 @@ class Runnable(BaseSecureRunnable):
     def process_stream(self, queries: List[Any]) -> Any:
         # yield from (self.process(query) for query in queries)
         pass
-        
+
 """.lstrip()
 
     try:
