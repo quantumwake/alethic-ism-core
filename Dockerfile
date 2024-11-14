@@ -17,7 +17,7 @@ WORKDIR /app/repo
 SHELL ["/bin/bash", "--login", "-c"]
 
 # install the conda build package in base
-RUN conda install -y conda-build
+RUN conda install -y conda-build -c conda-forge
 
 # Initialize the conda environment 
 RUN conda env create -f environment-prod.yaml
