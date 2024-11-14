@@ -2,7 +2,6 @@ name: alethic-ism-core
 channels:
   - conda-forge
   - pytorch
-  - defaults
 dependencies:
   - python=3.11
   - python-dotenv
