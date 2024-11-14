@@ -47,6 +47,6 @@ else
 fi
 
 # Build to a local channel
-conda config --set solver classic
+#conda config --set solver classic
 conda build "$META_YAML_PATH" --output-folder "$LOCAL_CHANNEL_PATH"
 conda index "$LOCAL_CHANNEL_PATH"

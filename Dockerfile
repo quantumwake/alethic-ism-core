@@ -32,9 +32,7 @@ RUN echo "conda activate alethic-ism-core" > ~/.bashrc
 RUN conda info
 
 # Install necessary dependencies for the build process
-RUN conda install -y conda-build -c conda-forge && \
-    conda config --set solver classic && \
-    conda list | grep solver
+RUN conda install -y conda-build -c conda-forge
 
 #RUN conda update -n base -c conda-forge conda && \
 #    conda install -y conda-build && \
