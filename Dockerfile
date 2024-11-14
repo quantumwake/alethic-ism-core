@@ -32,11 +32,15 @@ RUN echo "conda activate alethic-ism-core" > ~/.bashrc
 RUN conda info
 
 # Install necessary dependencies for the build process
-RUN conda update -n base -c defaults conda && \
-    conda install -y conda-build && \
-    #conda install -c conda-forge conda-libmamba-solver && \
+RUN conda install -y conda-build && \
     conda config --set solver classic && \
     conda list | grep solver
+
+#RUN conda update -n base -c defaults conda && \
+#    conda install -y conda-build && \
+#    #conda install -c conda-forge conda-libmamba-solver && \
+#    conda config --set solver classic && \
+#    conda list | grep solver
 
 #RUN conda install --solver=classic conda-forge::conda-libmamba-solver conda-forge::libmamba conda-forge::libmambapy conda-forge::libarchive
 
