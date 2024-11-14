@@ -88,6 +88,9 @@ class WorkflowStorage:
     def delete_workflow_edge(self, source_node_id: str, target_node_id: str):
         raise NotImplementedError()
 
+    def delete_workflow_edges_by_node_id(self, node_id: str):
+        raise NotImplementedError()
+
     def fetch_workflow_edges(self, project_id: str) -> Optional[List[WorkflowEdge]]:
         raise NotImplementedError()
 
@@ -324,6 +327,8 @@ class ProcessorStateRouteStorage:
     def delete_processor_state_route(self, route_id: str) -> int:
         raise NotImplementedError()
 
+    def delete_processor_state_routes_by_state_id(self, state_id: str) -> int:
+        raise NotImplementedError()
 
 class MonitorLogEventStorage:
 

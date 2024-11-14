@@ -765,24 +765,6 @@ class Runnable(BaseSecureRunnable):
     def init(self):
         self.context['counter'] = 0
 
-    def get_stock_data(self, ticker: str):
-        api_key = "DQKR5A3F12FOI7UV"  # Replace with your actual API key
-        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={ticker}&interval=5min&apikey={api_key}"
-        
-        logger.info(f"here is the url {url}, requests: {requests}")
-        
-        # Create a session
-        response = requests.get(url)
-
-        logger.info(f"here is the session {response}")
-              
-        # Check if the request was successful
-        if response.status_code == 200:
-            data = response.json()  # Parse the response as JSON
-            return data  # Return the JSON data for further processing
-        else:
-            return f"Error: Received status code {response.status_code}"
-
     def process(self, queries: List[Any]) -> List[Any]:
         self.logger.info("test message")
         ticker = "AAPL"
@@ -843,4 +825,4 @@ class Runnable(BaseSecureRunnable):
         # ])
         # print(f"Batch result: {batch_result}")
     except Exception as e:
-        raise e
+        print(f"Error: {str(e)}")
