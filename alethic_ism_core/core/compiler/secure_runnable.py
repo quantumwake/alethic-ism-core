@@ -52,6 +52,117 @@ class BaseSecureRunnable(ABC):
         pass
 
 
+    def pivot_list_of_dicts(self, data):
+        result = []  # List to hold the pivoted rows
+        current_dict = {}  # Dictionary to hold the current row
+        current_index = 1  # Track the current index
+
+        if not data:
+            return result
+
+        logger.info("pivoting data to table")
+        # Iterate over the data
+        for row in data:
+            # Check if we're starting a new index
+            if row['data_index'] != current_index:
+                # If current_dict is not empty, add it to the result list
+                if current_dict:
+                    result.append(current_dict)
+
+                # Start a new dictionary for the new index
+                current_dict = {}
+                current_index = row['data_index']
+
+            current_dict = {**current_dict, row['column_name']: row['data_value']}
+
+        logger.info("appending final dictionary to list")
+        # Append the final dictionary to the result list
+        if current_dict:
+            result.append(current_dict)
+
+        return result
+
+    # Function to call /api/v1/query/:state
+    def call_api_query(self, state_id: str, user_id: str, filters: List[Dict]) -> Dict:
+        base_url = "https://api.ism.quantumwake.io"
+        url = f"{base_url}/api/v1/query/state/{state_id}"
+
+        # Construct the request payload
+        payload = {
+            "filter_groups": [
+                {
+                    "filters": filters,
+                    # "filters": [
+                    #     {"column": "instruction", "operator": "like", "value": "%problematic%"},
+                    #     {"column": "animal", "operator": "=", "value": "cat"}
+                    # ],
+                    "group_logic": "AND"
+                }
+            ],
+            "state_id": state_id,
+            "user_id": user_id
+        }
+
+        # Headers to ensure JSON request and response
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        # Initialize the session locally
+        with requests.Session() as session:
+            response = session.post(url, headers=headers, json=payload)
+
+        # Handle the response
+        if response.status_code == 200:
+            return response.json()  # Return JSON if successful
+        else:
+            return str(response)
+
+    def get_stock_data(self, ticker: str):
+        api_key = "G3ATH50JQAUASTLI"  # Replace with your actual API key
+        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={ticker}&interval=5min&apikey={api_key}"
+
+        logger.info(f"here is the url {url}, requests: {requests}")
+
+        # Create a session
+        response = requests.get(url)
+
+        logger.info(f"here is the session {response}")
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            data = response.json()  # Parse the response as JSON
+            return data  # Return the JSON data for further processing
+        else:
+            return f"Error: Received status code {response.status_code}"
+
+    def query_stock(self, query: Dict):
+        self.logger.info("test message")
+        # ticker = "AAPL
+        ticker = query['ticker']
+        self.logger.info("stock ticker info")
+
+        stock_data = self.get_stock_data(ticker)
+        if stock_data:
+            logger.info(f"stock data 1: {stock_data}")
+            stock_data = stock_data['Time Series (5min)']
+            logger.info(f"stock data 2: {stock_data}")
+            stock_data = list(stock_data.items())[0]
+            logger.info(f"stock data 3: {stock_data}")
+            stock_data = stock_data[1]
+
+            updated_data = {
+                "ticker_open": stock_data["1. open"],
+                "ticker_high": stock_data["2. high"],
+                "ticker_low": stock_data["3. low"],
+                "ticker_close": stock_data["4. close"],
+                "ticker_volume": stock_data["5. volume"],
+            }
+
+        return {"ticker": ticker, **updated_data}
+
+
 @dataclass
 class SecurityConfig:
     """Configuration for security controls"""
@@ -460,19 +571,35 @@ class SecureRunnableBuilder:
     @staticmethod
     def validate_code(code: str) -> bool:
         """Validate code for potentially dangerous patterns"""
+        # forbidden_patterns = [
+        #     "import",
+        #     # "__",
+        #     "eval",
+        #     "exec",
+        #     "subprocess",
+        #     "os.",
+        #     "sys.",
+        #     "open",
+        #     "file",
+        #     "breakpoint",
+        #     "globals",
+        #     "locals"
+        # ]
+
+        # Add "__" rule specifically to avoid risky uses of double underscores
         forbidden_patterns = [
-            "import",
-            "__",
-            "eval",
-            "exec",
-            "subprocess",
-            "os.",
-            "sys.",
-            "open",
-            "file",
-            "breakpoint",
-            "globals",
-            "locals"
+            r"\bimport\b",  # Matches 'import' as a standalone word
+            r"eval\(",  # Direct eval function call
+            r"exec\(",  # Direct exec function call
+            r"subprocess\.",  # Accessing subprocess module
+            r"os\.",  # Accessing os module
+            r"sys\.",  # Accessing sys module
+            r"open\(",  # Direct open function call
+            r"file\(",  # Direct file function call
+            r"breakpoint\(",  # Direct breakpoint function call
+            r"globals\(",  # Direct globals function call
+            r"locals\(",  # Direct locals function call
+            r"(^|[^a-zA-Z0-9_])__[^a-zA-Z0-9_]",  # Matches "__" at the beginning or end of words
         ]
         return not any(pattern in code for pattern in forbidden_patterns)
 
@@ -681,43 +808,6 @@ class Runnable(BaseSecureRunnable):
     def init(self):
         self.context['counter'] = 0
 
-    def get_stock_data(self, ticker: str):
-        api_key = "DQKR5A3F12FOI7UV"  # Replace with your actual API key
-        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={ticker}&interval=5min&apikey={api_key}"
-        
-        logger.info(f"here is the url {url}, requests: {requests}")
-        
-        # Create a session
-        response = requests.get(url)
-
-        logger.info(f"here is the session {response}")
-              
-        # Check if the request was successful
-        if response.status_code == 200:
-            data = response.json()  # Parse the response as JSON
-            return data  # Return the JSON data for further processing
-        else:
-            return f"Error: Received status code {response.status_code}"
-
-    def query_stock(self, query: Dict):
-        self.logger.info("test message")
-        # ticker = "AAPL
-        is_stock_question = bool(query['is_stock_question'])
-        if not is_stock_question:
-            return
-        
-        ticker = query['stock_ticker']
-        self.logger.info("stock ticker info")
-        
-        stock_data = self.get_stock_data(ticker)
-        if stock_data:
-            stock_data = stock_data['Time Series (5min)']
-            stock_data = list(stock_data.items())[0]
-            stock_data = stock_data[1]
-
-        return { "ticker": ticker, **stock_data }
-
-
     def process(self, queries: List[Any]) -> List[Any]:
         return [{
             **self.query_stock(query),
@@ -725,7 +815,10 @@ class Runnable(BaseSecureRunnable):
         } for query in queries]
 
     def process_stream(self, query: Dict) -> Any:
-        yield json.dumps(query, indent=2)
+        yield json.dumps({
+            **query,
+            **self.query_stock(query)
+        }, indent=2)
     
 """
 
@@ -741,7 +834,7 @@ class Runnable(BaseSecureRunnable):
         #   result = runnable.process(queries=[{'test': 'data'}])
         #   print(f"Query result: {result}")
 
-        result = runnable.process(queries=[{'is_stock_question': 'true', 'stock_ticker': 'AAPL'}])
+        result = runnable.process(queries=[{'is_stock_question': 'true', 'ticker': 'AAPL'}])
         print(f"Query result: {result}")
 
         # batch_result = runnable.process_async([
@@ -750,4 +843,4 @@ class Runnable(BaseSecureRunnable):
         # ])
         # print(f"Batch result: {batch_result}")
     except Exception as e:
-        print(f"Error: {str(e)}")
+        raise e
