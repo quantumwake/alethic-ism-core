@@ -34,9 +34,11 @@ RUN conda info
 # Install necessary dependencies for the build process
 RUN conda update -n base -c defaults conda && \
     conda install -y conda-build && \
-    conda install -c conda-forge conda-libmamba-solver && \
-    conda config --set solver libmamba && \
+    #conda install -c conda-forge conda-libmamba-solver && \
+    conda config --set solver classic && \
     conda list | grep solver
+
+#RUN conda install --solver=classic conda-forge::conda-libmamba-solver conda-forge::libmamba conda-forge::libmambapy conda-forge::libarchive
 
 # Run the build command (adjust as per your repo's requirements)
 #RUN conda build . --output-folder /app/local-channel
