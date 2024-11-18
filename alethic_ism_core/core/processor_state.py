@@ -17,6 +17,7 @@ from .utils.ismlogging import ism_logger
 
 logging = ism_logger(__name__)
 
+
 class CustomStateUnpickler(pickle.Unpickler):
     def load(self):
         obj = super().load()
@@ -67,8 +68,6 @@ class CustomStateUnpickler(pickle.Unpickler):
                 return InstructionTemplate
 
             raise e
-
-
 
 
 class StateDataKeyDefinition(BaseModel):
@@ -140,6 +139,14 @@ class StateConfigVisual(StateConfig):
     width: Optional[int] = 1024
     height: Optional[int] = 1024
     quantity: Optional[int] = 1
+
+
+class StateConfigAudio(StateConfig):
+    template_id: Optional[str] = None
+
+
+class StateConfigUserInput(StateConfig):
+    filter_id: Optional[str] = None
 
 
 class StateDataColumnDefinition(BaseModel):
@@ -274,7 +281,9 @@ class State(BaseModel):
         StateConfigDB,
         StateConfigVisual,
         StateConfigCode,
-        StateConfigStream
+        StateConfigStream,
+        StateConfigAudio,
+        StateConfigUserInput,
     ]] = None
     columns: Dict[str, StateDataColumnDefinition] = {}
     data: Dict[str, StateDataRowColumnData] = {}
@@ -322,6 +331,10 @@ class State(BaseModel):
             value['config'] = StateConfigVisual(**config_value)
         elif state_type == 'StateConfigStream':
             value['config'] = StateConfigStream(**config_value)
+        elif state_type == 'StateConfigAudio':
+            value['config'] = StateConfigAudio(**config_value)
+        elif state_type == 'StateConfigUserInput':
+            value['config'] = StateConfigUserInput(**config_value)
         elif state_type == 'StateConfig':
             value['config'] = StateConfig(**config_value)
         else:
@@ -455,8 +468,8 @@ class State(BaseModel):
             _map = remap[state_item_name]
             if not _map:
                 raise ValueError(f'remapping of field {state_item_name} specified without a callable '
-                                f'function NEITHER alias. Please specify either a function or an alias using '
-                                f'the .alias property in {type(StateDataKeyDefinition)}, current values: {remap}')
+                                 f'function NEITHER alias. Please specify either a function or an alias using '
+                                 f'the .alias property in {type(StateDataKeyDefinition)}, current values: {remap}')
 
             # if it is a function, call it
             alias = _map(query_state=query_state) \
@@ -676,7 +689,8 @@ class State(BaseModel):
                 # balance the column values to fit the number of rows by back-filling data rows, with empty values that are missing
                 # TODO should probably execute callable functions if any.
                 current_column_row_count = len(self.data[column_name].values)
-                self.data[column_name].add_column_data_values(values=[None for _ in range(current_row_count - current_column_row_count)])
+                self.data[column_name].add_column_data_values(
+                    values=[None for _ in range(current_row_count - current_column_row_count)])
 
             # append the new row to the state.data
             self.data[column_name].add_column_data_values(row_column_data.values)
@@ -713,7 +727,6 @@ class State(BaseModel):
 
         # create an index to map back to the exact position in the array
         self.add_row_data_mapping(state_key=state_key, index=self.count)
-
 
     def has_query_state(self, query_state: dict):
         # make sure that the state is initialized and that there is a data key
@@ -852,7 +865,7 @@ class State(BaseModel):
             output_query_state = {**output_query_state, **input_query_state}
 
             # Remove specific keys if they exist
-            output_query_state.pop('state_key', None)         # TODO create an internal function for this
+            output_query_state.pop('state_key', None)  # TODO create an internal function for this
             output_query_state.pop('state_key_plain', None)
 
         # Apply specific key inheritance if not all variables are inherited (or negated inheritance)
@@ -880,7 +893,7 @@ class State(BaseModel):
                 # state_item_key = calculate_string_dict_hash(item)
                 output_query_state = {
                     **base_output_query_state,
-                    ** item,
+                    **item,
                 }
 
                 # format column names and append the state key
@@ -928,7 +941,8 @@ class State(BaseModel):
     #
     #     return column_definition.value
 
-    def pre_state_apply_callable_and_constant_columns(self, query_state: dict, scope_variable_mappings: callable = None) -> dict:
+    def pre_state_apply_callable_and_constant_columns(self, query_state: dict,
+                                                      scope_variable_mappings: callable = None) -> dict:
 
         # derive the constant and callable column values and apply them to the query state
         constant_and_callable_query_state = {
