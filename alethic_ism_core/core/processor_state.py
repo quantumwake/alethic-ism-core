@@ -146,7 +146,7 @@ class StateConfigAudio(StateConfig):
 
 
 class StateConfigUserInput(StateConfig):
-    filter_id: Optional[str] = None
+    template_id: Optional[str] = None
 
 
 class StateDataColumnDefinition(BaseModel):
