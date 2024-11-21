@@ -23,6 +23,7 @@ from .processor_state import (
     StateDataColumnDefinition,
     StateDataColumnIndex)
 from .utils.ismlogging import ism_logger, LOG_LEVEL
+from .vault.vault_model import ConfigMap, Vault
 
 logging = ism_logger(__name__)
 
@@ -425,11 +426,31 @@ class SessionStorage:
 
 
 class VaultStorage:
-    pass
+    def insert_vault(self, vault: Vault) -> Optional[Vault]:
+        raise NotImplementedError()
 
+    def fetch_vaults_by_owner(self, owner_id: str) -> Optional[List[Vault]]:
+        raise NotImplementedError()
+
+    def fetch_vault(self, vault_id: str) -> Optional[Vault]:
+        raise NotImplementedError()
+
+    def delete_vault(self, vault_id: str) -> int:
+        raise NotImplementedError()
 
 class ConfigMapStorage:
-    pass
+
+    def fetch_config_map(self, config_id: str) -> Optional[ConfigMap]:
+        raise NotImplementedError()
+
+    def fetch_config_maps_by_owner(self, owner_id: str) -> Optional[List[ConfigMap]]:
+        raise NotImplementedError()
+
+    def delete_config_map(self, config_id: str) -> int:
+        raise NotImplementedError()
+
+    def insert_config_map(self, config: ConfigMap) -> Optional[ConfigMap]:
+        raise NotImplementedError()
 
 
 class StateActionStorage:
@@ -508,6 +529,8 @@ class StateMachineStorage(StateStorage,
                           UsageStorage,
                           SessionStorage,
                           StateActionStorage,
+                          VaultStorage,
+                          ConfigMapStorage,
                           metaclass=ForwardingStateMachineStorageMeta):
     def __init__(self,
                  state_storage: StateStorage = None,
