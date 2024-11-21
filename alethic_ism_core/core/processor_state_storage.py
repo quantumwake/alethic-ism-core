@@ -424,6 +424,14 @@ class SessionStorage:
         raise NotImplementedError()
 
 
+class VaultStorage:
+    pass
+
+
+class ConfigMapStorage:
+    pass
+
+
 class StateActionStorage:
 
     def create_state_action(self, action: StateActionDefinition) -> StateActionDefinition:
