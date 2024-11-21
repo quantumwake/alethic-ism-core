@@ -245,6 +245,15 @@ class Session(BaseModel):
     owner_user_id: str
 
 
+class StateActionDefinition(BaseModel):
+    id: Optional[str] = None
+    state_id: str
+    action_type: str
+    field: Optional[str] = None
+    remote_url: Optional[bool] = False
+    created_date: Optional[dt.datetime] = dt.datetime.utcnow()
+
+
 # BaseModel for the 'session_message' table
 class SessionMessage(BaseModel):
     message_id: Optional[int] = None

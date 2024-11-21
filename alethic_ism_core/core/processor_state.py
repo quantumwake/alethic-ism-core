@@ -129,9 +129,11 @@ class StateConfigCode(StateConfig):
 
 
 class StateConfigDB(StateConfig):
-    embedding_columns: Optional[List[dict]] = None
-    function_columns: Optional[List[dict]] = None
-    constant_columns: Optional[List[dict]] = None
+    template_id: Optional[str] = None
+
+    # embedding_columns: Optional[List[dict]] = None
+    # function_columns: Optional[List[dict]] = None
+    # constant_columns: Optional[List[dict]] = None
 
 
 class StateConfigVisual(StateConfig):

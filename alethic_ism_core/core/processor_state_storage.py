@@ -14,7 +14,7 @@ from .base_model import (
     ProcessorProvider,
     ProcessorStateDirection,
     ProcessorProperty, MonitorLogEvent, ProcessorStatusCode, UsageUnit, UsageReport, Session, SessionMessage,
-    UsageReportInstant
+    UsageReportInstant, StateActionDefinition
 )
 from .processor_state import (
     State,
@@ -424,6 +424,24 @@ class SessionStorage:
         raise NotImplementedError()
 
 
+class StateActionStorage:
+
+    def create_state_action(self, action: StateActionDefinition) -> StateActionDefinition:
+        raise NotImplementedError()
+
+    def fetch_state_action(self, action_id: str) -> Optional[StateActionDefinition]:
+        raise NotImplementedError()
+
+    def fetch_state_actions(self, state_id: str) -> Optional[List[StateActionDefinition]]:
+        raise NotImplementedError()
+
+    def delete_state_actions(self, state_id: str) -> int:
+        raise NotImplementedError()
+
+    def delete_state_action(self, action_id: str) -> int:
+        raise NotImplementedError()
+
+
 class SessionIdentContext:
     identity: Optional[str] = None
 
@@ -481,6 +499,7 @@ class StateMachineStorage(StateStorage,
                           MonitorLogEventStorage,
                           UsageStorage,
                           SessionStorage,
+                          StateActionStorage,
                           metaclass=ForwardingStateMachineStorageMeta):
     def __init__(self,
                  state_storage: StateStorage = None,
@@ -493,7 +512,8 @@ class StateMachineStorage(StateStorage,
                  user_project_storage: UserProjectStorage = None,
                  monitor_log_event_storage: MonitorLogEventStorage = None,
                  usage_storage: UsageStorage = None,
-                 session_storage: SessionStorage = None):
+                 session_storage: SessionStorage = None,
+                 state_action_storage: StateActionStorage = None):
 
         # Assign the delegates dynamically via constructor parameters
         self._delegate_state_storage = state_storage
@@ -507,3 +527,4 @@ class StateMachineStorage(StateStorage,
         self._delegate_monitor_log_event_storage = monitor_log_event_storage
         self._delegate_usage_storage = usage_storage
         self._delegate_session_storage = session_storage
+        self._deleted_state_action_storage = state_action_storage
