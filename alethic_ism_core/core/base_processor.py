@@ -667,7 +667,7 @@ if __name__ == '__main__':
     # number of columns and in the order of the columns that were added, otherwise
     # there will be data / column misalignment
     test_state.add_row_data(StateDataRowColumnData(values=[
-        'why are cats so mean?',  # query
+        'why are we ....?',  # query
         'Education',  # context
         'cats are ....',  # response
         'Instrumentalist',  # analysis_dimension
@@ -675,9 +675,9 @@ if __name__ == '__main__':
     ]))
 
     test_state.add_row_data(StateDataRowColumnData(values=[
-        'why are cats so mean?',  # query
+        'why are cats and dogs....?',  # query
         'Education',  # context
-        'cats are cool too ....',  # response
+        'cats and dogs ....',  # response
         'Person-Centric',  # analysis_dimension
         88,  # analysis_dimension_score
     ]))

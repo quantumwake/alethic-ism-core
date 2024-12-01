@@ -2,19 +2,17 @@ import hashlib
 import json
 import math
 import random
+import re
 import signal
 import resource
-import threading
 from abc import ABC, abstractmethod
 from datetime import time, datetime
 from fnmatch import fnmatch
-from typing import List, Dict, Any, Set, Type, re
+from typing import List, Dict, Any, Set, Type
 from dataclasses import dataclass
-from urllib.parse import urlparse
 from contextlib import contextmanager
 from logging import getLogger, Logger
 
-import requests
 from RestrictedPython import compile_restricted, safe_globals
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
 from RestrictedPython.Guards import (

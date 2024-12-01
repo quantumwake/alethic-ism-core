@@ -1,6 +1,6 @@
 import datetime as dt
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import BaseModel
 
 # from .utils.general_utils import calculate_sha256
@@ -250,6 +250,7 @@ class StateActionDefinition(BaseModel):
     state_id: str
     action_type: str
     field: Optional[str] = None
+    field_options: Optional[Dict] = None
     remote_url: Optional[bool] = False
     created_date: Optional[dt.datetime] = dt.datetime.utcnow()
 

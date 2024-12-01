@@ -8,7 +8,7 @@ def validate_processor_state_from_created(new_status: ProcessorStatusCode):
     if new_status not in [ProcessorStatusCode.CREATED,
                           ProcessorStatusCode.QUEUED,
                           ProcessorStatusCode.RUNNING,
-                          ProcessorStatusCode.TERMINATED,
+                          ProcessorStatusCode.TERMINATE,
                           ProcessorStatusCode.STOPPED,
                           ProcessorStatusCode.FAILED]:
         logging.error(
@@ -20,7 +20,7 @@ def validate_processor_state_from_created(new_status: ProcessorStatusCode):
 
 def validate_processor_state_from_queued(new_status: ProcessorStatusCode):
     if new_status not in [ProcessorStatusCode.STOPPED,
-                          ProcessorStatusCode.TERMINATED,
+                          ProcessorStatusCode.TERMINATE,
                           ProcessorStatusCode.RUNNING,
                           ProcessorStatusCode.QUEUED]:
         logging.error(
@@ -33,7 +33,7 @@ def validate_processor_state_from_queued(new_status: ProcessorStatusCode):
 def validate_processor_state_from_running(new_status: ProcessorStatusCode):
     if new_status not in [ProcessorStatusCode.RUNNING,
                           ProcessorStatusCode.STOPPED,
-                          ProcessorStatusCode.TERMINATED,
+                          ProcessorStatusCode.TERMINATE,
                           ProcessorStatusCode.FAILED,
                           ProcessorStatusCode.COMPLETED]:
         logging.error(
@@ -45,7 +45,7 @@ def validate_processor_state_from_running(new_status: ProcessorStatusCode):
 
 def validate_processor_state_from_stopped(new_status: ProcessorStatusCode):
     if new_status not in [ProcessorStatusCode.STOPPED,
-                          ProcessorStatusCode.TERMINATED,
+                          ProcessorStatusCode.TERMINATE,
                           ProcessorStatusCode.FAILED]:
         logging.error(
             f'unable to transition {ProcessorStatusCode.STOPPED} to {new_status}')
