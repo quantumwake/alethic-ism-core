@@ -438,6 +438,7 @@ class VaultStorage:
     def delete_vault(self, vault_id: str) -> int:
         raise NotImplementedError()
 
+
 class ConfigMapStorage:
 
     def fetch_config_map(self, config_id: str) -> Optional[ConfigMap]:
@@ -544,7 +545,8 @@ class StateMachineStorage(StateStorage,
                  monitor_log_event_storage: MonitorLogEventStorage = None,
                  usage_storage: UsageStorage = None,
                  session_storage: SessionStorage = None,
-                 state_action_storage: StateActionStorage = None):
+                 state_action_storage: StateActionStorage = None,
+                 vault_storage: VaultStorage = None,):
 
         # Assign the delegates dynamically via constructor parameters
         self._delegate_state_storage = state_storage
@@ -559,3 +561,4 @@ class StateMachineStorage(StateStorage,
         self._delegate_usage_storage = usage_storage
         self._delegate_session_storage = session_storage
         self._deleted_state_action_storage = state_action_storage
+        self._delegate_vault_storage = vault_storage

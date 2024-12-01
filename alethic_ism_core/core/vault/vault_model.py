@@ -10,11 +10,18 @@ class ConfigMapType(Enum):
     CONFIG_MAP = "config_map"
 
 
+class VaultType(Enum):
+    VAULT = "Vault"
+    LOCAL = "Local"
+    KMS = "kms"
+
+
 class Vault(BaseModel):
     id: str
     name: str
-    owner: str
-    type: str  # e.g., 'kms', 'vault', 'local'
+    owner: Optional[str] = None
+    # TODO credentials such as api keys or other if we want to support multiple vaults on a per owner basis
+    type: VaultType = VaultType.LOCAL  # e.g., 'kms', 'vault', 'local', other provider
     metadata: Optional[Json] = None  # Additional metadata in JSON format
     created_at: Optional[dt.datetime] = None  # ISO timestamp
     updated_at: Optional[dt.datetime] = None  # ISO timestamp
