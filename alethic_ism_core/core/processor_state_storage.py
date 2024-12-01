@@ -546,7 +546,8 @@ class StateMachineStorage(StateStorage,
                  usage_storage: UsageStorage = None,
                  session_storage: SessionStorage = None,
                  state_action_storage: StateActionStorage = None,
-                 vault_storage: VaultStorage = None,):
+                 vault_storage: VaultStorage = None,
+                 config_map_storage: ConfigMapStorage = None):
 
         # Assign the delegates dynamically via constructor parameters
         self._delegate_state_storage = state_storage
@@ -562,3 +563,4 @@ class StateMachineStorage(StateStorage,
         self._delegate_session_storage = session_storage
         self._deleted_state_action_storage = state_action_storage
         self._delegate_vault_storage = vault_storage
+        self._delegate_config_map_storage = config_map_storage
