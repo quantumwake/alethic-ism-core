@@ -561,6 +561,6 @@ class StateMachineStorage(StateStorage,
         self._delegate_monitor_log_event_storage = monitor_log_event_storage
         self._delegate_usage_storage = usage_storage
         self._delegate_session_storage = session_storage
-        self._deleted_state_action_storage = state_action_storage
+        self._delegate_state_action_storage = state_action_storage
         self._delegate_vault_storage = vault_storage
         self._delegate_config_map_storage = config_map_storage

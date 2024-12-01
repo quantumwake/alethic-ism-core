@@ -17,7 +17,7 @@ class VaultType(Enum):
 
 
 class Vault(BaseModel):
-    id: str
+    id: Optional[str] = None
     name: str
     owner: Optional[str] = None
     # TODO credentials such as api keys or other if we want to support multiple vaults on a per owner basis
