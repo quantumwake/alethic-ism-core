@@ -279,6 +279,9 @@ class ProcessorStorage:
             -> Optional[Processor]:
         raise NotImplementedError()
 
+    def delete_processor(self, processor_id: str) -> int:
+        raise NotImplementedError()
+
     def change_processor_status(self, processor_id: str, status: ProcessorStatusCode) -> int:
         raise NotImplementedError()
 
@@ -300,6 +303,7 @@ class ProcessorStorage:
 
     def delete_processor_property(self, processor_id: str, name: str) -> int:
         raise NotImplementedError()
+
 
 
 class ProcessorStateRouteStorage:
@@ -330,6 +334,7 @@ class ProcessorStateRouteStorage:
 
     def delete_processor_state_routes_by_state_id(self, state_id: str) -> int:
         raise NotImplementedError()
+
 
 class MonitorLogEventStorage:
 
