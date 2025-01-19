@@ -1,5 +1,6 @@
 import redis
 import types
+import datetime as dt
 from functools import wraps
 from typing import Optional, List, Dict, OrderedDict, Any
 
@@ -338,7 +339,10 @@ class ProcessorStateRouteStorage:
 
 class MonitorLogEventStorage:
 
-    def fetch_monitor_log_events(self, internal_reference_id: int = None, user_id: str = None, project_id: str = None) \
+    def fetch_monitor_log_events(self,
+                                 user_id: str = None, project_id: str = None, reference_id: str = None,
+                                 start_date: dt.datetime = None, end_date: dt.datetime = None,
+                                 order_by: [str] = None) \
             -> Optional[List[MonitorLogEvent]]:
         raise NotImplementedError()
 
