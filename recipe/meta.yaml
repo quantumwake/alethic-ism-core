@@ -10,7 +10,9 @@ source:
 #  git_rev: main
 
 build:
-  number: 1009
+  script_env:
+    - MAKEFLAGS=-j$(nproc)
+  number: 1017
   script: "{{ PYTHON }} -m pip install . -vv"
 
 requirements:

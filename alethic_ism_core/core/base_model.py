@@ -1,7 +1,8 @@
 import datetime as dt
 from enum import Enum
 from typing import Optional, List, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
 
 # from .utils.general_utils import calculate_sha256
 
@@ -141,8 +142,7 @@ class Processor(BaseModel):
 
 
 class ProcessorState(BaseModel):
-
-    _internal_id: Optional[int] = None     # internal reference number for tracking of log messages
+    internal_id: Optional[int] = None
     id: Optional[str] = None
     processor_id: str
     state_id: str
@@ -156,13 +156,23 @@ class ProcessorState(BaseModel):
     current_index: Optional[int] = None
     maximum_index: Optional[int] = None
 
-    @property
-    def internal_id(self):
-        return self._internal_id
+    def dict(self, *args, **kwargs):
+        """Override dict method to exclude 'internal_id'"""
+        kwargs["exclude"] = kwargs.get("exclude", set()) | {"internal_id"}
+        return super().dict(*args, **kwargs)
 
-    @internal_id.setter
-    def internal_id(self, internal_id):
-        self._internal_id = internal_id
+    def json(self, *args, **kwargs):
+        """Override json method to exclude 'internal_id'"""
+        kwargs["exclude"] = kwargs.get("exclude", set()) | {"internal_id"}
+        return super().json(*args, **kwargs)
+    #
+    # @property
+    # def internal_id(self):
+    #     return self._internal_id
+    #
+    # @internal_id.setter
+    # def internal_id(self, internal_id):
+    #     self._internal_id = internal_id
 
 
 class MonitorLogEvent(BaseModel):
