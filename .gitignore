@@ -1,5 +1,6 @@
 .idea
 .idea/
+.idea/*
 logs/*.log
 .env
 *.swp
