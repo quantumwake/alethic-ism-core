@@ -1,6 +1,6 @@
 # Use an x86 base image
 # Stage 1: Base Image with Miniconda
-FROM continuumio/miniconda3:24.5.0-0 as core
+FROM continuumio/miniconda3:24.5.0-0 AS core
 
 # Set the working directory
 WORKDIR /app

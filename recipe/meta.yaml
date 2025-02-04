@@ -12,7 +12,7 @@ source:
 build:
   script_env:
     - MAKEFLAGS=-j$(nproc)
-  number: 1017
+  number: 1022
   script: "{{ PYTHON }} -m pip install . -vv"
 
 requirements:

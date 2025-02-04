@@ -4,7 +4,7 @@ META_YAML_PATH="./recipe"
 LOCAL_CHANNEL_PATH=~/miniconda3/envs/local_channel
 SKIP_PURGE=false
 VERBOSE=true
-USE_BOA=true
+USE_BOA=false
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in

@@ -5,7 +5,7 @@ print_usage() {
   echo "Usage: $0 [-a app_name] [-n docker_namespace] [-t tag]"
   echo "  -a app_name           Application name (default: alethic-ism-core)"
   echo "  -n docker_namespace   Docker namespace (default: krasaee)"
-  echo "  -t tag                Docker image tag"
+  echo "  -t tag                Docker image:tag"
 }
 
 # Default values
