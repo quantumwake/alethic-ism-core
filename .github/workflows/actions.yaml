@@ -32,10 +32,10 @@ jobs:
       id: build-conda-package
       run: |
         bash ./docker_build.sh -t $IMAGE
-        # bash ./docker_extract_conda_package.sh
+        bash ./docker_deploy.sh -t $IMAGE
         
-#        echo "checking env file_name: $file_name"
-#        echo "::set-output name=file_name::$file_name"
+       echo "checking env file_name: $file_name"
+       echo "::set-output name=file_name::$file_name"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
