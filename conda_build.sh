@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 META_YAML_PATH="./recipe"
 LOCAL_CHANNEL_PATH=~/miniconda3/envs/local_channel

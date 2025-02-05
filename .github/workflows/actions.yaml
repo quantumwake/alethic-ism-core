@@ -31,11 +31,10 @@ jobs:
     - name: Build Package Artifact 
       id: build-conda-package
       run: |
+        apt install yq -y
         bash ./docker_build.sh -t $IMAGE
         bash ./docker_deploy.sh -t $IMAGE
-        
-       # echo "checking env file_name: $file_name"
-       # echo "::set-output name=file_name::$file_name"
+        bash ./conda_build_bump_version.sh
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
