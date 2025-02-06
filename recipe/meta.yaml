@@ -10,7 +10,7 @@ source:
 build:
   # Uncomment the following line if your package is pure Python.
   noarch: python
-  number: 1035
+  number: 1036
   # If you need MAKEFLAGS for building native code, you can leave it:
   # script_env:
   #   - MAKEFLAGS=-j$(nproc)
