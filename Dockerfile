@@ -47,6 +47,5 @@ RUN conda install -y conda-build -c conda-forge --override-channels
 RUN bash ./conda_build.sh --local-channel-path /app/conda/env/local_channel
 
 # package the local channel such that we can extract into an artifact
-
 RUN chmod +x ./package-conda-channel.sh
 RUN bash ./package-conda-channel.sh
