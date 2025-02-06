@@ -2,6 +2,10 @@
 # Stage 1: Base Image with Miniconda
 FROM continuumio/miniconda3:24.5.0-0 AS core
 
+# conda package repository token such that we can upload the package to anaconda cloud
+ARG ANACONDA_API_TOKEN
+ENV ANACONDA_API_TOKEN=$ANACONDA_API_TOKEN
+
 # Set the working directory
 WORKDIR /app
 
@@ -49,3 +53,7 @@ RUN bash ./conda_build.sh --local-channel-path /app/conda/env/local_channel
 # package the local channel such that we can extract into an artifact
 RUN chmod +x ./package-conda-channel.sh
 RUN bash ./package-conda-channel.sh
+
+## push the package to anaconda cloud
+RUN anaconda upload /app/conda/env/local_channel/linux-64/*.tar.bz2
+RUN anaconda upload /app/conda/env/local_channel/noarch/*.tar.bz2

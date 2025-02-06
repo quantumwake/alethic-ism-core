@@ -2,7 +2,10 @@
 
 name: Docker Build Python Package using Conda (alethic-ism-core module)
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
 
 jobs:   
   build-and-upload:
@@ -42,8 +45,10 @@ jobs:
     - name: Build Package Artifact 
       id: build-conda-package
       run: |
+        $ANACONDA_API_TOKEN=${{ secrets.ANACONDA_TOKEN }}
+        
         bash ./docker_build.sh -t $IMAGE
-        bash ./docker_deploy.sh -t $IMAGE
+        bash ./docker_deploy.sh -t $IMAGE 
         bash ./conda_build_bump_version.sh
 
     - name: Upload Artifact

@@ -1,17 +1,20 @@
 #!/bin/bash
 
-# Function to print usage
 print_usage() {
   echo "Usage: $0 [-t tag] [-a architecture]"
   echo "  -t tag             Docker image tag"
   echo "  -p platform        Target platform architecture (default: linux/amd64)"
 }
 
-# Default values
+# Check for ANACONDA_API_TOKEN
+if [ -z "$ANACONDA_API_TOKEN" ]; then
+    echo "Error: ANACONDA_API_TOKEN environment variable is not set"
+    exit 1
+fi
+
 TAG=""
 ARCH="linux/amd64"
 
-# Parse command line arguments
 while getopts 't:a:' flag; do
   case "${flag}" in
     t) TAG="${OPTARG}" ;;
@@ -21,14 +24,14 @@ while getopts 't:a:' flag; do
   esac
 done
 
-# Check if ARCH is set, if not default to linux/amd64
-if [ -z "$ARCH" ]; then
-  ARCH="linux/amd64"
-  # TODO: Check operating system and set ARCH accordingly, e.g., ARCH="linux/arm64"
+# Validate TAG is provided
+if [ -z "$TAG" ]; then
+    echo "Error: -t tag is required"
+    print_usage
+    exit 1
 fi
 
-# Build the Docker image
 docker build --quiet \
   --platform "$ARCH" -t "$TAG" \
+  --build-arg ANACONDA_API_TOKEN=$ANACONDA_API_TOKEN \
   --no-cache .
-
