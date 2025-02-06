@@ -56,7 +56,7 @@ jobs:
       run: |
         git config --global user.name 'GitHub Actions'
         git config --global user.email 'github-actions@github.com'
-        VERSION=$(grep 'version:' ./recipe/meta.yaml | awk -F'"' '{print $2}')
+        VERSION=$(grep 'version:' ./recipe/meta.yaml | awk -F':' '{print $2}' | sed 's/ //g')
         git add ./recipe/meta.yaml
         git commit -m "Bump version to ${VERSION} [skip ci]"
         git tag -a "v${VERSION}" -m "Release ${VERSION}"
