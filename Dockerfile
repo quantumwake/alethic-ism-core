@@ -11,9 +11,6 @@ WORKDIR /app
 
 ADD . /app/repo
 
-#ARG GITHUB_REPO_URLls -l
-#RUN git clone --depth 1 ${GITHUB_REPO_URL} repo
-
 # Move to the repository directory
 WORKDIR /app/repo
 
@@ -36,18 +33,9 @@ RUN echo "conda activate alethic-ism-core" > ~/.bashrc
 RUN conda info
 
 # Install necessary dependencies for the build process
-RUN conda install -y conda-build -c conda-forge --override-channels
-
-#RUN conda update -n base -c conda-forge conda && \
-#    conda install -y conda-build && \
-#    #conda install -c conda-forge conda-libmamba-solver && \
-#    conda config --set solver classic && \
-#    conda list | grep solver
-
-#RUN conda install --solver=classic conda-forge::conda-libmamba-solver conda-forge::libmamba conda-forge::libmambapy conda-forge::libarchive
+RUN conda install -y conda-build anaconda-client -c conda-forge --override-channels
 
 # Run the build command (adjust as per your repo's requirements)
-#RUN conda build . --output-folder /app/local-channel
 RUN bash ./conda_build.sh --local-channel-path /app/conda/env/local_channel
 
 # package the local channel such that we can extract into an artifact
