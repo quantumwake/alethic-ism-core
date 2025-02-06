@@ -1,6 +1,6 @@
 package:
   name: alethic-ism-core
-  version: v0.0.2
+  version: 0.0.0
 source:
   path: ../
   # Alternatively, you can fetch from a URL or git:
