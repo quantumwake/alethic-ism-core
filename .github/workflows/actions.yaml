@@ -4,10 +4,12 @@ name: Docker Build Python Package using Conda (alethic-ism-core module)
 
 on: [push, pull_request]
 
-jobs:
+jobs:   
   build-and-upload:
+    permissions:
+      contents: write
+      
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout Repository
       id: code_checkout
