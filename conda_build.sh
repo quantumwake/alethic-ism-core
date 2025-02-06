@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+#set -euo pipefail
 
 META_YAML_PATH="./recipe"
 LOCAL_CHANNEL_PATH=~/miniconda3/envs/local_channel
@@ -27,12 +27,6 @@ log() {
 
 log "Using META_YAML_PATH: $META_YAML_PATH"
 log "Using LOCAL_CHANNEL_PATH: $LOCAL_CHANNEL_PATH"
-
-build_no=$(awk '/number: [0-9]+/ {print $2}' "$META_YAML_PATH/meta.yaml")
-build_no=$((build_no+1))
-sed -E "s/number: [0-9]+/number: $build_no/g" "$META_YAML_PATH/meta.yaml" > ./tmp_meta.yaml
-mv ./tmp_meta.yaml "$META_YAML_PATH/meta.yaml"
-log "Updated build number to: $build_no"
 
 if [ "$SKIP_PURGE" = false ]; then
     log "Purging and cleaning..."
