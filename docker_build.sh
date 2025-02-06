@@ -28,7 +28,7 @@ if [ -z "$ARCH" ]; then
 fi
 
 # Build the Docker image
-docker build --quiet --progress=plain \
+docker build --progress=plain \
   --platform "$ARCH" -t "$TAG" \
   --no-cache .
 

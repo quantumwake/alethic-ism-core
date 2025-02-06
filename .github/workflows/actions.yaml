@@ -52,10 +52,12 @@ jobs:
         name: ${{ steps.build-conda-package.outputs.file_name }}
         path: ${{ steps.build-conda-package.outputs.file_name }}
 
-    - name: Commit Version Bump
+    - name: Commit and Tag Version
       run: |
         git config --global user.name 'GitHub Actions'
         git config --global user.email 'github-actions@github.com'
+        VERSION=$(grep 'version:' ./recipe/meta.yaml | awk -F'"' '{print $2}')
         git add ./recipe/meta.yaml
-        git commit -m "bump version"
-        git push
+        git commit -m "Bump version to ${VERSION} [skip ci]"
+        git tag -a "v${VERSION}" -m "Release ${VERSION}"
+        git push && git push --tags
