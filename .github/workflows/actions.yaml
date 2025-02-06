@@ -4,10 +4,12 @@ name: Docker Build Python Package using Conda (alethic-ism-core module)
 
 on: [push, pull_request]
 
-jobs:
+jobs:   
   build-and-upload:
+    permissions:
+      contents: write
+      
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout Repository
       id: code_checkout
@@ -44,9 +46,16 @@ jobs:
         bash ./docker_deploy.sh -t $IMAGE
         bash ./conda_build_bump_version.sh
 
-
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.build-conda-package.outputs.file_name }}
         path: ${{ steps.build-conda-package.outputs.file_name }}
+
+    - name: Commit Version Bump
+      run: |
+        git config --global user.name 'GitHub Actions'
+        git config --global user.email 'github-actions@github.com'
+        git add ./recipe/meta.yaml
+        git commit -m "bump version"
+        git push
