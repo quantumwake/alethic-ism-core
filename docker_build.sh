@@ -31,7 +31,7 @@ if [ -z "$TAG" ]; then
     exit 1
 fi
 
-docker build --quiet \
+docker build \
   --platform "$ARCH" -t "$TAG" \
   --build-arg ANACONDA_API_TOKEN=$ANACONDA_API_TOKEN \
   --no-cache .

@@ -9,7 +9,14 @@ ENV ANACONDA_API_TOKEN=$ANACONDA_API_TOKEN
 # Set the working directory
 WORKDIR /app
 
-ADD . /app/repo
+ADD alethic_ism_core /app/repo/alethic_ism_core
+ADD recipe /app/repo/recipe
+ADD environment-prod.yaml /app/repo/environment-prod.yaml
+ADD conda_build.sh /app/repo/conda_build.sh
+ADD setup.py /app/repo/setup.py
+ADD Makefile /app/repo/Makefile
+ADD package-conda-channel.sh /app/repo/package-conda-channel.sh
+ADD pyproject.toml /app/repo/pyproject.toml
 
 # Move to the repository directory
 WORKDIR /app/repo
@@ -43,5 +50,5 @@ RUN chmod +x ./package-conda-channel.sh
 RUN bash ./package-conda-channel.sh
 
 ## push the package to anaconda cloud
-RUN anaconda upload /app/conda/env/local_channel/linux-64/*.tar.bz2
-RUN anaconda upload /app/conda/env/local_channel/noarch/*.tar.bz2
+#RUN anaconda upload /app/conda/env/local_channel/linux-64/*.tar.bz2 ### only if we have compiled code
+RUN anaconda upload /app/conda/env/local_channel/noarch/*.conda
