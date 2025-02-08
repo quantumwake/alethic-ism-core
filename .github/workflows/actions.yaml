@@ -38,6 +38,7 @@ jobs:
         
         echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV" # for local variables
         echo "IMAGE=$IMAGE" >> "$GITHUB_ENV" # for local variables
+        echo "ANACONDA_API_TOKEN=${{ secrets.ANACONDA_TOKEN }}" >> "$GITHUB_ENV" # for local variables
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
@@ -45,7 +46,7 @@ jobs:
     - name: Build Package Artifact 
       id: build-conda-package
       run: |
-        ANACONDA_API_TOKEN=${{ secrets.ANACONDA_TOKEN }}
+        
         
         bash ./docker_build.sh -t $IMAGE
         bash ./docker_deploy.sh -t $IMAGE 
