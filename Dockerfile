@@ -11,7 +11,7 @@ WORKDIR /app
 
 ADD alethic_ism_core /app/repo/alethic_ism_core
 ADD recipe /app/repo/recipe
-ADD environment-prod.yaml /app/repo/environment-prod.yaml
+ADD environment.yaml /app/repo/environment.yaml
 ADD conda_build.sh /app/repo/conda_build.sh
 ADD setup.py /app/repo/setup.py
 ADD Makefile /app/repo/Makefile
@@ -28,7 +28,7 @@ SHELL ["/bin/bash", "--login", "-c"]
 RUN conda install -y conda-build -c conda-forge
 
 # Initialize the conda environment 
-RUN conda env create -f environment-prod.yaml
+RUN conda env create -f environment.yaml
 
 # Initialize conda in bash config files:
 RUN conda init bash

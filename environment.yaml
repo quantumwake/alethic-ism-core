@@ -8,8 +8,3 @@ dependencies:
   - python-dotenv
   - pyyaml
   - pydantic
-  - restrictedpython
-  - nats-py
-  - redis-py
-  - mako
-  - pytorch::pytorch
