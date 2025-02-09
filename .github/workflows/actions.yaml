@@ -33,7 +33,7 @@ jobs:
       run: |
         COMMIT_ID=$(echo $GITHUB_SHA | head -c7)
         NAMESPACE="krasaee"
-        PROJECT_NAME="alethic-ism-api"
+        PROJECT_NAME="alethic-ism-core"
         IMAGE="$NAMESPACE/$PROJECT_NAME:$COMMIT_ID"
         
         echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV" # for local variables
