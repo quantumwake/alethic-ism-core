@@ -101,6 +101,7 @@ class StateConfig(BaseStateConfig):
     name: Optional[str] = None
     # storage_class: Optional[str] = "database"
     primary_key: Optional[List[StateDataKeyDefinition]] = None
+    state_join_key: Optional[List[StateDataKeyDefinition]] = None
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
     template_columns: Optional[List[StateDataKeyDefinition]] = None
