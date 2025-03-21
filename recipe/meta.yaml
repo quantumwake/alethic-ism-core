@@ -1,6 +1,6 @@
 package:
   name: alethic-ism-core
-  version: 0.0.3
+  version: 0.0.4
 source:
   path: ../
   # Alternatively, you can fetch from a URL or git:
@@ -10,7 +10,7 @@ source:
 build:
   # Uncomment the following line if your package is pure Python.
   noarch: python
-  number: 1039
+  number: 1040
   # If you need MAKEFLAGS for building native code, you can leave it:
   # script_env:
   #   - MAKEFLAGS=-j$(nproc)
