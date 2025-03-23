@@ -38,5 +38,5 @@ fi
 #  --no-cache .
 
 
-docker build \
+docker build --secret id=pypirc,src=$HOME/.pypirc \
   --platform "$ARCH" -t "$TAG" .

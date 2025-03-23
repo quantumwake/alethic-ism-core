@@ -38,5 +38,7 @@ RUN source .venv/bin/activate && \
 # Build the package using the virtual environment’s Python interpreter
 RUN source .venv/bin/activate && \
     python -m build
-#    python -m twine upload --repository pypi dist/*
+
+RUN --mount=type=secret,id=pypirc,target=/root/.pypirc source .venv/bin/activate && \
+    python -m twine upload --repository pypi dist/*
 
