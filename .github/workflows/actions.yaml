@@ -35,5 +35,5 @@ jobs:
     - name: Build Package Artifact 
       id: build-conda-package
       run: |
-        echo ${{ secrets.PYPI_API_KEY } > $HOME/.pypirc
+        echo ${{ secrets.PYPI_API_KEY }} > $HOME/.pypirc
         sh ./docker_build.sh -t $IMAGE
