@@ -32,8 +32,9 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
 
-    - name: Build Package Artifact 
-      id: build-conda-package
+    - name: Build Package
+      id: build-package
       run: |
+        echo "HOME: $HOME"
         echo ${{ secrets.PYPI_API_KEY }} > $HOME/.pypirc
-        sh ./docker_build.sh -t $IMAGE
+#        sh ./docker_build.sh -t $IMAGE
