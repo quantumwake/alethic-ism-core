@@ -1,5 +1,3 @@
-# actions.yml
-
 name: Docker Build Python Package using Conda (alethic-ism-core module)
 
 on:
@@ -17,16 +15,7 @@ jobs:
     - name: Checkout Repository
       id: code_checkout
       uses: actions/checkout@v2
-    
-    - name: Install Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y wget
-        wget https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64 -O /usr/local/bin/yq
-        chmod +x /usr/local/bin/yq
-        # Add other package installations as needed:
-        # sudo apt-get install -y <package-name>
-        
+
     - name: Assign Environment Variables for Build & Deployment Process
       id: setup_variables
 
@@ -38,7 +27,7 @@ jobs:
         
         echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV" # for local variables
         echo "IMAGE=$IMAGE" >> "$GITHUB_ENV" # for local variables
-        echo "ANACONDA_API_TOKEN=${{ secrets.ANACONDA_TOKEN }}" >> "$GITHUB_ENV" # for local variables
+        echo "PYPI_API_KEY=${{ secrets.PYPI_API_KEY }}" >> "$GITHUB_ENV" # for local variables
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
@@ -46,24 +35,5 @@ jobs:
     - name: Build Package Artifact 
       id: build-conda-package
       run: |
-        
-        
-        bash ./docker_build.sh -t $IMAGE
-        bash ./docker_deploy.sh -t $IMAGE 
-        bash ./conda_build_bump_version.sh
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.build-conda-package.outputs.file_name }}
-        path: ${{ steps.build-conda-package.outputs.file_name }}
-
-    - name: Commit and Tag Version
-      run: |
-        git config --global user.name 'GitHub Actions'
-        git config --global user.email 'github-actions@github.com'
-        VERSION=$(grep 'version:' ./recipe/meta.yaml | awk -F':' '{print $2}' | sed 's/ //g')
-        git add ./recipe/meta.yaml
-        git commit -m "Bump version to ${VERSION} [skip ci]"
-        git tag -a "v${VERSION}" -m "Release ${VERSION}"
-        git push && git push --tags
+        echo ${{ secrets.PYPI_API_KEY } > $HOME/.pypirc
+        sh ./docker_build.sh -t $IMAGE
