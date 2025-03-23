@@ -16,3 +16,7 @@
 `uv pip install -e .`
 
 `python -m build`
+
+
+### Docker Build & Upload PyPi package
+`sh docker_build.sh -t krasaee/alethic-ism-core:latest -a linux/amd64`
