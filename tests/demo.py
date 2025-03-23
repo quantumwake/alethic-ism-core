@@ -1,5 +1,6 @@
 import asyncio
-from alethic_ism_core.core.messaging.nats_message_producer_route import NATSRoute
+
+from ismcore.messaging.nats_message_route import NATSRoute
 
 
 async def run():

@@ -1,4 +1,4 @@
-from alethic_ism_core.core.utils.general_utils import parse_response_json
+from ismcore.utils.general_utils import parse_response_json
 
 
 def test_parse_json_text_simply_json_array():

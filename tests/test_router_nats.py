@@ -1,10 +1,9 @@
 import asyncio
 import json
 
-from alethic_ism_core.core.messaging.base_message_route_model import MessageStatus
-from alethic_ism_core.core.messaging.base_message_router import Router
+from ismcore.messaging.base_message_router import Router
+from ismcore.messaging.nats_message_provider import NATSMessageProvider
 
-from alethic_ism_core.core.messaging.nats_message_provider import NATSMessageProvider
 
 def test_nats_route_1():
     provider = NATSMessageProvider()

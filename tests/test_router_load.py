@@ -1,5 +1,5 @@
-from alethic_ism_core.core.messaging.base_message_router import Router
-from alethic_ism_core.core.messaging.nats_message_provider import NATSMessageProvider
+from ismcore.messaging.base_message_router import Router
+from ismcore.messaging.nats_message_provider import NATSMessageProvider
 
 message_provider = NATSMessageProvider()
 router = Router(

@@ -1,7 +1,6 @@
 import random
 
-from alethic_ism_core.core.utils.general_utils import \
-    calculate_uuid_based_from_string_with_sha256_seed
+from ismcore.utils.general_utils import calculate_uuid_based_from_string_with_sha256_seed
 
 
 def test_load_template_relative_paths():

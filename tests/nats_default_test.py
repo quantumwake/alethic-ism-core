@@ -1,9 +1,9 @@
 import asyncio
-import time
 from typing import Any
 
-from alethic_ism_core.core.messaging.base_message_route_model import BaseRoute
-from alethic_ism_core.core.messaging.nats_message_route import NATSRoute
+from ismcore.messaging.base_message_route_model import BaseRoute
+from ismcore.messaging.nats_message_route import NATSRoute
+
 
 async def run_consumer():
     async def callback(route: BaseRoute, msg: Any, data: Any):
@@ -15,7 +15,7 @@ async def run_consumer():
         name="test_route",
         subject="test.route",
         url="nats://localhost:4222",
-        jetstream=True,
+        jetstream_enabled=True,
         callback=callback,
     )
 
@@ -39,7 +39,7 @@ async def run_publisher():
         name="test_route",
         subject="test.route",
         url="nats://localhost:4222",
-        jetstream=True,
+        jetstream_enabled=True,
     )
 
     connected = await nat_route.connect()

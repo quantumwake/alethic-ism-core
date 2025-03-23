@@ -1,11 +1,15 @@
 .idea
-.idea/
-.idea/*
-logs/*.log
 .env
+.DS_Store
+.venv/
+.pypirc
+__pycache__
+_version.py
+logs/*.log
+build
 *.swp
 tmp
 *.tar.gz
-__pycache__
-.DS_Store
+*.egg-info/
+dist/
 

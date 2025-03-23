@@ -1,4 +1,4 @@
-import alethic_ism_core.core.utils.general_utils as utils
+import src.ismcore.utils.general_utils as utils
 
 
 def test_mako_template():

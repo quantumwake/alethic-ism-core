@@ -1,4 +1,5 @@
-from alethic_ism_core.core.base_model import ProcessorState
+from ismcore.model.base_model import ProcessorState
+
 
 def test_processor_state_internal_id_binding():
     ps = ProcessorState(**{

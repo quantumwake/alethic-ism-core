@@ -1,6 +1,6 @@
 import datetime
 
-from alethic_ism_core.core.base_model import Usage, UnitType, UnitSubType
+from ismcore.model.base_model import Usage, UnitType, UnitSubType
 
 
 def test_usage_entity():

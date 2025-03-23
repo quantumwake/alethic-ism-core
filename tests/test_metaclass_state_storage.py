@@ -1,29 +1,21 @@
 import uuid
-from typing import Optional, List
 import pytest
-
-from alethic_ism_core.core.base_model import (
-    ProcessorProvider,
+from typing import Optional, List
+from ismcore.model.processor_state import State, StateDataKeyDefinition, StateConfigLM, StateConfig
+from ismcore.model.base_model import (
     ProcessorStateDirection,
+    ProcessorStatusCode,
     ProcessorState,
+    InstructionTemplate,
     Processor,
-    InstructionTemplate, ProcessorStatusCode
-)
-from alethic_ism_core.core.processor_state import (
-    State,
-    StateConfig,
-    StateDataKeyDefinition,
-    StateConfigLM
-)
-
-from alethic_ism_core.core.processor_state_storage import (
-    StateStorage,
-    StateMachineStorage,
+    ProcessorProvider)
+from ismcore.storage.processor_state_storage import (
     ProcessorStateRouteStorage,
-    ProcessorProviderStorage,
+    StateStorage,
+    TemplateStorage,
     ProcessorStorage,
-    TemplateStorage
-)
+    ProcessorProviderStorage,
+    StateMachineStorage)
 
 
 class MockProcessorStateRouteStorage(ProcessorStateRouteStorage):

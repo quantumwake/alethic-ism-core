@@ -1,54 +1,42 @@
-# Use an x86 base image
-# Stage 1: Base Image with Miniconda
-FROM continuumio/miniconda3:24.5.0-0 AS core
-
+FROM ghcr.io/astral-sh/uv:python3.12-alpine as core
 # conda package repository token such that we can upload the package to anaconda cloud
-ARG ANACONDA_API_TOKEN
-ENV ANACONDA_API_TOKEN=$ANACONDA_API_TOKEN
+#ARG PYPI_API_KEY
+#ENV PYPI_API_KEY=$PYPI_API_KEY
 
 # Set the working directory
 WORKDIR /app
 
-ADD alethic_ism_core /app/repo/alethic_ism_core
-ADD recipe /app/repo/recipe
-ADD environment.yaml /app/repo/environment.yaml
-ADD conda_build.sh /app/repo/conda_build.sh
-ADD setup.py /app/repo/setup.py
-ADD Makefile /app/repo/Makefile
-ADD package-conda-channel.sh /app/repo/package-conda-channel.sh
-ADD pyproject.toml /app/repo/pyproject.toml
+ADD . .
+#ADD LICENSE /app/repo/LICENSE
+#ADD OSS-LICENSE /app/repo/OSS-LICENSE
 
-# Move to the repository directory
-WORKDIR /app/repo
+#ADD src/ismcore /app/repo/src/ismcore
+#ADD Makefile /app/repo/Makefile
+#ADD requirements.txt /app/repo/requirements.txt
+#ADD setup.py /app/repo/setup.py
+#ADD pyproject.toml /app/repo/pyproject.toml
 
-# Force all commands to run in bash
-SHELL ["/bin/bash", "--login", "-c"]
+# Create a virtual environment using uv
+RUN uv venv
 
-# install the conda build package in base
-RUN conda install -y conda-build -c conda-forge
+# Source the virtual environment
+#RUN source .venv/bin/activate
 
-# Initialize the conda environment 
-RUN conda env create -f environment.yaml
+# Install your package in editable mode using the virtual environment’s pip
+RUN source .venv/bin/activate && \
+    apk update && \
+    apk add git && \
+    uv pip install -U pip twine setuptools setuptools-scm build && \
+    uv pip install -r requirements.txt
 
-# Initialize conda in bash config files:
-RUN conda init bash
+# add git information for setuptools-scm to work correctly
+#ADD .git /app/repo/.git
+#ADD .gitignore /app/repo/.gitignore
+#ADD tests
+#    uv pip install -e .
 
-# Activate the environment, and make sure it's activated:
-RUN echo "conda activate alethic-ism-core" > ~/.bashrc
+# Build the package using the virtual environment’s Python interpreter
+RUN source .venv/bin/activate && \
+    python -m build
+#    python -m twine upload --repository pypi dist/*
 
-# display information about the current activation
-RUN conda info
-
-# Install necessary dependencies for the build process
-RUN conda install -y conda-build anaconda-client -c conda-forge --override-channels
-
-# Run the build command (adjust as per your repo's requirements)
-RUN bash ./conda_build.sh --local-channel-path /app/conda/env/local_channel
-
-# package the local channel such that we can extract into an artifact
-RUN chmod +x ./package-conda-channel.sh
-RUN bash ./package-conda-channel.sh
-
-## push the package to anaconda cloud
-#RUN anaconda upload /app/conda/env/local_channel/linux-64/*.tar.bz2 ### only if we have compiled code
-RUN anaconda upload /app/conda/env/local_channel/noarch/*.conda

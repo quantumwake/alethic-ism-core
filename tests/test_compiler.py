@@ -1,5 +1,5 @@
-from alethic_ism_core.core.compiler.runnable import BaseRunnable
-from alethic_ism_core.core.processor_state import State, StateConfig
+from ismcore.compiler.runnable import BaseRunnable
+from ismcore.model.processor_state import State, StateConfig
 
 code = """
 class Runnable(BaseRunnable):
@@ -84,7 +84,6 @@ class Runnable(BaseRunnable):
 def test_compiler_code():
     state = State(
         id="1",
-        name="state",
         config=StateConfig(
 
         )

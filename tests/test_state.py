@@ -1,6 +1,11 @@
 import random
-from alethic_ism_core.core.processor_state import StateConfigLM, State, StateDataColumnDefinition, StateConfig, \
-    StateDataKeyDefinition
+
+from ismcore.model.processor_state import (
+    State,
+    StateConfig,
+    StateConfigLM,
+    StateDataKeyDefinition,
+    StateDataColumnDefinition)
 
 
 def create_mock_state_json():

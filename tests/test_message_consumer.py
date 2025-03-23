@@ -1,15 +1,16 @@
 import json
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import PrivateAttr
 
-from alethic_ism_core.core.messaging.base_message_provider import BaseRouteProvider
-from alethic_ism_core.core.messaging.base_message_route_model import BaseRoute, RouteMessageStatus, MessageStatus
-from alethic_ism_core.core.messaging.base_message_router import Router
-from alethic_ism_core.core.base_model import ProcessorProvider, Processor, ProcessorState
-from alethic_ism_core.core.base_processor_lm import BaseProcessorLM
-from alethic_ism_core.core.processor_state import State
-from alethic_ism_core.core.processor_state_storage import StateMachineStorage
+from ismcore.messaging.base_message_consumer_processor import BaseMessageConsumerProcessor
+from ismcore.messaging.base_message_provider import BaseRouteProvider
+from ismcore.messaging.base_message_route_model import BaseRoute, RouteMessageStatus, MessageStatus
+from ismcore.messaging.base_message_router import Router
+from ismcore.model.base_model import Processor, ProcessorProvider, ProcessorState
+from ismcore.model.processor_state import State
+from ismcore.processor.base_processor_lm import BaseProcessorLM
+from ismcore.storage.processor_state_storage import StateMachineStorage
 from tests.test_metaclass_state_storage import (
     MockStateStorage,
     MockProcessorProviderStorage,
@@ -26,7 +27,7 @@ class MockRoute(BaseRoute):
         # self.route_config = route_config
         pass
 
-    def publish(self, msg: Any) -> RouteMessageStatus:
+    async def publish(self, msg: str) -> Optional[RouteMessageStatus]:
 
         msg_json = json.loads(msg)
         if msg_json['status'] == 'FAILED':
@@ -41,7 +42,8 @@ class MockRoute(BaseRoute):
             error=None
         )
 
-    def consume(self) -> [Any, Any]:
+    # def consume(self) -> [Any, Any]:
+    async def consume(self, wait: bool = True):
 
         # mocked provider message object that is acknowledged(...)
         msg = ("mocked consumer message as a string but this is a message object from something "
@@ -147,14 +149,14 @@ def test_message_pre_post_fail_status():
     test_route = router.find_route('test/test')
     mock_messaging_consumer = MockMessageConsumer(
         route=test_route,
-        monitor_route=mock_monitor_route
-    )
+        monitor_route=mock_monitor_route,
+        storage=test_state_machine_storage)
 
     # should go through
-    mock_messaging_consumer.start_consumer(max_loops=1)
+    mock_messaging_consumer.start_consumer()
 
     # will throw a value error but check the mock monitor
-    mock_messaging_consumer.start_consumer(max_loops=1)
+    mock_messaging_consumer.start_consumer()
 
 
 def test_message_consumer():
@@ -167,10 +169,12 @@ def test_message_consumer():
         template_storage=MockTemplateStorage()
     )
 
+
     mock_test_consumer_route = "test/test"
     mock_messaging_consumer = MockMessageConsumer(
         route=mock_test_consumer_route,
-    )
+        storage=test_state_machine_storage,
+        monitor_route=mock_monitor_route)
 
     # with pytest.raises(NotImplementedError) as exc_info:
-    mock_messaging_consumer.start_consumer(1)
+    mock_messaging_consumer.start_consumer()

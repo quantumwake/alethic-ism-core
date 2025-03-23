@@ -1,0 +1,9 @@
+requests
+restrictedpython
+pydantic
+pyyaml
+nats-py
+mako
+python-dotenv
+pytest
+pytest-asyncio

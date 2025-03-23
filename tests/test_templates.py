@@ -1,4 +1,4 @@
-from alethic_ism_core.core.utils.general_utils import load_template, build_template_text
+from ismcore.utils.general_utils import load_template, build_template_text
 
 
 def test_load_template_relative_paths():

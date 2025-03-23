@@ -1,4 +1,4 @@
-from alethic_ism_core.core.datasource.semantic_distance import BasicSemanticSearch
+from src.ismcore.embedding.semantic_distance import BasicSemanticSearch
 
 reference_sentence = 'Cows are thoughtful, intelligent beings with family structures.'
 other_sentences = ['Cows are sentient intelligent beings',

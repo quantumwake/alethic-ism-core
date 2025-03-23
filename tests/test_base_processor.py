@@ -1,26 +1,13 @@
 import asyncio
-
 import pytest
 
-from alethic_ism_core.core.base_model import (
-    InstructionTemplate,
-    ProcessorProvider,
-    ProcessorState,
-    Processor,
+from ismcore.model.base_model import InstructionTemplate, ProcessorProvider, Processor, ProcessorState, \
     ProcessorStateDirection
-)
-
-from alethic_ism_core.core.processor_state import (
-    State,
-    StateConfig,
-    StateDataKeyDefinition,
-    StateConfigLM,
-    StateDataColumnDefinition
-)
-
-from alethic_ism_core.core.base_processor import BaseProcessor
-from alethic_ism_core.core.base_processor_lm import BaseProcessorLM
-from alethic_ism_core.core.processor_state_storage import StateMachineStorage
+from ismcore.model.processor_state import State, StateConfigLM, StateDataKeyDefinition, StateDataColumnDefinition, \
+    StateConfig
+from ismcore.processor.base_processor import BaseProcessor
+from ismcore.processor.base_processor_lm import BaseProcessorLM
+from ismcore.storage.processor_state_storage import StateMachineStorage
 
 input_query_states = [
     {"question": "what color is the sky?"},
@@ -56,6 +43,12 @@ class MockStateMachineStorage(StateMachineStorage):
             project_id="test_project_id_1"
         )
 
+    def fetch_processor(self, processor_id: str) -> Processor:
+        return Processor(
+            id="test processor id",
+            provider_id="test provider id",
+            project_id="test project id"
+        )
 
 class MockProcessor(BaseProcessor):
 
@@ -147,7 +140,7 @@ def test_mock_processor_lm():
 
 
 @staticmethod
-@pytest.mark.asynico
+@pytest.mark.asyncio
 async def test_mock_processor():
     storage = MockStateMachineStorage()
 
@@ -161,6 +154,12 @@ async def test_mock_processor():
         )
     )
 
+    processor = Processor(
+        id="test processor id",
+        provider_id="test provider id",
+        project_id="test project id"
+    )
+
     provider = ProcessorProvider(
         id="test provider id",
         name="test provider name",
@@ -168,15 +167,18 @@ async def test_mock_processor():
         class_name="MockProviders"
     )
 
-    mock_processor = MockProcessor(provider=provider, state_machine_storage=storage, output_state=output_state)
+    mock_processor = MockProcessor(provider=provider,
+                                   processor=processor,
+                                   state_machine_storage=storage,
+                                   output_state=output_state)
 
     input_query_states = [
         {"question": "what color is the sky?"},
         {"question": "what color is the grass?"},
     ]
 
-    response_1 = mock_processor.execute(input_query_state=input_query_states[0])
-    response_2 = mock_processor.execute(input_query_state=input_query_states[1])
+    response_1 = await mock_processor.execute(input_query_state=input_query_states[0])
+    response_2 = await mock_processor.execute(input_query_state=input_query_states[1])
 
     assert response_1['response'] == 'the sky is blue'
     assert response_2['response'] == 'the grass is green'
