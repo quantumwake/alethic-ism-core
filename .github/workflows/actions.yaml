@@ -43,7 +43,6 @@ jobs:
 #      uses: docker/build-push-action@v5
       run: |
         echo "Building image $IMAGE"
-        cat /root/.pypirc
         sh ./docker_build.sh -t $IMAGE
 
 #      with:

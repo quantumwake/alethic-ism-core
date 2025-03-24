@@ -19,7 +19,7 @@ RUN source .venv/bin/activate && \
 RUN source .venv/bin/activate && \
     python -m build
 
-RUN --mount=type=secret,id=pypirc,target=/root/.pypirc \
+RUN --mount=type=secret,id=pypirc,target=/tmp/.pypirc \
     source .venv/bin/activate && \
-    python -m twine upload --repository pypi dist/*
+    python -m twine upload --config-file /tmp/.pypirc --repository pypi dist/*
 
