@@ -27,8 +27,6 @@ jobs:
         echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV"
         echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
 
     - name: Create PyPI config file
       run: |
@@ -38,8 +36,11 @@ jobs:
         echo 'password = ${{ secrets.PYPI_API_KEY }}' >> /tmp/secrets/pypirc
         cat /tmp/secrets/pypirc
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
     - name: Build and push Docker image
-      uses: docker/build-push-action@v5
+#      uses: docker/build-push-action@v5
       run: |
         echo "Building image $IMAGE"
         cat /root/.pypirc
