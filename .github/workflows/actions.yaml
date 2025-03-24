@@ -28,14 +28,12 @@ jobs:
         echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3.10.0
+      uses: docker/setup-buildx-action@v3
 
     - name: Create PyPI config file
       run: |
         mkdir -p /tmp/secrets
-#        echo '[distutils]' > /tmp/secrets/pypirc
-#        echo 'index-servers = pypi' >> /tmp/secrets/pypirc
-        echo '[pypi]' >> /tmp/secrets/pypirc
+        echo '[pypi]' > /tmp/secrets/pypirc
         echo 'username = __token__' >> /tmp/secrets/pypirc
         echo 'password = ${{ secrets.PYPI_API_KEY }}' >> /tmp/secrets/pypirc
         cat /tmp/secrets/pypirc
