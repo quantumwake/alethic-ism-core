@@ -1,11 +1,8 @@
 FROM ghcr.io/astral-sh/uv:python3.12-alpine as core
-# conda package repository token such that we can upload the package to anaconda cloud
-#ARG PYPI_API_KEY
-#ENV PYPI_API_KEY=$PYPI_API_KEY
 
 # Set the working directory
-WORKDIR /app
-
+WORKDIR /
+# add repository
 ADD . .
 
 # Create a virtual environment using uv
@@ -22,6 +19,6 @@ RUN source .venv/bin/activate && \
 RUN source .venv/bin/activate && \
     python -m build
 
-RUN --mount=type=secret,id=pypirc,target=/tmp/secrets/pypirc source .venv/bin/activate && \
+RUN --mount=type=secret,id=pypirc,target=~/.pypirc source .venv/bin/activate && \
     python -m twine upload --repository pypi dist/*
 
