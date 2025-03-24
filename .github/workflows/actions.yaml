@@ -38,15 +38,15 @@ jobs:
         echo 'password = ${{ secrets.PYPI_API_KEY }}' >> /tmp/secrets/pypirc
         cat /tmp/secrets/pypirc
 
-#    - name: Build and push Docker image
-#      uses: docker/build-push-action@v5
-#      with:
-#        context: .
-#        push: false  # Set to true if you want to push to a registry
-#        tags: ${{ env.IMAGE }}
-#        load: true  # Load the image into Docker
-#        secrets: |
-#          "pypirc=/tmp/secrets/pypirc"
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: false  # Set to true if you want to push to a registry
+        tags: ${{ env.IMAGE }}
+        load: true  # Load the image into Docker
+        secrets: |
+          "pypirc=/tmp/secrets/pypirc"
 
 #    - name: Assign Environment Variables for Build & Deployment Process
 #      id: setup_variables
