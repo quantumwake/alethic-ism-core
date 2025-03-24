@@ -1,4 +1,4 @@
-name: Docker Build Python Package using Conda (alethic-ism-core module)
+name: Docker Build Python Package using Conda (alethic-ism-core python module)
 
 on:
   push:
@@ -27,8 +27,7 @@ jobs:
         echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV"
         echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-
-    - name: Create PyPI config file
+    - name: Create PyPI config file for twine upload
       run: |
         mkdir -p /tmp/secrets
         echo '[pypi]' > /tmp/secrets/pypirc
@@ -39,42 +38,7 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build and push Docker image
-#      uses: docker/build-push-action@v5
+    - name: Build Package and Upload to PyPi
       run: |
         echo "Building image $IMAGE"
         sh ./docker_build.sh -t $IMAGE
-
-#      with:
-#        context: .
-#        push: false  # Set to true if you want to push to a registry
-#        tags: ${{ env.IMAGE }}
-#        load: true  # Load the image into Docker
-#        secrets: |
-#          "pypirc=/tmp/secrets/pypirc"
-
-#    - name: Assign Environment Variables for Build & Deployment Process
-#      id: setup_variables
-#
-#      run: |
-#        COMMIT_ID=$(echo $GITHUB_SHA | head -c7)
-#        NAMESPACE="krasaee"
-#        PROJECT_NAME="alethic-ism-core"
-#        IMAGE="$NAMESPACE/$PROJECT_NAME:$COMMIT_ID"
-#
-#        echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV" # for local variables
-#        echo "IMAGE=$IMAGE" >> "$GITHUB_ENV" # for local variables
-#        echo "PYPI_API_KEY=${{ secrets.PYPI_API_KEY }}" >> "$GITHUB_ENV" # for local variables
-#
-#
-
-#
-#    - name: Set up Docker Buildx
-#      uses: docker/setup-buildx-action@v1
-#
-#    - name: Build Package
-#      id: build-package
-#      run: |
-#        echo "HOME: $HOME"
-#        echo ${{ secrets.PYPI_API_KEY }} > $HOME/.pypirc
-##        sh ./docker_build.sh -t $IMAGE
