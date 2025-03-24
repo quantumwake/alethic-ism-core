@@ -14,27 +14,64 @@ jobs:
     steps:
     - name: Checkout Repository
       id: code_checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Assign Environment Variables for Build & Deployment Process
       id: setup_variables
-
       run: |
         COMMIT_ID=$(echo $GITHUB_SHA | head -c7)
         NAMESPACE="krasaee"
         PROJECT_NAME="alethic-ism-core"
         IMAGE="$NAMESPACE/$PROJECT_NAME:$COMMIT_ID"
         
-        echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV" # for local variables
-        echo "IMAGE=$IMAGE" >> "$GITHUB_ENV" # for local variables
-        echo "PYPI_API_KEY=${{ secrets.PYPI_API_KEY }}" >> "$GITHUB_ENV" # for local variables
+        echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV"
+        echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      uses: docker/setup-buildx-action@v3
 
-    - name: Build Package
-      id: build-package
+    - name: Create PyPI config file
       run: |
-        echo "HOME: $HOME"
-        echo ${{ secrets.PYPI_API_KEY }} > $HOME/.pypirc
-#        sh ./docker_build.sh -t $IMAGE
+        mkdir -p /tmp/secrets
+        echo '[distutils]' > /tmp/secrets/pypirc
+        echo 'index-servers = pypi' >> /tmp/secrets/pypirc
+        echo '[pypi]' >> /tmp/secrets/pypirc
+        echo 'username = __token__' >> /tmp/secrets/pypirc
+        echo 'password = ${{ secrets.PYPI_API_KEY }}' >> /tmp/secrets/pypirc
+        cat /tmp/secrets/pypirc
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: false  # Set to true if you want to push to a registry
+        tags: ${{ env.IMAGE }}
+        load: true  # Load the image into Docker
+        secrets: |
+          "pypirc=/tmp/secrets/pypirc"
+
+#    - name: Assign Environment Variables for Build & Deployment Process
+#      id: setup_variables
+#
+#      run: |
+#        COMMIT_ID=$(echo $GITHUB_SHA | head -c7)
+#        NAMESPACE="krasaee"
+#        PROJECT_NAME="alethic-ism-core"
+#        IMAGE="$NAMESPACE/$PROJECT_NAME:$COMMIT_ID"
+#
+#        echo "COMMIT_ID=$COMMIT_ID" >> "$GITHUB_ENV" # for local variables
+#        echo "IMAGE=$IMAGE" >> "$GITHUB_ENV" # for local variables
+#        echo "PYPI_API_KEY=${{ secrets.PYPI_API_KEY }}" >> "$GITHUB_ENV" # for local variables
+#
+#
+
+#
+#    - name: Set up Docker Buildx
+#      uses: docker/setup-buildx-action@v1
+#
+#    - name: Build Package
+#      id: build-package
+#      run: |
+#        echo "HOME: $HOME"
+#        echo ${{ secrets.PYPI_API_KEY }} > $HOME/.pypirc
+##        sh ./docker_build.sh -t $IMAGE
