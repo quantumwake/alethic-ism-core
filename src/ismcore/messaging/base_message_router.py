@@ -117,3 +117,30 @@ class Router:
             raise LookupError(f"unable to find route selector {selector}")
 
         return self.routing_table[selector]
+
+    # TODO IN ORDER TO SUPPORT LARGE NUMBER OF ROUTES WE NEED A SIGNIFICANTLY MORE EFFICIENT WAY TO FIND ROUTES ESPECIALLY FOR WILD CARD MATCHES
+    # TODO IN ORDER TO SUPPORT LARGE NUMBER OF ROUTES WE NEED A SIGNIFICANTLY MORE EFFICIENT WAY TO FIND ROUTES ESPECIALLY FOR WILD CARD MATCHES
+    # TODO IN ORDER TO SUPPORT LARGE NUMBER OF ROUTES WE NEED A SIGNIFICANTLY MORE EFFICIENT WAY TO FIND ROUTES ESPECIALLY FOR WILD CARD MATCHES
+    # TODO IN ORDER TO SUPPORT LARGE NUMBER OF ROUTES WE NEED A SIGNIFICANTLY MORE EFFICIENT WAY TO FIND ROUTES ESPECIALLY FOR WILD CARD MATCHES
+    # TODO IN ORDER TO SUPPORT LARGE NUMBER OF ROUTES WE NEED A SIGNIFICANTLY MORE EFFICIENT WAY TO FIND ROUTES ESPECIALLY FOR WILD CARD MATCHES
+    def find_route_wildcard(self, selector: str) -> Optional[BaseRoute]:
+        if selector in self.routing_table:
+            route = self.routing_table[selector]
+            return route
+
+        # check for prefix match
+        matches = []
+        for key, match in self.routing_table.items():
+            if key.endswith("/*"):
+                key = key[:-2]
+
+                if selector.startswith(key):
+                    matches.append(match)
+
+        if len(matches) == 1:
+            return matches[0]
+
+        if len(matches) > 1:
+            raise LookupError(f"multiple routes found for prefix selector {selector}")
+
+        raise LookupError(f"unable to find route selector {selector}")

@@ -12,6 +12,9 @@ def test_basic_find_route():
     test_route = router.find_route('test/test')
     assert test_route
 
+def test_wildcard_find_route():
+    test_route = router.find_route_wildcard('test/wildcard/hello_world')
+    print(test_route)
 
 def test_basic_grouping():
     subject_group = router.find_route_by_subject(subject="test.subject")

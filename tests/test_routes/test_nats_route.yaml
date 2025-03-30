@@ -10,6 +10,21 @@ messageConfig:
         url: nats://127.0.0.1:4222
         subject: "ism.test"
 
+      - selector: test/wildcard/*
+        name: "ism_tes_wild_card"
+        url: nats://127.0.0.1:4222
+        subject: "ism.test.wildcard.*"
+
+      - selector: test/wildcard/multiple/*
+        name: "ism_tes_wild_card_multiple"
+        url: nats://127.0.0.1:4222
+        subject: "ism.test.wildcard.multiple.*"
+
+      - selector: test/wildcard/multiple2/*
+        name: "ism_tes_wild_card_multiple"
+        url: nats://127.0.0.1:4222
+        subject: "ism.test.wildcard.multiple.*"
+
       - selector: test/test_group_unique_a
         name: "test_group_unique_a"
         url: nats://127.0.0.1:4222
