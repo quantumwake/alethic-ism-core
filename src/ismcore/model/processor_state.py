@@ -566,13 +566,22 @@ class State(BaseModel):
         # calculate the columns definition hash, we use this to compare to ensure there is some consistency
         # Helper function to create new columns definitions from the query state
         def generate_new_columns():
-            return [
-                StateDataColumnDefinition(
-                    name=clean_string_for_ddl_naming(name)
-                )
-                for name, value in query_state.items()
-                if not self.columns or name not in self.columns
-            ]
+            if not query_state:
+                return []
+
+            columns = []
+            for name, value in query_state.items():
+                column_name = clean_string_for_ddl_naming(name)
+                if not column_name:
+                    logging.warning(f'skipping column `{name}`, it is not a valid name')
+                elif column_name not in self.columns:
+                    column = StateDataColumnDefinition(name=name)
+                    columns.append(column)
+                else:
+                    logging.debug(f'column {column_name} already exists in query state {query_state}')
+
+            return columns
+
 
         # Initial state check for when columns are absent
         if not self.columns:

@@ -125,7 +125,9 @@ class ProcessorProviderStorage:
 
 
 class StateStorage:
-    def fetch_state_data_by_column_id(self, column_id: int) -> Optional[StateDataRowColumnData]:
+    # def fetch_state_data_by_column_id(self, column_id: int) -> Optional[StateDataRowColumnData]:
+    def fetch_state_data_by_column_id(self, column_id: int, offset: int | None = None, limit: int = 1000) \
+            -> Optional[StateDataRowColumnData]:
         raise NotImplementedError()
 
     def fetch_state_columns(self, state_id: str) \
@@ -182,7 +184,7 @@ class StateStorage:
             -> List[StateDataKeyDefinition]:
         raise NotImplementedError()
 
-    def fetch_state_column_data_mappings(self, state_id) \
+    def fetch_state_column_data_mappings(self, state_id, offset: int | None = None, limit: int = 1000) \
             -> Dict[str, StateDataColumnIndex]:
         raise NotImplementedError()
 
@@ -197,15 +199,15 @@ class StateStorage:
             -> Optional[Dict[str, StateDataColumnDefinition]]:
         raise NotImplementedError()
 
-    def load_state_data(self, columns: Dict[str, StateDataColumnDefinition]) \
+    def load_state_data(self, columns: Dict[str, StateDataColumnDefinition], offset: int | None = None, limit: int = 1000) \
             -> Optional[Dict[str, StateDataRowColumnData]]:
         raise NotImplementedError()
 
-    def load_state_data_mappings(self, state_id: str) \
+    def load_state_data_mappings(self, state_id: str, offset: int | None = None, limit: int = 1000) \
             -> Dict[str, StateDataColumnIndex]:
         raise NotImplementedError()
 
-    def load_state(self, state_id: str, load_data: bool = True) -> Optional[State]:
+    def load_state(self, state_id: str, load_data: bool = True, offset: int | None = None, limit: int = 1000) -> Optional[State]:
         raise NotImplementedError()
 
     def delete_state_cascade(self, state_id):
