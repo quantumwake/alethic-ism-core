@@ -10,6 +10,11 @@ class UserProfile(BaseModel):
     max_agentic_units: Optional[int] = 10000    # HARD STOP - maximum compute units during a billing cycle
     created_date: Optional[dt.datetime] = dt.datetime.utcnow()
 
+class UserProfileCredential(BaseModel):
+    user_id: str
+    type: str
+    credentials: Optional[str] = None
+    created_date: Optional[dt.datetime] = dt.datetime.utcnow()
 
 class UserProject(BaseModel):
     project_id: Optional[str] = None
