@@ -7,6 +7,7 @@ from ismcore.utils.ism_logger import ism_logger
 from ismcore.model.base_model import (
     UserProject,
     UserProfile,
+    UserProfileCredential,
     WorkflowNode,
     WorkflowEdge,
     InstructionTemplate,
@@ -20,7 +21,7 @@ from ismcore.model.base_model import (
     UsageReport,
     Session,
     SessionMessage,
-    StateActionDefinition
+    StateActionDefinition,
 )
 from ismcore.model.processor_state import (
     State,
@@ -50,6 +51,11 @@ class UserProfileStorage:
     def insert_user_profile(self, user_profile: UserProfile):
         raise NotImplementedError()
 
+    def fetch_user_profile_credential(self, user_id: str) -> Optional[UserProfileCredential]:
+        raise NotImplementedError()
+
+    def insert_user_profile_credential(self, user_profile_credential: UserProfileCredential) -> Optional[UserProfileCredential]:
+        raise NotImplementedError()
 
 class UserProjectStorage:
 

@@ -24,3 +24,12 @@ This module forms the base layer of the [Alethic ISM project group](https://gith
     source .venv/bin/activate
 ```
    
+#### Cutting a Release:
+
+where b is the version number.
+```bash
+git tag -a v1.0.x -m "Release version 1.0.x"
+```
+```bash
+git push origin v1.0.x
+```
