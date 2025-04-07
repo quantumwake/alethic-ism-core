@@ -521,3 +521,9 @@ def obsolete_parse_response_csv(response: str):
         data.append(record)
 
     return data, columns
+
+def str2bool(value) -> bool:
+    value = value.lower() # for case-insensitivity
+    if value and value.lower() in ('true', '1', 't'):
+        return True
+    return False
