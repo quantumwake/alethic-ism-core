@@ -16,7 +16,11 @@ classifiers = [
 
 [[project.authors]]
 name = "Kasra Rasaee"
-email = "krasaee@quantumwake.io"
+email = "krasaee@gmail.com"
+
+[[project.authors]]
+name = "Sankalpa Ghose"
+email = "sankalpa@alethic.ai"
 
 # If you have dependencies, list them under dependencies:
 # dependencies = [

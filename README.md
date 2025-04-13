@@ -1,10 +1,12 @@
-# Alethic Instruction-Based State Machine (ISM) Core
+# Alethic Instruction-Based State Machine (ISM) Core SDK for Python
 
-This module forms the base layer of the [Alethic ISM project group](https://github.com/quantumwake/alethic), handling the core processor and state management code. It is primarily used for building specific processor types (including language-based processors) and managing the bulk of state input and output processing.
+This following is the python sdk used to interact with the ISM network.
+
+Refer to the [Alethic ISM project group](https://github.com/quantumwake/alethic), handling the core processor and state management code. It is primarily used for building specific processor types (including language-based processors) and managing the bulk of state input and output processing.
 
 ## Key Concepts
 - **State Information:** Manages individual state data for specific processing configurations.
-- **State Management:** Ensures coherence in managing state column and row data.
+- **State Management:** Ensures synchronization in managing state column and row data.
 
 ## Dependencies
 - This project now leverages a modern `pyproject.toml` build system with dynamic versioning powered by `setuptools-scm`.
@@ -24,12 +26,16 @@ This module forms the base layer of the [Alethic ISM project group](https://gith
     source .venv/bin/activate
 ```
    
-#### Cutting a Release:
+#### Cutting a Release (if you are a contributor):
 
-where b is the version number.
-```bash
-git tag -a v1.0.x -m "Release version 1.0.x"
+```shell
+  export ISM_CORE_VERSION=v1.0.x
 ```
+
 ```bash
-git push origin v1.0.x
+  git tag -a ${ISM_CORE_VERSION} -m "Release version ${ISM_CORE_VERSION}"
+```
+
+```bash
+  git push origin ${ISM_CORE_VERSION}
 ```

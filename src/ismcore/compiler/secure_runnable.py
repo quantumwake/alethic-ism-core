@@ -117,8 +117,9 @@ class BaseSecureRunnable(ABC):
         else:
             return str(response)
 
+    ## TODO example -- rip this out, this was only for a demo.
     def get_stock_data(self, ticker: str):
-        api_key = "G3ATH50JQAUASTLI"  # Replace with your actual API key
+        api_key = "<>"  # Replace with your actual API key
         url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={ticker}&interval=5min&apikey={api_key}"
 
         logger.info(f"here is the url {url}, requests: {requests}")
