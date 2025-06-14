@@ -544,46 +544,10 @@ class BaseProcessor(MonitoredProcessorState):
             # flush the stream to ensure the messages are sent to the stream server
             await stream_route.flush()
 
-            # execute the underlying model function
-            stream = await self._stream(
-                input_data=input_query_state,
-                template=template,
-            )
-            #
-            # try:
-            #     # Use explicit async iteration
-            #     iterator = stream.__aiter__()
-            #     while True:
-            #         try:
-            #             content = await iterator.__anext__()
-            #         except StopAsyncIteration:
-            #             break
-            #         except Exception as iter_exception:
-            #             # Log any exceptions encountered during iteration
-            #             logging.warning(f'Exception during iteration: {iter_exception}', exc_info=True)
-            #             continue
-            #
-            #         # Process the content if valid
-            #         try:
-            #             if isinstance(content, str):
-            #                 await stream_route.publish(content)
-            #                 await stream_route.flush()
-            #             elif content is None:
-            #                 # Log or handle the None case if necessary
-            #                 logging.warning('Received NoneType content, skipping...')
-            #             else:
-            #                 # Handle unexpected types
-            #                 logging.warning(f'Unexpected content type: {type(content)}')
-            #         except Exception as process_exception:
-            #             # Log exceptions encountered during processing
-            #             logging.critical(f'Exception encountered during content processing: {process_exception}',
-            #                              exc_info=True)
-            #
-            #
-            # except Exception as critical:
-            #     # Log any exceptions that occur in the overall streaming process
-            #     logging.critical(f'Exception encountered during streaming: {critical}', exc_info=True)
+            # build a coroutine calling the concrete implementation of the stream
+            stream = self._stream(input_data=input_query_state,template=template)
 
+            # execute and iterate the yielded data directly into the upstream route
             async for content in stream:
                 try:
                     if isinstance(content, str):
