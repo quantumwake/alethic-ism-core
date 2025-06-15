@@ -1,8 +1,6 @@
 import json
-from typing import Any, Optional
-
+from typing import Any, Optional, List
 from pydantic import PrivateAttr
-
 from ismcore.messaging.base_message_consumer_processor import BaseMessageConsumerProcessor
 from ismcore.messaging.base_message_provider import BaseRouteProvider
 from ismcore.messaging.base_message_route_model import BaseRoute, RouteMessageStatus, MessageStatus
@@ -106,10 +104,11 @@ router = Router(
 
 class MockProcessor(BaseProcessorLM):
 
-    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
-        question = input_query_state["question"]
-        additional_info_field = input_query_state["additional_info_field"]
-        some_other_field = input_query_state["some_other_field"]
+    # async def process_input_data(self, input_query_state: dict, force: bool = False):
+    async def process_input_data(self, input_data: dict | List[dict], force: bool = False):
+        question = input_data["question"]
+        additional_info_field = input_data["additional_info_field"]
+        some_other_field = input_data["some_other_field"]
 
         assert question in ["is hello world is the question 1?", "is hello world is the question 2?"]
         assert additional_info_field in ["first other field data 1", "first other field data 2"]

@@ -133,12 +133,6 @@ class BaseProcessorLM(BaseProcessor):
     async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
-    async def process_input_data_set(self, input_query_states: List[dict], force: bool = False):
-        return await self.process_input_data(input_data=input_query_states, force=force)
-
-    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
-        return await self.process_input_data(input_data=input_query_state, force=force)
-
     async def process_input_data(self, input_data: dict | List[dict], force: bool = False):
         if not input_data:
             return []

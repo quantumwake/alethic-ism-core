@@ -225,9 +225,9 @@ class StatePropagationProviderDistributor(StatePropagationProvider):
 class BaseProcessor(MonitoredProcessorState):
 
     @property
-    def template(self) -> InstructionTemplate:
-        if not isinstance(self.config, StateConfigStream):
-            raise ValueError("system template cannot be set for streaming configuration, use template instead")
+    def template(self) -> InstructionTemplate | None:
+        # if not isinstance(self.config, StateConfigStream):
+        #     raise ValueError("system template cannot be set for streaming configuration, use template instead")
 
         if self.config.template_id:
             template = self.storage.fetch_template(self.config.template_id)
@@ -406,9 +406,9 @@ class BaseProcessor(MonitoredProcessorState):
             # RUNNING (INTRA): the processor is executing the output instructions on the input
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if self.config.flag_expect_stream:
-                await self.process_input_data_set_as_stream(input_query_states=input_query_state)
+                await self.process_input_data_stream(input_data=input_query_state)
             else:
-                output_query_states = await self.process_input_data_set(input_query_states=input_query_state, force=force)
+                output_query_states = await self.process_input_data(input_data=input_query_state, force=force)
 
             # COMPLETED: the processor has completed execution of instructions
             await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
@@ -449,9 +449,9 @@ class BaseProcessor(MonitoredProcessorState):
             # RUNNING (INTRA): the processor is executing the output instructions on the input
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if isinstance(self.config, StateConfigStream) or self.config.flag_expect_stream:
-                await self.process_input_data_entry_as_stream(input_query_state=input_query_state)
+                await self.process_input_data_stream(input_data=input_query_state)
             else:
-                output_query_states = await self.process_input_data_entry(input_query_state=input_query_state, force=force)
+                output_query_states = await self.process_input_data(input_data=input_query_state, force=force)
 
             # COMPLETED: the processor has completed execution of instructions
             await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
@@ -499,36 +499,30 @@ class BaseProcessor(MonitoredProcessorState):
         # return the results
         return output_query_states
 
-    async def process_input_data_set(self, input_query_states: List[dict], force: bool = False):
-        raise NotImplementedError("event processing is not supported by this processor")
-
-    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
+    async def process_input_data(self, input_data: dict | List[dict], force: bool = False):
         raise NotImplementedError("event processing is not supported by this processor")
 
     ## TODO need to clean up these methods
     async def _stream(self, input_data: Any, template: str):
         raise NotImplementedError()
 
-    async def process_input_data_set_as_stream(self, input_query_states: List[dict], force: bool = False):
-        raise NotImplementedError("event processing is not supported by this processor for input query state sets, use single entry streaming for now")
-
-    async def process_input_data_entry_as_stream(self, input_query_state: dict):
+    async def process_input_data_stream(self, input_data: dict | List[dict], force: bool = False):
         if not self.stream_route:
             raise ValueError(
                 f"streams are not supported by provider: {self.output_processor_state.id}, "
                 f"route_id {self.output_processor_state.id}")
 
-        if not input_query_state:
+        if not input_data:
             raise ValueError("invalid input state, cannot be empty")
 
-        if not isinstance(self.config, StateConfigStream):
-            raise NotImplementedError()
+        # if not isinstance(self.config, StateConfigStream):
+        #     raise NotImplementedError()
 
-        template = build_template_text_v2(self.template, input_query_state)
+        template = build_template_text_v2(self.template, input_data)
 
         # this is a bit of a hack to use a session id for a given processor state stream
-        if 'session_id' in input_query_state:
-            session_id = input_query_state["session_id"]
+        if 'session_id' in input_data:
+            session_id = input_data["session_id"]
             subject = f"processor.state.{self.output_state.id}.{session_id}"
         else:
             subject = f"processor.state.{self.output_state.id}"
@@ -549,19 +543,19 @@ class BaseProcessor(MonitoredProcessorState):
         try:
             # submit the original request to the stream, such that it is broadcasted to all subscribers of the subject
             # TODO this needs to be invoked at the LM processor level, pre-stream-processing
-            if 'source' in input_query_state:
-                await stream_route.publish(input_query_state['source'])
+            if 'source' in input_data:
+                await stream_route.publish(input_data['source'])
                 await stream_route.publish("<<>>SOURCE<<>>")
 
-            if 'input' in input_query_state:
-                await stream_route.publish(input_query_state['input'])
+            if 'input' in input_data:
+                await stream_route.publish(input_data['input'])
                 await stream_route.publish("<<>>INPUT<<>>")
 
             # flush the stream to ensure the messages are sent to the stream server
             await stream_route.flush()
 
             # build a coroutine calling the concrete implementation of the stream
-            stream = self._stream(input_data=input_query_state,template=template)
+            stream = self._stream(input_data=input_data, template=template)
 
             # execute and iterate the yielded data directly into the upstream route
             async for content in stream:
@@ -596,7 +590,7 @@ class BaseProcessor(MonitoredProcessorState):
                 # self.output_processor_state,
                 route_id=self.output_processor_state.id,
                 exception=exception,
-                data=input_query_state
+                data=input_data
             )
 
     #

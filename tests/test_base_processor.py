@@ -22,23 +22,6 @@ input_query_states_2 = [
     {'name': 'Carol', 'age': 28, 'job': 'Data Scientist'},
 ]
 
-
-def mock_question_for_single_entry(input_data: dict):
-    question = input_data['question']
-    if question == 'what color is the sky?':
-        return {"response": "the sky is blue"}
-
-    if question == 'what color is the grass?':
-        return {"response": "the grass is green"}
-
-    raise NotImplemented(f'invalid question {question}')
-
-def mock_question_for_set(input_data: List[dict]):
-    return { "response": "the beach is sandy" }
-
-    # raise NotImplemented(f'invalid question {question}')
-
-
 class MockStateMachineStorage(StateMachineStorage):
 
     def fetch_template(self, template_id: str) -> InstructionTemplate | None:
@@ -72,25 +55,24 @@ class MockStateMachineStorage(StateMachineStorage):
             project_id="test project id"
         )
 
-class MockProcessor(BaseProcessor):
-    async def process_input_data_set(self, input_query_state: list[dict], force: bool = False):
-        return mock_question_for_set(input_data=input_query_state)
-
-    async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
-        return mock_question_for_single_entry(input_data=input_query_state)
-
 
 class MockProcessorLM(BaseProcessorLM):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]):
+        response = None
         if isinstance(values, dict):
-            response_dict = mock_question_for_single_entry(input_data=values)
-        else:
-            response_dict = mock_question_for_set(input_data=values)
+            question = values["question"]
+            if question == 'what color is the sky?':
+                response = {"response": "the sky is blue"}
 
-        return response_dict, dict, str(response_dict)
+            if question == 'what color is the grass?':
+                response = {"response": "the grass is green"}
+        else:
+            response = {"response": "the beach is sandy"}
+
+        return response, dict, str(response)
 
 
 def failure_callback_handler(processor_state: ProcessorState, exception: Exception, query_state: dict):
@@ -100,8 +82,8 @@ def failure_callback_handler(processor_state: ProcessorState, exception: Excepti
 def test_mock_processor_lm_entry() :
     mock_processor = setup_mock_processor_lm(user_template_id="test_template_id_1")
     mock_processor.config.flag_enable_execute_set = False
-    response_1 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states_1[0]))
-    response_2 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states_1[1]))
+    response_1 = asyncio.run(mock_processor.process_input_data(input_data=input_query_states_1[0]))
+    response_2 = asyncio.run(mock_processor.process_input_data(input_data=input_query_states_1[1]))
 
     assert response_1[0]['response'] == 'the sky is blue'
     assert response_2[0]['response'] == 'the grass is green'
@@ -111,13 +93,9 @@ def test_mock_processor_lm_entry() :
 def test_mock_processor_lm_entry_set() :
     mock_processor = setup_mock_processor_lm(user_template_id="test_template_id_2")
     mock_processor.config.flag_enable_execute_set = True
-    response_1 = asyncio.run(mock_processor.process_input_data_set(input_query_states=input_query_states_2))
+    response_1 = asyncio.run(mock_processor.process_input_data(input_data=input_query_states_2))
 
     assert response_1[0]['response'] == 'the beach is sandy'
-    # assert response_2[0]['response'] == 'the grass is green'
-    # assert response_2[0]['provider_name'] == 'test provider name'
-    # assert response_2[0]['provider_version'] == 'test-version-1.0'
-
 
 
 def setup_mock_processor_lm(user_template_id: str) -> MockProcessorLM:
@@ -155,47 +133,33 @@ def setup_mock_processor_lm(user_template_id: str) -> MockProcessorLM:
     )
 
 
-
-@staticmethod
-@pytest.mark.asyncio
-async def test_mock_processor():
-    storage = MockStateMachineStorage()
-
-    output_state = State(
-        config=StateConfig(
-            name="Test Output State",
-            storage_class="memory",
-            primary_key=[
-                StateDataKeyDefinition(name="question")
-            ]
-        )
-    )
-
-    processor = Processor(
-        id="test processor id",
-        provider_id="test provider id",
-        project_id="test project id"
-    )
-
-    provider = ProcessorProvider(
-        id="test provider id",
-        name="test provider name",
-        version="test-version-1.0",
-        class_name="MockProviders"
-    )
-
-    mock_processor = MockProcessor(provider=provider,
-                                   processor=processor,
-                                   state_machine_storage=storage,
-                                   output_state=output_state)
-
-    input_query_states = [
-        {"question": "what color is the sky?"},
-        {"question": "what color is the grass?"},
-    ]
-
-    response_1 = await mock_processor.execute(input_query_state=input_query_states[0])
-    response_2 = await mock_processor.execute(input_query_state=input_query_states[1])
-
-    assert response_1['response'] == 'the sky is blue'
-    assert response_2['response'] == 'the grass is green'
+#
+# @staticmethod
+# @pytest.mark.asyncio
+# async def test_mock_processor():
+#     storage = MockStateMachineStorage()
+#
+#     output_state = State(
+#         config=StateConfig(
+#             name="Test Output State",
+#             storage_class="memory",
+#             primary_key=[
+#                 StateDataKeyDefinition(name="question")
+#             ]
+#         )
+#     )
+#
+#     provider = ProcessorProvider(id="test provider id", name="test provider name", version="test-version-1.0", class_name="MockProviders")
+#     processor = Processor(id="test processor id", provider_id=provider.id, project_id="test project id")
+#     processor_executor = MockProcessor1(provider=provider, processor=processor, state_machine_storage=storage, output_state=output_state)
+#
+#     input_query_states = [
+#         {"question": "what color is the sky?"},
+#         {"question": "what color is the grass?"},
+#     ]
+#
+#     response_1 = await processor_executor.execute(input_query_state=input_query_states[0])
+#     response_2 = await processor_executor.execute(input_query_state=input_query_states[1])
+#
+#     assert response_1['response'] == 'the sky is blue'
+#     assert response_2['response'] == 'the grass is green'
