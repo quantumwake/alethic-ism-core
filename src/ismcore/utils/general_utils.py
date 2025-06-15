@@ -356,7 +356,12 @@ def parse_response_json(response: str):
 
     try:
         json_response = json.loads(_response)
-        json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
+        if isinstance(json_response, list):
+            json_response = [
+                {clean_string_for_ddl_naming(key): value for key, value in item.items()
+             } for item in json_response ]
+        else:
+            json_response = {clean_string_for_ddl_naming(key): value for key, value in json_response.items()}
         return True, 'json', json_response
     except Exception as e:
         # ignore and move to the next step
