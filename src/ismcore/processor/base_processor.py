@@ -350,9 +350,8 @@ class BaseProcessor(MonitoredProcessorState):
 
         self.current_status = new_status
 
-    async def can_processor_process_data(self, input_query_state_entry: dict):
+    async def can_processor_process_data(self):
         processor = self.storage.fetch_processor(processor_id=self.processor.id)
-
         if not processor:
             logging.error(f'critical, unable to find processor id: {self.processor.id}, '
                           f'likely a storage implementation issue, should have not got this far.')
@@ -382,14 +381,42 @@ class BaseProcessor(MonitoredProcessorState):
         )
 
         if usage and usage[0].total >= user.max_agentic_units:
-            # self.send_processor_state_update()
             logging.warning(f'usage limit reached for user: {user.user_id}, '
                             f'total: {usage[0].total}, max limit: {user.max_agentic_units}')
             return False
 
         return True
 
-    async def execute(self, input_query_state: dict, force: bool = False):
+    async def execute_set(self, input_query_state: List[dict] = None, force : bool = False):
+        is_allowed_to_process = await self.can_processor_process_data()
+        if not is_allowed_to_process:
+            logging.debug(f'processor {self.processor.id} for {self.provider.id}' f'is in a stopped state, skipping input query processing')
+            return []
+
+        if self.config.flag_dedup_drop_enabled:
+            pass  # TODO need to check input for deduplication (need to keep the hash of the input if this is enabled)
+
+        # execute the input entry given the processor implementation
+        try:
+            route_id = self.output_processor_state.id
+
+            # RUNNING: the processor is about to execute the instructions
+            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.RUNNING)
+
+            # RUNNING (INTRA): the processor is executing the output instructions on the input
+            output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
+            if self.config.flag_expect_stream:
+                await self.process_input_data_set_as_stream(input_query_states=input_query_state)
+            else:
+                output_query_states = await self.process_input_data_set(input_query_states=input_query_state, force=force)
+
+            # COMPLETED: the processor has completed execution of instructions
+            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
+            return output_query_states
+        except Exception as ex:
+            await self.fail_execute_processor_state(route_id=self.output_processor_state.id, exception=ex)
+
+    async def execute_entry(self, input_query_state: dict, force: bool = False):
         """
         Executes the processor state update and processes the input data entry.
 
@@ -403,7 +430,7 @@ class BaseProcessor(MonitoredProcessorState):
         Raises:
             Exception: If an error occurs during execution.
         """
-        is_allowed_to_process = await self.can_processor_process_data(input_query_state_entry=input_query_state)
+        is_allowed_to_process = await self.can_processor_process_data()
         if not is_allowed_to_process:
             logging.debug(f'processor {self.processor.id} for {self.provider.id}'
                           f'is in a stopped state, skipping input query processing')
@@ -416,35 +443,18 @@ class BaseProcessor(MonitoredProcessorState):
         try:
             route_id = self.output_processor_state.id
 
-            #
             # RUNNING: the processor is about to execute the instructions
-            #
-            await self.send_processor_state_update(
-                route_id=route_id,
-                status=ProcessorStatusCode.RUNNING
-            )
+            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.RUNNING)
 
-            #
             # RUNNING (INTRA): the processor is executing the output instructions on the input
-            #
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
-            if isinstance(self.config, StateConfigStream):
-                await self.stream_input_data_entry(
-                    input_query_state=input_query_state
-                )
+            if isinstance(self.config, StateConfigStream) or self.config.flag_expect_stream:
+                await self.process_input_data_entry_as_stream(input_query_state=input_query_state)
             else:
-                output_query_states = await self.process_input_data_entry(
-                    input_query_state=input_query_state,
-                    force=force)
+                output_query_states = await self.process_input_data_entry(input_query_state=input_query_state, force=force)
 
-            #
             # COMPLETED: the processor has completed execution of instructions
-            #
-            await self.send_processor_state_update(
-                route_id=route_id,
-                status=ProcessorStatusCode.COMPLETED
-            )
-
+            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
             return output_query_states
         except Exception as ex:
             await self.fail_execute_processor_state(
@@ -453,13 +463,13 @@ class BaseProcessor(MonitoredProcessorState):
                 data=input_query_state
             )
 
-    async def finalize_result(self, input_query_state: Any, result: Any, additional_query_state: Any) -> List[Any]:
+    async def finalize_result(self, result: dict | List[dict] | str, input_data: dict | List[dict], additional_query_state: Any) -> List[Any]:
         """
         Finalizes the result by applying the result to the output state.
 
         Args:
-            input_query_state (Any): The initial input query state.
             result (Any): The result of the execution.
+            input_data (Any): The initial input query state.
             additional_query_state (Any): Any additional output values.
 
         Returns:
@@ -469,14 +479,14 @@ class BaseProcessor(MonitoredProcessorState):
         # Apply the result from the execution
         output_query_states = await self.output_state.apply_result(
             result=result,  # the result of the execution
-            input_query_state=input_query_state,  # the initial input state
+            input_data=input_data,  # the initial input state
             additional_query_state=additional_query_state  # any additional output values
         )
 
         # Apply the new query states to the state propagator, if defined
         output_query_states = await self.state_propagation_provider.apply_state(
             processor=self,
-            input_query_state=input_query_state,
+            input_query_state=input_data,
             output_query_states=output_query_states
         )
 
@@ -489,13 +499,20 @@ class BaseProcessor(MonitoredProcessorState):
         # return the results
         return output_query_states
 
+    async def process_input_data_set(self, input_query_states: List[dict], force: bool = False):
+        raise NotImplementedError("event processing is not supported by this processor")
+
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         raise NotImplementedError("event processing is not supported by this processor")
 
+    ## TODO need to clean up these methods
     async def _stream(self, input_data: Any, template: str):
         raise NotImplementedError()
 
-    async def stream_input_data_entry(self, input_query_state: dict):
+    async def process_input_data_set_as_stream(self, input_query_states: List[dict], force: bool = False):
+        raise NotImplementedError("event processing is not supported by this processor for input query state sets, use single entry streaming for now")
+
+    async def process_input_data_entry_as_stream(self, input_query_state: dict):
         if not self.stream_route:
             raise ValueError(
                 f"streams are not supported by provider: {self.output_processor_state.id}, "
@@ -530,7 +547,6 @@ class BaseProcessor(MonitoredProcessorState):
         )
 
         try:
-
             # submit the original request to the stream, such that it is broadcasted to all subscribers of the subject
             # TODO this needs to be invoked at the LM processor level, pre-stream-processing
             if 'source' in input_query_state:

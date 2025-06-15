@@ -1,8 +1,10 @@
+import json
 from enum import Enum as PyEnum
 from datetime import datetime as dt
 from typing import Any, List, Dict, Optional, Union
 from pydantic import BaseModel, model_validator
 
+import ismcore.utils.map_utils
 from ismcore.utils.ism_logger import ism_logger
 from ismcore.utils.evaluate import safer_evaluate
 from ismcore.utils.general_utils import (
@@ -87,34 +89,92 @@ class StateStorageClass(PyEnum):
 
 
 class BaseStateConfig(BaseModel):
+    # Optional name identifier for the state config
     name: Optional[str] = None
+
+    # Defines the storage backend to use (e.g., "database", "parquet", etc.)
     storage_class: Optional[str] = "database"
+
+    # If True, entries processed by this state will be appended to a session context,
+    # allowing later retrieval based on a session_id provided in the input dictionary.
     flag_append_to_session: Optional[bool] = False
+
+    # If True, deduplication is enabled by hashing the entire input entry and
+    # skipping execution if an identical entry has already been processed.
     flag_dedup_drop_enabled: Optional[bool] = False
+
+    # If True, the upstream method will receive the entire input set (list/slice) at once
+    # rather than processing one entry at a time. This allows concrete implementations
+    # to handle batch inputs as they see fit.
+    flag_enable_execute_set: Optional[bool] = False
+
+    # flag_flatten_input: Optional[bool] = False
 
 
 class StateConfig(BaseStateConfig):
+    # Optional override of the name identifier for the state configuration.
     name: Optional[str] = None
+
     # storage_class: Optional[str] = "database"
+
+    # List of key definitions that serve as the primary key for this state.
+    # Used for deduplication, indexing, or uniquely identifying records.
     primary_key: Optional[List[StateDataKeyDefinition]] = None
+
+    # Keys used to join this state with others during processing.
+    # Typically used when aggregating, enriching, or matching across states.
     state_join_key: Optional[List[StateDataKeyDefinition]] = None
+
+    # Specifies which keys to **inherit transitively** from matching entries in previous states.
+    # If `flag_query_state_inheritance_all` is True, the full entry (or set of entries)
+    # will be copied and merged into the current input before processing.
+    # If inverse is True, the current entry will be projected *onto* the inherited entries instead.
     query_state_inheritance: Optional[List[StateDataKeyDefinition]] = None
+
+    # Remaps or renames keys when propagating values from this state to the downstream query state.
+    # Allows the output of this state to align with the expected input structure of future states.
     remap_query_state_columns: Optional[List[StateDataKeyDefinition]] = None
+
+    # Used in dot-product-style joins across multiple streams or state inputs.
+    # Allows projecting keys with templated values such as:
+    # `{ "question": "what is the name of {person}" }`, where `{person}` is populated from another input key.
     template_columns: Optional[List[StateDataKeyDefinition]] = None
 
+    # Enforces that all inputs must contain a valid primary key;
+    # otherwise, the entry will be rejected or skipped during processing.
     flag_require_primary_key: Optional[bool] = False
+
+    # If True, automatically copies all values from inherited entries
+    # into the current input context based on the `query_state_inheritance` definition.
     flag_query_state_inheritance_all: Optional[bool] = True
+
+    # If True, reverses the inheritance direction:
+    # instead of copying from previous entries into the current one,
+    # the current input will be merged *into* the matching inherited entries.
     flag_query_state_inheritance_inverse: Optional[bool] = False
+
+    # If True, automatically saves the output of this state to the storage backend
+    # (e.g., database or parquet) without requiring explicit save logic.
     flag_auto_save_output_state: Optional[bool] = False
+
+    # If True, automatically routes the state output to downstream or connected states
+    # based on the dependency graph or configuration.
     flag_auto_route_output_state: Optional[bool] = False
+
+    # If True, ensures that routing to downstream states occurs **after** the output has been saved.
+    # Helps enforce data consistency in workflows that depend on saved intermediate states.
     flag_auto_route_output_state_after_save: Optional[bool] = False
+
+    # If True, the system will call the `_stream` method on the state implementation
+    # and expect it to yield values, instead of calling `_set` or `_entry`.
+    flag_expect_stream: Optional[bool] = False
 
 
 class StateConfigLM(StateConfig):
     user_template_id: str
     system_template_id: Optional[str] = None
 
-
+## TODO Deprecate in favor of flag_expect_stream???
 class StateConfigStream(BaseStateConfig):
     url: Optional[str] = None
     template_id: Optional[str] = None
@@ -843,78 +903,159 @@ class State(BaseModel):
 
         return output_query_state
 
-    async def apply_result(self, result: Any, input_query_state: Any, additional_query_state: Any):
+    async def apply_result(
+            self,
+            result: Union[Dict, List[Dict], str],
+            input_data: Union[Dict, List[Dict]],
+            additional_query_state: Any
+    ) -> List[Dict]:
         """
         Applies the result to the query state by merging additional output values and handling state inheritance.
 
         Args:
-            result (Any): The result of the process, which must be of type dict, list, or str.
-            input_query_state (Any): The input query state to be merged with the output state.
-            additional_query_state (Any): Additional values to be included in the output state.
+            result: A dict, list of dicts, or a single string result.
+            input_data: A dict or list of dicts representing the input state(s).
+            additional_query_state: Additional values to include in each output state.
 
         Returns:
-            list: A list of dictionaries representing the output query states.
+            A list of merged query-state dictionaries.
 
         Raises:
-            ValueError: If the result is not of type dict, list, or str.
+            ValueError: If the result or list items are invalid types.
         """
-
-        # Check if the result is of a valid type
+        # Validate result type
         if not isinstance(result, (dict, list, str)):
-            raise ValueError(f'the result of the process is not of type dict, list or str. type: {result} invalid')
-
-        # Initialize the output query state
-        output_query_state = {}
-        if additional_query_state:
-            output_query_state = {**additional_query_state}
-
-        # If inheritance of all variables from the previous input state is enabled
-        if self.config.flag_query_state_inheritance_all:
-            output_query_state = {**output_query_state, **input_query_state}
-
-            # Remove specific keys if they exist
-            output_query_state.pop('state_key', None)  # TODO create an internal function for this
-            output_query_state.pop('state_key_plain', None)
-
-        # Apply specific key inheritance if not all variables are inherited (or negated inheritance)
-        if not self.config.query_state_inheritance:
-            output_query_state = await self.apply_query_state_inheritance(
-                input_query_state=input_query_state,
-                output_query_state=output_query_state
+            raise ValueError(
+                f"Result must be dict, list, or str, got {type(result)}"
             )
 
-        # Build the output states based on the type of the result
-        query_states = []
-        if isinstance(result, dict):
-            output_query_state = {
-                **output_query_state,
-                **result,
-            }
+        # Prepare base output state
+        base_state: Dict = {}
+        if additional_query_state:
+            base_state = {**additional_query_state}
 
-            query_states.append(output_query_state)
-        elif isinstance(result, list):
-            base_output_query_state = output_query_state
-            for item in list(result):
-                if not isinstance(item, dict):
-                    raise ValueError(f'item in response list of rows must be in of type dict.')
+        # Handle execute-set flag on input_data
+        if self.config.flag_enable_execute_set and isinstance(input_data, list):
+            if len(input_data) == 1:
+                input_data = input_data[0]
+            else:
+                # serialize list to avoid dot-product
+                serialized = json.dumps(
+                    input_data,
+                    indent=2,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(',', ':'),
+                    default=str
+                )
+                input_data = {"inherit_set": serialized}
+                # dot-product support pending
+                # raise NotImplementedError(
+                #     "Cannot inherit list input without dot-product support"
+                # )
 
-                # state_item_key = calculate_string_dict_hash(item)
-                output_query_state = {
-                    **base_output_query_state,
-                    **item,
-                }
-
-                # format column names and append the state key
-                query_states.append(output_query_state)
+        # Inheritance logic
+        if self.config.flag_query_state_inheritance_all:
+            base_state = {**base_state, **(input_data if isinstance(input_data, dict) else {})}
+            # drop old state keys since they might get replaced with new ones
+            base_state.pop('state_key', None)
+            base_state.pop('state_key_plain', None)
         else:
-            output_query_state = {
-                **output_query_state,
-                'result': result
-            }
+            base_state = await self.apply_query_state_inheritance(
+                input_query_state=(input_data if isinstance(input_data, dict) else input_data),
+                output_query_state=base_state
+            )
 
-            query_states.append(output_query_state)
+        # Build output states
+        outputs: List[Dict] = []
+        if isinstance(result, dict):
+            outputs.append({**base_state, **result})
 
-        return query_states
+        elif isinstance(result, list):
+            for item in result:
+                if not isinstance(item, dict):
+                    raise ValueError(
+                        "Each item in result list must be a dict"
+                    )
+                outputs.append({**base_state, **item})
+
+        else:  # single string
+            outputs.append({**base_state, 'result': result})
+
+        return outputs
+    #
+    # async def apply_result_old(self, result: Any, input_query_state: Any, additional_query_state: Any):
+    #     """
+    #     Applies the result to the query state by merging additional output values and handling state inheritance.
+    #
+    #     Args:
+    #         result (Any): The result of the process, which must be of type dict, list, or str.
+    #         input_query_state (Any): The input query state to be merged with the output state.
+    #         additional_query_state (Any): Additional values to be included in the output state.
+    #
+    #     Returns:
+    #         list: A list of dictionaries representing the output query states.
+    #
+    #     Raises:
+    #         ValueError: If the result is not of type dict, list, or str.
+    #     """
+    #
+    #     # Check if the result is of a valid type
+    #     if not isinstance(result, (dict, list, str)):
+    #         raise ValueError(f'the result of the process is not of type dict, list or str. type: {result} invalid')
+    #
+    #     # Initialize the output query state
+    #     output_query_state = {}
+    #     if additional_query_state:
+    #         output_query_state = {**additional_query_state}
+    #
+    #     # If inheritance of all variables from the previous input state is enabled
+    #     if self.config.flag_query_state_inheritance_all:
+    #         output_query_state = {**output_query_state, **input_query_state}
+    #
+    #         # Remove specific keys if they exist (this is such that the new state_key can be applied, given this new state data)
+    #         output_query_state.pop('state_key', None)  # TODO create an internal function for this
+    #         output_query_state.pop('state_key_plain', None)
+    #
+    #     # Apply specific key inheritance if not all variables are inherited (or negated inheritance)
+    #     if not self.config.query_state_inheritance:
+    #         output_query_state = await self.apply_query_state_inheritance(
+    #             input_query_state=input_query_state,
+    #             output_query_state=output_query_state
+    #         )
+    #
+    #     # Build the output states based on the type of the result
+    #     query_states = []
+    #     if isinstance(result, dict):
+    #         output_query_state = {
+    #             **output_query_state,
+    #             **result,
+    #         }
+    #
+    #         query_states.append(output_query_state)
+    #     elif isinstance(result, list):
+    #         base_output_query_state = output_query_state
+    #         for item in list(result):
+    #             if not isinstance(item, dict):
+    #                 raise ValueError(f'item in response list of rows must be in of type dict.')
+    #
+    #             # state_item_key = calculate_string_dict_hash(item)
+    #             output_query_state = {
+    #                 **base_output_query_state,
+    #                 **item,
+    #             }
+    #
+    #             # format column names and append the state key
+    #             query_states.append(output_query_state)
+    #     else:
+    #         output_query_state = {
+    #             **output_query_state,
+    #             'result': result
+    #         }
+    #
+    #         query_states.append(output_query_state)
+    #
+    #     return query_states
 
     def flag_require_primary_key(self):
         """

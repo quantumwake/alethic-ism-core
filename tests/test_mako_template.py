@@ -1,5 +1,32 @@
 import src.ismcore.utils.general_utils as utils
 
+def test_make_template_with_set():
+    # 1) define a super-simple template that loops over `items`
+    tmpl = """
+    Items:
+    % for it in items:
+      - Name: ${it['name']}, Age: ${it['age']}, Job: ${it['job']}
+    % endfor
+    """
+
+    # 2) your data as a list of dicts
+    data = [
+        {'name': 'Alice', 'age': 30, 'job': 'Developer'},
+        {'name': 'Bob',   'age': 25, 'job': 'Designer'},
+        {'name': 'Carol', 'age': 28, 'job': 'Data Scientist'},
+    ]
+
+    # 3) render and print
+    # output = render_list_template(tmpl, data)
+    # Define a function to handle missing values
+    def error_callback(context, key):
+        if key.name == "items":
+            return None
+
+        return ""
+
+    output = utils.build_template_text_mako(tmpl, data, error_callback=error_callback)
+    print(output)
 
 def test_mako_template():
     content = """

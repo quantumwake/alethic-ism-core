@@ -178,21 +178,17 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
                 )
 
                 # update the processor state with the relevant status of RUNNING
-                await self.intra_execute(
-                    consumer_message_mapping=consumer_message_mapping
-                )
+                await self.intra_execute(consumer_message_mapping=consumer_message_mapping)
 
                 # iterate each query state entry and forward it to the processor
-                for query_state_entry in query_states:
-                    await runnable_processor.execute(
-                        input_query_state=query_state_entry
-                    )
+                if output_state.config.flag_enable_execute_set:
+                    await runnable_processor.execute_set(input_query_state=query_states)
+                else:
+                    for query_state_entry in query_states:
+                        await runnable_processor.execute_entry(input_query_state=query_state_entry)
 
                 # submit completed execution
-                await self.post_execute(
-                    consumer_message_mapping=consumer_message_mapping
-                )
-
+                await self.post_execute(consumer_message_mapping=consumer_message_mapping)
             except ValueError as ex:
                 # submit failed execution log to the output processor state
                 await self.fail_execute_processor_state(

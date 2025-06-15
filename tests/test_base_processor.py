@@ -1,4 +1,6 @@
 import asyncio
+from typing import List
+
 import pytest
 
 from ismcore.model.base_model import InstructionTemplate, ProcessorProvider, Processor, ProcessorState, \
@@ -9,39 +11,59 @@ from ismcore.processor.base_processor import BaseProcessor
 from ismcore.processor.base_processor_lm import BaseProcessorLM
 from ismcore.storage.processor_state_storage import StateMachineStorage
 
-input_query_states = [
+input_query_states_1 = [
     {"question": "what color is the sky?"},
     {"question": "what color is the grass?"},
 ]
 
+input_query_states_2 = [
+    {'name': 'Alice', 'age': 30, 'job': 'Developer'},
+    {'name': 'Bob',   'age': 25, 'job': 'Designer'},
+    {'name': 'Carol', 'age': 28, 'job': 'Data Scientist'},
+]
 
-def mock_question_response(input_query_state: dict):
-    question = input_query_state['question']
 
+def mock_question_for_single_entry(input_data: dict):
+    question = input_data['question']
     if question == 'what color is the sky?':
-        return {
-            **input_query_state,
-            **{"response": "the sky is blue"}
-        }
+        return {"response": "the sky is blue"}
+
     if question == 'what color is the grass?':
-        return {
-            **input_query_state,
-            **{"response": "the grass is green"}
-        }
+        return {"response": "the grass is green"}
 
     raise NotImplemented(f'invalid question {question}')
+
+def mock_question_for_set(input_data: List[dict]):
+    return { "response": "the beach is sandy" }
+
+    # raise NotImplemented(f'invalid question {question}')
 
 
 class MockStateMachineStorage(StateMachineStorage):
 
-    def fetch_template(self, template_id: str) -> InstructionTemplate:
-        return InstructionTemplate(
-            template_id="test_template_id_1",
-            template_path="test_template_path_1",
-            template_content="answer the following question: {question}",
-            template_type="user template",
-            project_id="test_project_id_1"
-        )
+    def fetch_template(self, template_id: str) -> InstructionTemplate | None:
+        if template_id == "test_template_id_1":
+            return InstructionTemplate(
+                template_id="test_template_id_1",
+                template_path="test_template_path_1",
+                template_content="answer the following question: ${question}",
+                template_type="mako",
+                project_id="test_project_id_1"
+            )
+        elif template_id == "test_template_id_2":
+            tmpl = """
+               Items:
+               % for it in items:
+                 - Name: ${it['name']}, Age: ${it['age']}, Job: ${it['job']}
+               % endfor
+               """
+            return InstructionTemplate(
+                template_id="test_template_id_2",
+                template_path="test_template_path_2",
+                template_content=tmpl,
+                template_type="mako",
+                project_id="test_project_id_1"
+            )
 
     def fetch_processor(self, processor_id: str) -> Processor:
         return Processor(
@@ -51,66 +73,61 @@ class MockStateMachineStorage(StateMachineStorage):
         )
 
 class MockProcessor(BaseProcessor):
+    async def process_input_data_set(self, input_query_state: list[dict], force: bool = False):
+        return mock_question_for_set(input_data=input_query_state)
 
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
-        return mock_question_response(input_query_state=input_query_state)
+        return mock_question_for_single_entry(input_data=input_query_state)
 
 
 class MockProcessorLM(BaseProcessorLM):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-    def __init__(self, output_state: dict, **kwargs):
+    async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]):
+        if isinstance(values, dict):
+            response_dict = mock_question_for_single_entry(input_data=values)
+        else:
+            response_dict = mock_question_for_set(input_data=values)
 
-        super().__init__(
-            monitor_route=None,
-            output_state=output_state,
-            **kwargs)
-
-        self.provider = ProcessorProvider(
-            id="test provider id",
-            name="test provider name",
-            version="test-version-1.0",
-            class_name="MockProviders"
-        )
-
-        self.processor = Processor(
-            id="test processor id",
-            provider_id=self.provider.id,
-            project_id="test project id"
-        )
-
-        self.output_processor_state = ProcessorState(
-            id=f"{self.processor.id}:{self.output_state.id}",
-            state_id=self.output_state.id,
-            processor_id=self.processor.id,
-            direction=ProcessorStateDirection.OUTPUT
-        )
-
-    async def _execute(self, user_prompt: str, system_prompt: str, values: dict):
-        question = values['question']
-        response_dict = mock_question_response(input_query_state=values)
         return response_dict, dict, str(response_dict)
 
-    def __process_input_data_entry(self, input_query_state: dict, force: bool = False):
-        if input_query_state['question'] == 'what color is the sky?':
-            return {
-                **input_query_state,
-                **{"response": "the sky is blue"}
-            }
-        if input_query_state['question'] == 'what color is the grass?':
-            return {
-                **input_query_state,
-                **{"response": "the grass is green"}
-            }
+
+def failure_callback_handler(processor_state: ProcessorState, exception: Exception, query_state: dict):
+    pass
 
 
-def test_mock_processor_lm():
+def test_mock_processor_lm_entry() :
+    mock_processor = setup_mock_processor_lm(user_template_id="test_template_id_1")
+    mock_processor.config.flag_enable_execute_set = False
+    response_1 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states_1[0]))
+    response_2 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states_1[1]))
+
+    assert response_1[0]['response'] == 'the sky is blue'
+    assert response_2[0]['response'] == 'the grass is green'
+    assert response_2[0]['provider_name'] == 'test provider name'
+    assert response_2[0]['provider_version'] == 'test-version-1.0'
+
+def test_mock_processor_lm_entry_set() :
+    mock_processor = setup_mock_processor_lm(user_template_id="test_template_id_2")
+    mock_processor.config.flag_enable_execute_set = True
+    response_1 = asyncio.run(mock_processor.process_input_data_set(input_query_states=input_query_states_2))
+
+    assert response_1[0]['response'] == 'the beach is sandy'
+    # assert response_2[0]['response'] == 'the grass is green'
+    # assert response_2[0]['provider_name'] == 'test provider name'
+    # assert response_2[0]['provider_version'] == 'test-version-1.0'
+
+
+
+def setup_mock_processor_lm(user_template_id: str) -> MockProcessorLM:
     storage = MockStateMachineStorage()
     output_state = State(
         id="test output state mock",
         config=StateConfigLM(
             name="Test Output State",
             storage_class="memory",
-            user_template_id="test_template_id_1",
+            user_template_id=user_template_id,
             primary_key=[
                 StateDataKeyDefinition(name="question")
             ]
@@ -121,22 +138,22 @@ def test_mock_processor_lm():
         "provider_version": StateDataColumnDefinition(name="provider_version", value="provider.version", callable=True),
     }
 
-    def failure_callback_handler(processor_state: ProcessorState, exception: Exception, query_state: dict):
-        pass
+    # configure the provider, the processor "type" for the provider, and the output edges where the data should flow next
+    provider = ProcessorProvider(id="test provider id", name="test provider name", version="test-version-1.0", class_name="MockProviders")
+    processor = Processor(id="test processor id", provider_id=provider.id, project_id="test project id")
+    output_processor_state = ProcessorState(id=f"{processor.id}:{output_state.id}", state_id=output_state.id, processor_id=processor.id, direction=ProcessorStateDirection.OUTPUT)
 
-    mock_processor = MockProcessorLM(
+    # set up the actual mock processor that executes the code
+    return MockProcessorLM(
+        monitor_route=None, # set the monitor route none, not testing this
+        provider=provider,
+        processor=processor,
+        output_processor_state=output_processor_state,
         output_state=output_state,
         state_machine_storage=storage,
         failure_callback=failure_callback_handler
     )
 
-    response_1 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states[0]))
-    response_2 = asyncio.run(mock_processor.process_input_data_entry(input_query_state=input_query_states[1]))
-
-    assert response_1[0]['response'] == 'the sky is blue'
-    assert response_2[0]['response'] == 'the grass is green'
-    assert response_2[0]['provider_name'] == 'test provider name'
-    assert response_2[0]['provider_version'] == 'test-version-1.0'
 
 
 @staticmethod

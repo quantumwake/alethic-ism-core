@@ -1,7 +1,7 @@
 import json
 import datetime as dt
 
-from typing import Union
+from typing import Union, List
 
 from ismcore.model.base_model import SessionMessage
 from ismcore.model.processor_state import StateConfigLM, StateConfigStream
@@ -130,12 +130,18 @@ class BaseProcessorLM(BaseProcessor):
         #     "input": input_template
         # })
 
-    async def _execute(self, user_prompt: str, system_prompt: str, values: dict):
+    async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]):
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
+    async def process_input_data_set(self, input_query_states: List[dict], force: bool = False):
+        return await self.process_input_data(input_data=input_query_states, force=force)
+
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
-        if not input_query_state:
-            return
+        return await self.process_input_data(input_data=input_query_state, force=force)
+
+    async def process_input_data(self, input_data: dict | List[dict], force: bool = False):
+        if not input_data:
+            return []
 
         # TODO maybe validate the input state to see if it was already processed for this particular output state?
         #
@@ -151,43 +157,25 @@ class BaseProcessorLM(BaseProcessor):
         #     return
 
         # build final user and system prompts using the query state entry as the input data
-        user_prompt = build_template_text_v2(self.user_template, input_query_state)
-        system_template = self.system_template
-        system_prompt = build_template_text_v2(system_template, input_query_state) if system_template else None
+        user_prompt = build_template_text_v2(self.user_template, input_data)
+        system_prompt = build_template_text_v2(self.system_template, input_data) if self.system_template else None
 
         # begin the processing of the prompts
         try:
-            # input_query_state = {
-            #     key:value
-            #     for key, value in input_query_state.items()
-            #     if not key[:2] == "__" and not key[:-2] == '__'
-            # }
-
             # execute the underlying model function
-            result, result_type, response_raw_data = (
-                await self._execute(
-                    user_prompt=user_prompt,
-                    system_prompt=system_prompt,
-                    values=input_query_state
-                )
+            result, result_type, response_raw_data = await self._execute(
+                user_prompt=user_prompt,
+                system_prompt=system_prompt,
+                values=input_data
             )
 
             # we build a new output state to be appended to the output states
-            additional_query_state = {
-                'user_prompt': user_prompt,
-                'system_prompt': system_prompt,
-            }
-
-            return await self.finalize_result(
-                input_query_state=input_query_state,
-                result=result,
-                additional_query_state=additional_query_state
-            )
-
+            additional_query_state = {'user_prompt': user_prompt, 'system_prompt': system_prompt}
+            return await self.finalize_result(result=result, input_data=input_data, additional_query_state=additional_query_state)
         except Exception as exception:
             await self.fail_execute_processor_state(
                 # self.output_processor_state,
                 route_id=self.output_processor_state.id,
                 exception=exception,
-                data=input_query_state
+                data=input_data
             )

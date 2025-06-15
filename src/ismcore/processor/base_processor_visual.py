@@ -58,8 +58,8 @@ class BaseProcessorVisual(BaseProcessor):
             }
 
             return await self.finalize_result(
-                input_query_state=input_query_state,
                 result=result,
+                input_data=input_query_state,
                 additional_query_state=additional_query_state
             )
 

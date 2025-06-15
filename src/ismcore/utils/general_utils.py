@@ -179,7 +179,7 @@ def calculate_string_dict_hash(item: dict):
     return calculate_uuid_based_from_string_with_sha256_seed(plain)
 
 
-def build_template_text_mako(template: [str, dict], data: dict, error_callback: callable = None) -> Optional[str]:
+def build_template_text_mako(template: [str, dict], data: any, error_callback: callable = None) -> Optional[str]:
     if not template:
         warning = f'called build template but template is not set'
         logging.warning(warning)
@@ -197,7 +197,11 @@ def build_template_text_mako(template: [str, dict], data: dict, error_callback: 
         mako_template = Template(content, error_handler=error_callback)
 
         # Render the template with the data
-        result = mako_template.render(**data)
+        if isinstance(data, list):
+            result = mako_template.render(items=data)
+        else:
+            result = mako_template.render(**data)
+
         return result
     except Exception as e:
         error = f'failed to process mako template {template} with error: {e}'
@@ -236,7 +240,7 @@ def get_template_content(template: Union[dict, str]):
     raise NotImplementedError(f'template of type {type(template)} not supported')
 
 
-def build_template_text_v2(template: InstructionTemplate, data: dict, error_callback: callable = None) -> Optional[str]:
+def build_template_text_v2(template: InstructionTemplate, data: any, error_callback: callable = None) -> Optional[str]:
     if not template:
         return str(data)
 

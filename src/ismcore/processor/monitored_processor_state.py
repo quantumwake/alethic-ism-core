@@ -12,7 +12,7 @@ logging = ism_logger(__name__)
 
 
 class MonitoredUsage:
-    def __init__(self, usage_route: BaseRoute = None, **kwargs):
+    def __init__(self, usage_route: BaseRoute | None = None, **kwargs):
         self.usage_route = usage_route
 
     async def publish_usage(self, usage: Usage):
@@ -46,7 +46,7 @@ class MonitoredUsage:
 class MonitoredProcessorState:
 
     def __init__(self, monitor_route: BaseRoute | None = None, **kwargs):
-        super().__init__(**kwargs)
+        # super().__init__(**kwargs)
         self.monitor_route = monitor_route
 
     async def send_processor_state_update(
