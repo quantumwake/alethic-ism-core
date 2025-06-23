@@ -18,11 +18,37 @@ from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getit
 from RestrictedPython.Guards import (
     safer_getattr,
     guarded_iter_unpack_sequence,
+    guarded_unpack_sequence,
     guarded_setattr,
     _write_wrapper,
 )
+from RestrictedPython.PrintCollector import PrintCollector
 
 logger = getLogger(__name__)
+
+
+class SecureCompilationError(Exception):
+    """Raised when code compilation fails with security or syntax issues"""
+    
+    def __init__(self, message: str, line_no: int = None, errors: list = None, warnings: list = None):
+        self.line_no = line_no
+        self.errors = errors or []
+        self.warnings = warnings or []
+        super().__init__(message)
+
+
+class SecureExecutionError(Exception):
+    """Raised when secure code execution fails"""
+    pass
+
+
+class SecureValidationError(Exception):
+    """Raised when code validation fails due to forbidden patterns"""
+    
+    def __init__(self, message: str, pattern: str = None, line_no: int = None):
+        self.pattern = pattern
+        self.line_no = line_no
+        super().__init__(message)
 
 
 class BaseSecureRunnable(ABC):
@@ -568,39 +594,44 @@ class SecureRunnableBuilder:
         self.requests = RestrictedRequests(security_config)
 
     @staticmethod
-    def validate_code(code: str) -> bool:
-        """Validate code for potentially dangerous patterns"""
-        # forbidden_patterns = [
-        #     "import",
-        #     # "__",
-        #     "eval",
-        #     "exec",
-        #     "subprocess",
-        #     "os.",
-        #     "sys.",
-        #     "open",
-        #     "file",
-        #     "breakpoint",
-        #     "globals",
-        #     "locals"
-        # ]
-
-        # Add "__" rule specifically to avoid risky uses of double underscores
+    def validate_code(code: str) -> None:
+        """Validate code for potentially dangerous patterns
+        
+        Raises:
+            SecureValidationError: If forbidden patterns are found
+        """
         forbidden_patterns = [
-            r"\bimport\b",  # Matches 'import' as a standalone word
-            r"eval\(",  # Direct eval function call
-            r"exec\(",  # Direct exec function call
-            r"subprocess\.",  # Accessing subprocess module
-            r"os\.",  # Accessing os module
-            r"sys\.",  # Accessing sys module
-            r"open\(",  # Direct open function call
-            r"file\(",  # Direct file function call
-            r"breakpoint\(",  # Direct breakpoint function call
-            r"globals\(",  # Direct globals function call
-            r"locals\(",  # Direct locals function call
-            r"(^|[^a-zA-Z0-9_])__[^a-zA-Z0-9_]",  # Matches "__" at the beginning or end of words
+            (r"\bimport\b", "import statement"),
+            (r"\bfrom\b.*\bimport\b", "from-import statement"),
+            (r"eval\s*\(", "eval() function"),
+            (r"exec\s*\(", "exec() function"),
+            (r"compile\s*\(", "compile() function"),
+            (r"subprocess\.", "subprocess module"),
+            (r"os\.", "os module"),
+            (r"sys\.", "sys module"),
+            (r"open\s*\(", "open() function"),
+            (r"file\s*\(", "file() function"),
+            (r"breakpoint\s*\(", "breakpoint() function"),
+            (r"globals\s*\(", "globals() function"),
+            (r"locals\s*\(", "locals() function"),
+            (r"__.*__", "dunder methods"),
+            (r"getattr\s*\(", "getattr() function"),
+            (r"setattr\s*\(", "setattr() function"),
+            (r"delattr\s*\(", "delattr() function"),
+            (r"vars\s*\(", "vars() function"),
+            (r"dir\s*\(", "dir() function"),
         ]
-        return not any(pattern in code for pattern in forbidden_patterns)
+        
+        lines = code.split('\n')
+        for line_no, line in enumerate(lines, 1):
+            for pattern, description in forbidden_patterns:
+                if re.search(pattern, line):
+                    raise SecureValidationError(
+                        f"Forbidden pattern found at line {line_no}: {description}\n"
+                        f"Line content: {line.strip()}",
+                        pattern=pattern,
+                        line_no=line_no
+                    )
 
     def create_restricted_globals(self):
         """Create restricted global environment"""
@@ -623,6 +654,7 @@ class SecureRunnableBuilder:
             '_getitem_': default_guarded_getitem,
             '_getiter_': default_guarded_getiter,
             '_iter_unpack_sequence_': guarded_iter_unpack_sequence,
+            '_unpack_sequence_': guarded_unpack_sequence,
             '_setattr_': guarded_setattr,
             '_inplacevar_': inplacevar_wrapper,
 
@@ -650,12 +682,16 @@ class SecureRunnableBuilder:
             'any': any,
             'sorted': sorted,
             'reversed': reversed,
+            'isinstance': isinstance,
 
+            # Print support
+            '_print_': PrintCollector,
+            '_print': PrintCollector,
+            
             # Restricted utilities
             'requests': self.requests,
             'logger': self.logger,
             'context': self.context,
-            # 'print': print,
 
             # More restricted utilities
             'math': math,
@@ -681,48 +717,101 @@ class SecureRunnableBuilder:
         return restricted
 
     def compile(self, code: str) -> BaseSecureRunnable:
-        """Compile code into a secure runnable instance"""
-        if not self.validate_code(code):
-            raise ValueError("Code contains forbidden patterns")
-
+        """Compile code into a secure runnable instance
+        
+        Args:
+            code: Python code defining a Runnable class
+            
+        Returns:
+            Instance of the compiled secure runnable
+            
+        Raises:
+            SecureValidationError: If code contains forbidden patterns
+            SecureCompilationError: If code compilation fails
+            SecureExecutionError: If code execution fails
+            ValueError: If code structure is invalid
+        """
+        # Step 1: Validate code for forbidden patterns
         try:
-            # Set resource limits if enabled
-            if self._config.enable_resource_limits:
-                ResourceLimiter.set_limits(self._config)
+            self.validate_code(code)
+        except SecureValidationError:
+            raise
+            
+        # Step 2: Set resource limits if enabled
+        if self._config.enable_resource_limits:
+            ResourceLimiter.set_limits(self._config)
 
-            # Compile the restricted code
-            compiled = compile_restricted(code, '<string>', 'exec')
+        # Step 3: Compile the restricted code
+        try:
+            compiled = compile_restricted(code, '<user_code>', 'exec')
+        except SyntaxError as e:
+            error_msg = f"Syntax error at line {e.lineno}: {e.msg}"
+            if hasattr(e, 'text') and e.text:
+                error_msg += f"\nCode: {e.text.strip()}"
+            raise SecureCompilationError(error_msg, line_no=e.lineno) from e
+            
+        # Check compilation result
+        if hasattr(compiled, 'errors') and compiled.errors:
+            errors_str = '\n'.join(compiled.errors)
+            raise SecureCompilationError(
+                f"Code compilation failed with errors:\n{errors_str}",
+                errors=compiled.errors
+            )
+            
+        if hasattr(compiled, 'warnings') and compiled.warnings:
+            warnings_str = '\n'.join(compiled.warnings)
+            logger.warning(f"Code compilation warnings:\n{warnings_str}")
 
-            # Prepare execution environment
-            restricted_globals = self.create_restricted_globals()
-            local_dict = {}
+        # Step 4: Prepare execution environment
+        restricted_globals = self.create_restricted_globals()
+        local_dict = {}
 
-            # Execute the code to define the class
+        # Step 5: Execute the code to define the class
+        # If compiled is a CompileResult, use compiled.code, otherwise use compiled directly
+        code_obj = compiled.code if hasattr(compiled, 'code') else compiled
+        try:
             with timeout_context(self._config.execution_timeout):
-                exec(compiled, restricted_globals, local_dict)
+                exec(code_obj, restricted_globals, local_dict)
+        except TimeoutError:
+            raise SecureExecutionError(
+                f"Code execution timed out after {self._config.execution_timeout} seconds"
+            )
+        except NameError as e:
+            # Provide helpful error for missing names
+            error_msg = str(e)
+            if "is not defined" in error_msg:
+                error_msg += "\nNote: Type annotations like 'myvar: List[dict]' are not supported in RestrictedPython. Use 'myvar = []' instead."
+            raise SecureExecutionError(f"Execution error: {error_msg}") from e
+        except Exception as e:
+            raise SecureExecutionError(f"Code execution failed: {str(e)}") from e
 
-            # Get the user-defined Runnable class
-            if 'Runnable' not in local_dict:
-                raise ValueError("Code must define a 'Runnable' class that extends BaseSecureRunnable")
-
-            runnable_class = local_dict['Runnable']
-
-            # Verify the class extends BaseSecureRunnable
-            if not issubclass(runnable_class, BaseSecureRunnable):
-                raise ValueError("Runnable class must extend BaseSecureRunnable")
-
-            # Instantiate the class
-            instance = runnable_class(
-                security_config=self._config
+        # Step 6: Get and validate the user-defined Runnable class
+        if 'Runnable' not in local_dict:
+            raise ValueError(
+                "Code must define a 'Runnable' class that extends BaseSecureRunnable.\n"
+                "Example:\n"
+                "class Runnable(BaseSecureRunnable):\n"
+                "    def init(self):\n"
+                "        pass\n"
+                "    def process(self, queries):\n"
+                "        return queries"
             )
 
-            # Initialize the instance
+        runnable_class = local_dict['Runnable']
+
+        # Verify the class extends BaseSecureRunnable
+        if not issubclass(runnable_class, BaseSecureRunnable):
+            raise ValueError("Runnable class must extend BaseSecureRunnable")
+
+        # Step 7: Instantiate and initialize the class
+        try:
+            instance = runnable_class(security_config=self._config)
             instance.init()
             return instance
-
-        except Exception as e1:
-            logger.error(f"Failed to compile secure runnable: {str(e1)}")
-            raise
+        except Exception as e:
+            raise SecureExecutionError(
+                f"Failed to instantiate or initialize Runnable class: {str(e)}"
+            ) from e
 
 
 # Example usage
