@@ -223,6 +223,7 @@ class StateDataColumnDefinition(BaseModel):
     dimensions: Optional[int] = None  # Dimensions for vector
     value: Optional[Any] = None
     source_column_name: Optional[str] = None  # The source column this column was derived from
+    display_order: Optional[int] = None  # Display order for column presentation
 
     def manual_json(self):
         state = {
@@ -233,6 +234,7 @@ class StateDataColumnDefinition(BaseModel):
             "min_length": self.min_length,
             "max_length": self.max_length,
             "dimensions": self.dimensions,
+            "display_order": self.display_order,
             # do not include value
         }
         return state
@@ -720,11 +722,34 @@ class State(BaseModel):
             logging.warning(f'ignored column {column.name}, column already defined for state {self.config}')
             return
 
+        # Auto-assign display_order if not provided
+        if column.display_order is None:
+            # Find the max display_order among existing columns
+            max_order = -1
+            for existing_column in self.columns.values():
+                if existing_column.display_order is not None:
+                    max_order = max(max_order, existing_column.display_order)
+            column.display_order = max_order + 1
+
         self.columns[column.name] = column
 
     def add_columns(self, columns: List[StateDataColumnDefinition]):
         for column in columns:
             self.add_column(column)
+
+    def get_columns_sorted_by_display_order(self) -> List[StateDataColumnDefinition]:
+        """
+        Returns columns sorted by display_order. 
+        Columns without display_order (None) are placed at the end in their original order.
+        """
+        columns_list = list(self.columns.values())
+        return sorted(columns_list, key=lambda col: col.display_order if col.display_order is not None else float('inf'))
+
+    def get_column_names_sorted_by_display_order(self) -> List[str]:
+        """
+        Returns column names sorted by display_order.
+        """
+        return [col.name for col in self.get_columns_sorted_by_display_order()]
 
     def add_row_data(self, column_and_value: Dict[str, StateDataRowColumnData]):
         row_index = 0
