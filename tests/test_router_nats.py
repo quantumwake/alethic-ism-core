@@ -9,7 +9,7 @@ def test_nats_route_1():
     provider = NATSMessageProvider()
     router = Router(
         provider=provider,
-        yaml_file="./test_routes/test_nats_route.yaml"
+        yaml_file="./tests/test_routes/test_nats_route.yaml"
     )
 
     async def run_test():

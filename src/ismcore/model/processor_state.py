@@ -174,6 +174,10 @@ class StateConfigLM(StateConfig):
     user_template_id: str
     system_template_id: Optional[str] = None
 
+    # If True, include the user and system prompts in the state column.
+    flag_include_prompts_in_state: Optional[bool] = False
+
+
 ## TODO Deprecate in favor of flag_expect_stream???
 class StateConfigStream(BaseStateConfig):
     url: Optional[str] = None

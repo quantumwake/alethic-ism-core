@@ -164,7 +164,11 @@ class BaseProcessorLM(BaseProcessor):
             )
 
             # we build a new output state to be appended to the output states
-            additional_query_state = {'user_prompt': user_prompt, 'system_prompt': system_prompt}
+            if self.config.flag_include_prompts_in_state:
+                additional_query_state = {'user_prompt': user_prompt, 'system_prompt': system_prompt}
+            else:
+                additional_query_state = None
+
             return await self.finalize_result(result=result, input_data=input_data, additional_query_state=additional_query_state)
         except Exception as exception:
             await self.fail_execute_processor_state(

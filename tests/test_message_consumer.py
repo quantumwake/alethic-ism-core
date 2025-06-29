@@ -98,7 +98,7 @@ class MockRouteProvider(BaseRouteProvider):
 route_provider = MockRouteProvider()
 router = Router(
     provider=route_provider,
-    yaml_file="./test_routes/test_mock_route.yaml"
+    yaml_file="./tests/test_routes/test_mock_route.yaml"
 )
 
 

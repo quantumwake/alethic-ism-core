@@ -7,7 +7,7 @@ from ismcore.messaging.nats_message_provider import NATSMessageProvider
 
 # Create producer and router, and send messages
 provider = NATSMessageProvider()
-router = Router(provider=provider, yaml_file="./test_routes/test_nats_route.yaml")
+router = Router(provider=provider, yaml_file="./tests/test_routes/test_nats_route.yaml")
 route = router.find_route(selector="test/test")
 
 # Create consumer provider and start listening in a separate thread

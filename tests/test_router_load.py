@@ -3,7 +3,7 @@ from ismcore.messaging.nats_message_provider import NATSMessageProvider
 
 message_provider = NATSMessageProvider()
 router = Router(
-    yaml_file="./test_routes/test_nats_route.yaml",
+    yaml_file="./tests/test_routes/test_nats_route.yaml",
     provider=message_provider
 )
 
