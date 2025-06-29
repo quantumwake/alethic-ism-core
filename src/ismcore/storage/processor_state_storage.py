@@ -30,6 +30,7 @@ from ismcore.model.processor_state import (
     StateDataColumnDefinition,
     StateDataColumnIndex)
 from ismcore.vault.vault_model import Vault, ConfigMap
+from ismcore.model.filter import Filter
 
 logging = ism_logger(__name__)
 
@@ -491,6 +492,24 @@ class StateActionStorage:
         raise NotImplementedError()
 
 
+class FilterStorage:
+
+    def insert_filter(self, filter: Filter) -> Filter:
+        raise NotImplementedError()
+
+    def fetch_filter(self, filter_id: str) -> Optional[Filter]:
+        raise NotImplementedError()
+
+    def fetch_filters_by_user(self, user_id: str) -> Optional[List[Filter]]:
+        raise NotImplementedError()
+
+    def delete_filter(self, filter_id: str) -> int:
+        raise NotImplementedError()
+
+    def apply_filter_on_data(self, filter_id: str, data: Dict[str, Any]) -> bool:
+        raise NotImplementedError()
+
+
 class SessionIdentContext:
     identity: Optional[str] = None
 
@@ -515,6 +534,7 @@ class StateMachineStorage(StateStorage,
                           StateActionStorage,
                           VaultStorage,
                           ConfigMapStorage,
+                          FilterStorage,
                           metaclass=ForwardingStateMachineStorageMeta):
     def __init__(self,
                  state_storage: StateStorage = None,
@@ -530,7 +550,8 @@ class StateMachineStorage(StateStorage,
                  session_storage: SessionStorage = None,
                  state_action_storage: StateActionStorage = None,
                  vault_storage: VaultStorage = None,
-                 config_map_storage: ConfigMapStorage = None):
+                 config_map_storage: ConfigMapStorage = None,
+                 filter_storage: FilterStorage = None):
 
         # Assign the delegates dynamically via constructor parameters
         self._delegate_state_storage = state_storage
@@ -547,3 +568,4 @@ class StateMachineStorage(StateStorage,
         self._delegate_state_action_storage = state_action_storage
         self._delegate_vault_storage = vault_storage
         self._delegate_config_map_storage = config_map_storage
+        self._delegate_filter_storage = filter_storage
