@@ -13,7 +13,7 @@ RUN source .venv/bin/activate && \
     apk update && \
     apk add git && \
     uv pip install -U pip twine setuptools setuptools-scm build && \
-    uv pip install -r requirements.txt
+    uv pip install -r requirements.txt -U --no-cache
 
 # Build the package using the virtual environment’s Python interpreter
 RUN source .venv/bin/activate && \
