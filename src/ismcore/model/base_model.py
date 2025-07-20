@@ -8,19 +8,22 @@ class UserProfile(BaseModel):
     email: Optional[str] = None
     name: Optional[str] = None
     max_agentic_units: Optional[int] = 10000    # HARD STOP - maximum compute units during a billing cycle
-    created_date: Optional[dt.datetime] = dt.datetime.utcnow()
+    created_date: Optional[dt.datetime] = dt.datetime.now(tz=dt.timezone.utc)
 
 class UserProfileCredential(BaseModel):
     user_id: str
     type: str
     credentials: Optional[str] = None
-    created_date: Optional[dt.datetime] = dt.datetime.utcnow()
+    created_date: Optional[dt.datetime] = dt.datetime.now(tz=dt.timezone.utc)
 
 class UserProject(BaseModel):
     project_id: Optional[str] = None
     project_name: str
     user_id: str
-    created_date: Optional[dt.datetime] = dt.datetime.utcnow()
+    created_date: Optional[dt.datetime] = dt.datetime.now(tz=dt.timezone.utc)
+    updated_date: Optional[dt.datetime] = None
+    deleted_date: Optional[dt.datetime] = None
+    properties: Optional[str] = None
 
 
 class WorkflowNode(BaseModel):
@@ -126,6 +129,9 @@ class ProcessorProvider(BaseModel):
     class_name: str
     user_id: Optional[str] = None
     project_id: Optional[str] = None
+    created_date: Optional[dt.datetime] = dt.datetime.now(tz=dt.timezone.utc)
+    updated_date: Optional[dt.datetime] = None
+    routing: Optional[str] = None  # JSON string for routing configuration
 
 
 class ProcessorProperty(BaseModel):
@@ -136,10 +142,11 @@ class ProcessorProperty(BaseModel):
 
 class Processor(BaseModel):
     id: Optional[str] = None
+    name: Optional[str] = None
     provider_id: Optional[str] = None
     project_id: str
     status: ProcessorStatusCode = ProcessorStatusCode.CREATED
-    properties: Optional[List[ProcessorProperty]] = None
+    properties: Optional[str] = None
 
 
 class ProcessorState(BaseModel):

@@ -63,8 +63,16 @@ class UserProjectStorage:
     def delete_user_project(self, project_id):
         raise NotImplementedError()
 
-    def fetch_user_project(self, project_id: str) \
-            -> Optional[UserProject]:
+    def delete_user_project_logical(self, project_id):
+        raise NotImplementedError()
+
+    def fetch_user_project(self, project_id: str) -> Optional[UserProject]:
+        raise NotImplementedError()
+
+    def fetch_user_projects(self, user_id: str, include_deleted: bool = False) -> List[UserProject]:
+        raise NotImplementedError()
+
+    def fetch_deleted_projects(self, older_than_days: int = 30) -> List[UserProject]:
         raise NotImplementedError()
 
     def insert_user_project(self, user_project: UserProject):
@@ -297,8 +305,7 @@ class ProcessorStorage:
     def change_processor_status(self, processor_id: str, status: ProcessorStatusCode) -> int:
         raise NotImplementedError()
 
-    def insert_processor(self, processor: Processor) \
-            -> Processor:
+    def insert_processor(self, processor: Processor) -> Processor | None:
         raise NotImplementedError()
 
     def fetch_processor_properties(self, processor_id: str) -> Optional[List[ProcessorProperty]]:
