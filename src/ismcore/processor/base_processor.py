@@ -515,12 +515,7 @@ class BaseProcessor(MonitoredProcessorState):
         if not input_data:
             raise ValueError("invalid input state, cannot be empty")
 
-        # if not isinstance(self.config, StateConfigStream):
-        #     raise NotImplementedError()
-
-        template = build_template_text_v2(self.template, input_data)
-
-        # this is a bit of a hack to use a session id for a given processor state stream
+        # TODO this such a terrible HACK to use a session id for a given processor state stream
         if 'session_id' in input_data:
             session_id = input_data["session_id"]
             subject = f"processor.state.{self.output_state.id}.{session_id}"
@@ -540,8 +535,18 @@ class BaseProcessor(MonitoredProcessorState):
             }
         )
 
+        # check if template attribute exists in
+        if hasattr(self, 'template'):
+            if not self.template:
+                template = None
+            else:
+                template = build_template_text_v2(self.template, input_data)
+        else:
+            template = None
+
+
         try:
-            # submit the original request to the stream, such that it is broadcasted to all subscribers of the subject
+            # submit the original request to the stream, to all subscribers of the subject
             # TODO this needs to be invoked at the LM processor level, pre-stream-processing
             if 'source' in input_data:
                 await stream_route.publish(input_data['source'])

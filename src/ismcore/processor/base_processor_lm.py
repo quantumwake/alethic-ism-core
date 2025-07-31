@@ -74,18 +74,6 @@ class BaseProcessorLM(BaseProcessor):
         message_list.extend(self.derive_messages(template=template))
         return message_list
 
-    # def update_session_data_entry(self, session_id: str, session_entry: dict):
-    #     if not session_id:
-    #         return
-    #
-    #     # the following elements need to exist for sessions to works correctly
-    #     if not set(['source', 'role', 'input']).issubset(session_entry.keys()):
-    #         raise ValueError(f"source, role and input need to be present for sessions to work correctly in dictionary {session_entry}")
-    #
-    #
-    #     # store the message for later retrieval by a process (during it's execution phase for this input)
-    #     # self.storage.insert_session_message(session_id, json.dumps(session_entry))
-
     def update_session_data(self, input_data: any, input_template: str, output_data: str):
         if not isinstance(input_data, dict):
             return
@@ -171,6 +159,93 @@ class BaseProcessorLM(BaseProcessor):
 
             return await self.finalize_result(result=result, input_data=input_data, additional_query_state=additional_query_state)
         except Exception as exception:
+            await self.fail_execute_processor_state(
+                # self.output_processor_state,
+                route_id=self.output_processor_state.id,
+                exception=exception,
+                data=input_data
+            )
+
+    async def process_input_data_stream(self, input_data: dict | List[dict], force: bool = False):
+        if not self.stream_route:
+            raise ValueError(
+                f"streams are not supported by provider: {self.output_processor_state.id}, "
+                f"route_id {self.output_processor_state.id}")
+
+        if not input_data:
+            raise ValueError("invalid input state, cannot be empty")
+
+        # if not isinstance(self.config, StateConfigStream):
+        #     raise NotImplementedError()
+
+        template = build_template_text_v2(self.template, input_data)
+
+        # TODO this such a terrible HACK to use a session id for a given processor state stream
+        if 'session_id' in input_data:
+            session_id = input_data["session_id"]
+            subject = f"processor.state.{self.output_state.id}.{session_id}"
+        else:
+            subject = f"processor.state.{self.output_state.id}"
+
+        name = f"{subject}".replace("-", "_")
+
+        # begin the processing of the prompts
+        logging.debug(f"entered streaming mode, state_id: {self.output_state.id}")
+
+        # submit to the fully qualified subject, which may include a session id
+        stream_route = self.stream_route.clone(
+            route_config_updates={
+                "subject": subject,
+                "name": name
+            }
+        )
+
+        try:
+            # submit the original request to the stream, such that it is broadcasted to all subscribers of the subject
+            # TODO this needs to be invoked at the LM processor level, pre-stream-processing
+            if 'source' in input_data:
+                await stream_route.publish(input_data['source'])
+                await stream_route.publish("<<>>SOURCE<<>>")
+
+            if 'input' in input_data:
+                await stream_route.publish(input_data['input'])
+                await stream_route.publish("<<>>INPUT<<>>")
+
+            # flush the stream to ensure the messages are sent to the stream server
+            await stream_route.flush()
+
+            # build a coroutine calling the concrete implementation of the stream
+            stream = self._stream(input_data=input_data, template=template)
+
+            # execute and iterate the yielded data directly into the upstream route
+            async for content in stream:
+                try:
+                    if isinstance(content, str):
+                        await stream_route.publish(content)
+                        await stream_route.flush()
+                    elif content is None:
+                        # Log or handle the None case if necessary
+                        logging.warning('Received NoneType content, skipping...')
+                    else:
+                        # Handle unexpected types
+                        logging.warning(f'Unexpected content type: {type(content)}')
+                except Exception as critical:
+                    # Provide more detailed exception handling
+                    logging.critical(f'Exception encountered during streaming: {critical}', exc_info=True)
+
+            # TODO this needs to be invoked at the LM processor level, post-stream-processing
+            # submit the response message to the stream.
+            await stream_route.publish("<<>>ASSISTANT<<>>")
+            await stream_route.flush()
+
+            # should gracefully close the connection
+            await stream_route.disconnect()
+
+            logging.debug(f"exit streaming mode, state_id: {self.output_state.id}")
+        except Exception as exception:
+            # submit the response message to the stream.
+            await stream_route.publish("<<>>ERROR<<>>")
+            await stream_route.flush()
             await self.fail_execute_processor_state(
                 # self.output_processor_state,
                 route_id=self.output_processor_state.id,

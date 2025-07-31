@@ -28,6 +28,23 @@ def test_make_template_with_set():
     output = utils.build_template_text_mako(tmpl, data, error_callback=error_callback)
     print(output)
 
+def test_mako_template_with_decimal():
+    content = "hello world ${test_var} and ${context.get('3a')}"
+    data = {
+        "test_var": 123.5,
+        "3a": "test",
+    }
+
+    # Define a function to handle missing values
+    def error_callback(context, key):
+        return ""
+
+    rendered_content = utils.build_template_text_mako(
+        template=content, data=data, error_callback=error_callback
+    )
+
+    print(rendered_content)
+
 def test_mako_template():
     content = """
     Hello, ${user['name']}!
