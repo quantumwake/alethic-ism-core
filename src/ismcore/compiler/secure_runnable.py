@@ -107,7 +107,7 @@ class BaseSecureRunnable(ABC):
         return result
 
     # Function to call /api/v1/query/:state
-    def query_state_data(self, state_id: str, user_id: str, filters: List[Dict]) -> Dict:
+    def query_state_data(self, state_id: str, filters: List[Dict]) -> Dict:
         base_url = "https://api.ism.quantumwake.io"
         url = f"{base_url}/api/v1/state/query/{state_id}"
 

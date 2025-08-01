@@ -525,6 +525,7 @@ def demo_example(name, code, queries):
     except Exception as e:
         print(f"Error: {type(e).__name__}: {str(e)}")
 
+
 if __name__ == "__main__":
     # Demo 1: Data Processing Pipeline
     demo_example(
