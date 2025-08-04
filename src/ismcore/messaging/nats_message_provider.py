@@ -20,6 +20,8 @@ class NATSMessageProvider(BaseRouteProvider):
             selector=route_config['selector'],
             url=route_config['url'],
             subject=route_config['subject'],
+            ack_wait=route_config['ack_wait'] if 'ack_wait' in route_config else 90,
+            batch_size=route_config['batch_size'] if 'batch_size' in route_config else 1,
             queue=route_config['queue'] if 'queue' in route_config else None, ### TODO - queue is not in the yaml file? maybe not needed for pull subscriptions but needed for requests?
             jetstream_enabled=route_config['jetstream_enabled'] if 'jetstream_enabled' in route_config else True,
             # group=route_config['group'] if 'group' in route_config else None,

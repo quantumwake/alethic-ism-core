@@ -24,6 +24,10 @@ class NATSRoute(BaseRoute, BaseModel):
     subject: str  # the channel or subject to listen on
     queue: Optional[str] = None  # the consumer queue / group to join
 
+    # timeouts and batching
+    batch_size: Optional[int] = 1  # number of messages to batch before processing
+    ack_wait: Optional[int] = 30  # time to wait for ack before considering the message failed
+
     jetstream_enabled: Optional[bool] = True
 
     # internal tracking for consumers, as each consumer needs to be unique
@@ -128,7 +132,7 @@ class NATSRoute(BaseRoute, BaseModel):
             subject=self.subject,
             durable=durable_name,
             config=ConsumerConfig(
-                ack_wait=90,
+                ack_wait=self.ack_wait,
                 deliver_policy=DeliverPolicy.ALL,
                 ack_policy=AckPolicy.EXPLICIT,
                 max_ack_pending=1000,
@@ -231,26 +235,33 @@ class NATSRoute(BaseRoute, BaseModel):
             try:
                 if self.jetstream_enabled:
                     # JetStream consumption
-                    msg = await self._js_pull_sub.fetch(batch=10, timeout=backoff_time)   # for pull based
+                    msg = await self._js_pull_sub.fetch(batch=self.batch_size, timeout=backoff_time)   # for pull based
                     if not msg:
                         raise nats.js.errors.FetchTimeoutError("no data received")
-
                 else:
                     # Standard NATS consumption
                     msg = await self._nc.request(self.subject, b'', timeout=backoff_time)
                     if not msg:
-                        raise nats.errors.TimeoutError("no data received")
+                        raise nats.aio.errors.ErrTimeout("no data received")
 
                 if isinstance(msg, list):
                     for m in msg:
+                        # Log warning if message is redelivered (JetStream only)
+                        if self.jetstream_enabled and hasattr(m, 'metadata') and m.metadata.num_delivered > 1:
+                            logger.warning(f"Message redelivered {m.metadata.num_delivered} times on subject: {self.subject}, consumer: {m.metadata.consumer}")
+
                         await self.callback(self, m, m.data.decode("utf-8"))
                 else:
+                    # Log warning if message is redelivered (JetStream only)
+                    if self.jetstream_enabled and hasattr(msg, 'metadata') and msg.metadata.num_delivered > 1:
+                        logger.warning(f"Message redelivered {msg.metadata.num_delivered} times on subject: {self.subject}, consumer: {msg.metadata.consumer}")
+
                     await self.callback(self, msg, msg.data.decode("utf-8"))
 
                 backoff_time = backoff_base  # Reset backoff time
             except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
                 raise InterruptedError(e)
-            except (nats.js.errors.FetchTimeoutError, nats.aio.errors.ErrTimeout, nats.errors.TimeoutError):
+            except (nats.js.errors.FetchTimeoutError, nats.aio.errors.ErrTimeout):
                 logger.info(f"no data received, backing off for {backoff_time} seconds...")
 
                 if not wait:
@@ -269,6 +280,7 @@ class NATSRoute(BaseRoute, BaseModel):
         # TODO should probably check durability rather then jetstream? kind of confusing but yeah. will figure this out at some point
         if self.jetstream_enabled:
             if message:
+                logger.debug(f"ack message: {message}")
                 await message.ack()
                 return True
             else:

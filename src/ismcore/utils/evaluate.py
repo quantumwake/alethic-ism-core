@@ -9,6 +9,13 @@ def hashit(input_string, length=8):
     full_hash = hashlib.sha256(input_string.encode()).hexdigest()
     return full_hash[:length]
 
+def now() -> str:
+    from datetime import datetime
+    return datetime.now().isoformat()
+
+def now_utc() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
 
 def safer_evaluate(code, allowed_vars=None, allowed_funcs=None):
     import hashlib
@@ -30,7 +37,10 @@ def safer_evaluate(code, allowed_vars=None, allowed_funcs=None):
         "_getitem_": default_guarded_getitem,
         "_getiter_": default_guarded_getiter,
         '_iter_unpack_sequence_': guarded_iter_unpack_sequence,
-        'hashit': hashit  # Add hash function to globals
+        'hashit': hashit,  # Add hash function to globals
+        'now': now,  # add date time string function
+        'utc': now_utc(),  # add date time string function (returns utc only)
+        'rand_hash': lambda x: hashit(str(random.random()) + str(x)),  # random hash function
     }
 
     if allowed_funcs:
