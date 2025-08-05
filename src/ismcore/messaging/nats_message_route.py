@@ -235,6 +235,7 @@ class NATSRoute(BaseRoute, BaseModel):
             try:
                 if self.jetstream_enabled:
                     # JetStream consumption
+                    logger.info(f"pulling messages from subject: {self.subject}, consumer: {self.consumer_id}, batch_size: {self.batch_size}")
                     msg = await self._js_pull_sub.fetch(batch=self.batch_size, timeout=backoff_time)   # for pull based
                     if not msg:
                         raise nats.js.errors.FetchTimeoutError("no data received")
@@ -245,6 +246,7 @@ class NATSRoute(BaseRoute, BaseModel):
                         raise nats.aio.errors.ErrTimeout("no data received")
 
                 if isinstance(msg, list):
+                    logger.info(f"received {len(msg)} messages on subject: {self.subject}, consumer: {self.consumer_id}")
                     for m in msg:
                         # Log warning if message is redelivered (JetStream only)
                         if self.jetstream_enabled and hasattr(m, 'metadata') and m.metadata.num_delivered > 1:

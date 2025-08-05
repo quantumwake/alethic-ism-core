@@ -1,6 +1,8 @@
 from ismcore.messaging.base_message_provider import BaseRouteProvider
 from ismcore.messaging.nats_message_route import NATSRoute
+from ismcore.utils.ism_logger import ism_logger
 
+logger = ism_logger(__name__)
 
 class NATSMessageProvider(BaseRouteProvider):
 
@@ -15,7 +17,7 @@ class NATSMessageProvider(BaseRouteProvider):
         #         stream: "??"
         #         selector: mock/route/selector/path
 
-        return NATSRoute(
+        route = NATSRoute(
             name=route_config['name'],
             selector=route_config['selector'],
             url=route_config['url'],
@@ -26,5 +28,7 @@ class NATSMessageProvider(BaseRouteProvider):
             jetstream_enabled=route_config['jetstream_enabled'] if 'jetstream_enabled' in route_config else True,
             # group=route_config['group'] if 'group' in route_config else None,
         )
+        logger.debug(f"created route: {route.name}; selector {route.selector}; subject: {route.subject}; batch: {route.batch_size}; ack_wait: {route.ack_wait}; queue: {route.queue}; jetstream_enabled: {route.jetstream_enabled}")
+        return route
 
 
