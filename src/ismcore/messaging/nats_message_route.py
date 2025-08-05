@@ -263,7 +263,7 @@ class NATSRoute(BaseRoute, BaseModel):
                 backoff_time = backoff_base  # Reset backoff time
             except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
                 raise InterruptedError(e)
-            except (nats.js.errors.FetchTimeoutError, nats.aio.errors.ErrTimeout):
+            except (nats.js.errors.FetchTimeoutError, nats.aio.errors.ErrTimeout, TimeoutError):
                 logger.info(f"no data received, backing off for {backoff_time} seconds...")
 
                 if not wait:
