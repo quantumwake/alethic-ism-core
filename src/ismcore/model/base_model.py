@@ -146,7 +146,7 @@ class Processor(BaseModel):
     provider_id: Optional[str] = None
     project_id: str
     status: ProcessorStatusCode = ProcessorStatusCode.CREATED
-    properties: Optional[str] = None
+    properties: Optional[dict] = None  # Changed from str to dict to match jsonb column
 
 
 class ProcessorState(BaseModel):
