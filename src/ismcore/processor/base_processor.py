@@ -421,6 +421,7 @@ class BaseProcessor(MonitoredProcessorState):
 
             # Apply request delay if configured
             if self.properties.requestDelay > 0:
+                logging.debug(f'processor {self.processor.id} for {self.provider.id} applying request delay of {self.properties.requestDelay} ms')
                 await asyncio.sleep(self.properties.requestDelay / 1000.0)  # Convert ms to seconds
 
             # COMPLETED: the processor has completed execution of instructions
