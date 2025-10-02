@@ -1,4 +1,5 @@
 import json
+import asyncio
 from typing import Any, List, Dict, Union
 
 from ismcore.messaging.base_message_route_model import BaseRoute
@@ -11,6 +12,7 @@ from ismcore.model.base_model import (
     ProcessorStateDirection,
     InstructionTemplate,
     ProcessorProvider,
+    ProcessorPropertiesBase,
     Processor,
     ProcessorState,
     ProcessorStatusCode)
@@ -268,6 +270,13 @@ class BaseProcessor(MonitoredProcessorState):
                      f'config: {self.config}')
 
     @property
+    def properties(self) -> ProcessorPropertiesBase:
+        """Return typed processor properties"""
+        if not self.processor.properties:
+            return ProcessorPropertiesBase()
+        return ProcessorPropertiesBase(**self.processor.properties)
+
+    @property
     def config(self) -> Union[StateConfig, StateConfigStream]:
         return self.output_state.config
 
@@ -410,6 +419,10 @@ class BaseProcessor(MonitoredProcessorState):
             else:
                 output_query_states = await self.process_input_data(input_data=input_query_state, force=force)
 
+            # Apply request delay if configured
+            if self.properties.requestDelay > 0:
+                await asyncio.sleep(self.properties.requestDelay / 1000.0)  # Convert ms to seconds
+
             # COMPLETED: the processor has completed execution of instructions
             await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
             return output_query_states
@@ -452,6 +465,10 @@ class BaseProcessor(MonitoredProcessorState):
                 await self.process_input_data_stream(input_data=input_query_state)
             else:
                 output_query_states = await self.process_input_data(input_data=input_query_state, force=force)
+
+            # Apply request delay if configured
+            if self.properties.requestDelay > 0:
+                await asyncio.sleep(self.properties.requestDelay / 1000.0)  # Convert ms to seconds
 
             # COMPLETED: the processor has completed execution of instructions
             await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
