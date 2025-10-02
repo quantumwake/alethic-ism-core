@@ -3,7 +3,7 @@ import datetime as dt
 
 from typing import Union, List
 
-from ismcore.model.base_model import SessionMessage
+from ismcore.model.base_model import SessionMessage, ProcessorPropertiesLM
 from ismcore.model.processor_state import StateConfigLM, StateConfigStream
 from ismcore.processor.base_processor import BaseProcessor
 from ismcore.utils.general_utils import build_template_text_v2
@@ -11,6 +11,7 @@ from ismcore.utils.ism_logger import ism_logger
 
 logging = ism_logger(__name__)
 
+class
 
 class BaseProcessorLM(BaseProcessor):
 
@@ -24,6 +25,13 @@ class BaseProcessorLM(BaseProcessor):
             raise ValueError(f'invalid state config, '
                              f'got {type(self.output_state.config)}, '
                              f'expected {StateConfigLM} or {StateConfigStream}')
+
+    @property
+    def properties(self) -> ProcessorPropertiesLM:
+        """Override base class to return typed LM properties"""
+        if not self.processor.properties:
+            return ProcessorPropertiesLM()
+        return ProcessorPropertiesLM(**self.processor.properties)
 
     @property
     def config(self) -> Union[StateConfigLM, StateConfigStream]:

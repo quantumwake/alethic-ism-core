@@ -140,6 +140,17 @@ class ProcessorProperty(BaseModel):
     value: Optional[str] = None
 
 
+class ProcessorPropertiesLM(BaseModel):
+    topK: Optional[int] = 0
+    topP: Optional[float] = 1.0
+    maxTokens: Optional[int] = 2048
+    temperature: Optional[float] = 0.7
+    requestDelay: Optional[int] = 500
+    repeatPenalty: Optional[float] = 1.0
+    presencePenalty: Optional[float] = 0.0
+    frequencyPenalty: Optional[float] = 0.0
+
+
 class Processor(BaseModel):
     id: Optional[str] = None
     name: Optional[str] = None
