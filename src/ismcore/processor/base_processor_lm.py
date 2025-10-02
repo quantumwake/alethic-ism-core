@@ -11,8 +11,6 @@ from ismcore.utils.ism_logger import ism_logger
 
 logging = ism_logger(__name__)
 
-class
-
 class BaseProcessorLM(BaseProcessor):
 
     def __init__(self, **kwargs):
