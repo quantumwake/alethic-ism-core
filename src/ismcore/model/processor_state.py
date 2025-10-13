@@ -360,12 +360,12 @@ class State(BaseModel):
     state_type: Optional[str] = None
 
     @model_validator(mode="after")
-    def derive_state_type(cls, state):
-        if state.config:
-            state_type = type(state.config).__name__
-            state.state_type = state_type
+    def derive_state_type(self):
+        if self.config:
+            state_type = type(self.config).__name__
+            self.state_type = state_type
 
-        return state
+        return self
 
     @model_validator(mode="before")
     def create_config(cls, value, values):
