@@ -258,6 +258,30 @@ class StateStorage:
     def save_state(self, state: State) -> State:
         raise NotImplementedError()
 
+    def load_state_metadata(self, state_id: str) -> Optional[State]:
+        """
+        Load state metadata only, without loading actual column data.
+        Memory-efficient for incremental updates where existing data isn't needed.
+        """
+        raise NotImplementedError()
+
+    def append_state_data_direct(self, state_id: str, query_states: List[Dict],
+                                scope_variable_mappings: dict = None, batch_size: int = 5000) -> State:
+        """
+        Append new rows directly to the database without loading existing data.
+        Memory-efficient for incremental updates.
+
+        Args:
+            state_id: The state ID to append data to
+            query_states: List of dictionaries containing new rows (raw, will be transformed)
+            scope_variable_mappings: Variables for evaluating callable columns in transformations
+            batch_size: Number of rows to insert per batch (default 5000)
+
+        Returns:
+            Updated state metadata (count and persisted_position updated)
+        """
+        raise NotImplementedError()
+
 
 class UsageStorage:
 

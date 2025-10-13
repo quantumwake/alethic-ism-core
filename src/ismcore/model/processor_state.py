@@ -849,12 +849,14 @@ class State(BaseModel):
     def apply_query_state(self,
                           query_state: dict,
                           skip_has_query_state: bool = False,
+                          skip_data_append: bool = False,
                           scope_variable_mappings: dict = None):
         """
         Applies a query state entry to the state object data rows and updates the indexes.
 
         :param query_state: The state information to apply.
         :param skip_has_query_state: If True, skips the check for the existence of a query state entry before applying it. Default is False.
+        :param skip_data_append: If True, skips appending data to arrays (streaming mode for memory efficiency). Default is False.
         :param scope_variable_mappings: A dictionary key-value pairs used for evaluating callable columns.
                                             For example, eval for column name version: eval(processor_state.version) to
                                             get the model version in a language model configuration.
@@ -882,11 +884,13 @@ class State(BaseModel):
         # Apply columns as specified in the query state
         self.process_and_add_columns(query_state=query_state)
 
-        # Apply row data from the query state using the helper method
-        self.process_and_add_row_data(query_state=query_state)
+        # If not skipping data append, add row data and mappings
+        if not skip_data_append:
+            # Apply row data from the query state using the helper method
+            self.process_and_add_row_data(query_state=query_state)
 
-        # Apply the state key to the mappings for constant access seek time
-        self.process_and_add_row_data_mapping(query_state=query_state)
+            # Apply the state key to the mappings for constant access seek time
+            self.process_and_add_row_data_mapping(query_state=query_state)
 
         # Post-state apply - finalize the function and return the resulting state
         return self.post_state_apply(query_state=query_state)
