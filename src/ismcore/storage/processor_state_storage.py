@@ -141,7 +141,7 @@ class ProcessorProviderStorage:
 
 class StateStorage:
     # def fetch_state_data_by_column_id(self, column_id: int) -> Optional[StateDataRowColumnData]:
-    def fetch_state_data_by_column_id(self, column_id: int, offset: int | None = None, limit: int = 1000) \
+    def fetch_state_data_by_column_id(self, column_id: int, state_count: int, offset: int | None = None, limit: int = 1000) \
             -> Optional[StateDataRowColumnData]:
         raise NotImplementedError()
 
@@ -214,7 +214,7 @@ class StateStorage:
             -> Optional[Dict[str, StateDataColumnDefinition]]:
         raise NotImplementedError()
 
-    def load_state_data(self, columns: Dict[str, StateDataColumnDefinition], offset: int | None = None, limit: int = 1000) \
+    def load_state_data(self, columns: Dict[str, StateDataColumnDefinition], state_count: int, offset: int | None = None, limit: int = 1000) \
             -> Optional[Dict[str, StateDataRowColumnData]]:
         raise NotImplementedError()
 
