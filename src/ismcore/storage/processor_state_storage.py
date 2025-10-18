@@ -265,6 +265,22 @@ class StateStorage:
         """
         raise NotImplementedError()
 
+    def fetch_state_data_chunk_for_export(self, state_id: str, offset: int, limit: int):
+        """
+        Fetch a chunk of state data directly from the database for export purposes.
+        Returns an iterator or cursor result set that yields rows in the format:
+        (column_name, data_index, data_value)
+
+        This method is optimized for streaming large datasets without loading
+        everything into memory at once.
+
+        :param state_id: The ID of the state to export
+        :param offset: Starting row index for this chunk
+        :param limit: Maximum number of rows to fetch
+        :return: Iterator yielding tuples of (column_name, data_index, data_value)
+        """
+        raise NotImplementedError()
+
     def append_state_data_direct(self, state_id: str, query_states: List[Dict],
                                 scope_variable_mappings: dict = None, batch_size: int = 5000) -> State:
         """
