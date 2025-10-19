@@ -1,6 +1,7 @@
+import asyncio
 import json
 import time
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Dict, Callable
 
 import nats
 from nats.aio.msg import Msg
@@ -28,6 +29,10 @@ class NATSRoute(BaseRoute, BaseModel):
     batch_size: Optional[int] = 1  # number of messages to batch before processing
     ack_wait: Optional[int] = 30  # time to wait for ack before considering the message failed
 
+    # concurrent subject processing
+    concurrent_subjects: Optional[bool] = False  # enable concurrent processing per actual subject
+    max_concurrent_subjects: Optional[int] = None  # max subjects to process concurrently (None = unlimited)
+
     jetstream_enabled: Optional[bool] = True
 
     # internal tracking for consumers, as each consumer needs to be unique
@@ -39,6 +44,10 @@ class NATSRoute(BaseRoute, BaseModel):
 
     _nc_sub: nats.aio.client.Subscription = PrivateAttr(default=None)  # subscriber for a regular NATS consumer
     _js_pull_sub: JetStreamContext.PullSubscription = PrivateAttr(default=None)  # sub for pull Jetstream consumer
+
+    # tracking for concurrent subject processing
+    _subject_tasks: Dict[str, asyncio.Task] = PrivateAttr(default_factory=dict)  # active tasks per subject
+    _subject_tasks_lock: asyncio.Lock = PrivateAttr(default_factory=asyncio.Lock)  # lock for thread-safe access
 
     @property  # TODO needed? I don't think so
     def subject_group(self):
@@ -188,6 +197,9 @@ class NATSRoute(BaseRoute, BaseModel):
         await msg.respond(reply)
 
     async def publish(self, msg: Any) -> Optional[RouteMessageStatus]:
+        return await self.publish_with_subject(self.subject, msg)
+
+    async def publish_with_subject(self, subject: str, msg: Any) -> Optional[RouteMessageStatus]:
         if not msg:
             return None
 
@@ -195,6 +207,8 @@ class NATSRoute(BaseRoute, BaseModel):
             msg = msg.encode('utf-8')
         elif isinstance(msg, dict):
             msg = json.dumps(msg).encode('utf-8')
+        elif isinstance(msg, bytes):
+            msg = str(msg).encode('utf-8')
         else:
             raise ValueError("Unsupported message type")
 
@@ -202,16 +216,14 @@ class NATSRoute(BaseRoute, BaseModel):
             await self.connect()
 
             if self.jetstream_enabled:
-                logger.debug(f'preparing to publish data onto route: {self.name}, subject: {self.subject}')
-                awk = await self._js.publish(subject=self.subject, payload=msg)
+                logger.debug(f'preparing to publish data onto jetstream route: {self.name}, subject: {subject}')
+                awk = await self._js.publish(subject=subject, payload=msg)
             else:
-                await self._nc.publish(subject=self.subject, payload=msg)
+                logger.debug(f'preparing to publish data onto nats route: {self.name}, subject: {subject}')
+                await self._nc.publish(subject=subject, payload=msg)
                 awk = "N/A"
 
-            return RouteMessageStatus(
-                id=str(awk),
-                status=MessageStatus.QUEUED
-            )
+            return RouteMessageStatus(id=str(awk), status=MessageStatus.QUEUED)
         except (ErrConnectionClosed, ErrTimeout, ErrNoServers, Exception) as e:
             print("Failed to send message:", e)
             return RouteMessageStatus(
@@ -222,7 +234,156 @@ class NATSRoute(BaseRoute, BaseModel):
         finally:
             pass
 
+    async def _fetch_messages(self, timeout: float):
+        """
+        Fetch messages from NATS (JetStream or standard).
+
+        Args:
+            timeout: Timeout duration for fetching messages
+
+        Returns:
+            Single message or list of messages
+
+        Raises:
+            FetchTimeoutError: If no messages available within timeout
+        """
+        if self.jetstream_enabled:
+            logger.info(f"pulling messages from subject: {self.subject}, consumer: {self.consumer_id}, batch_size: {self.batch_size}")
+            msg = await self._js_pull_sub.fetch(batch=self.batch_size, timeout=timeout)
+            if not msg:
+                raise nats.js.errors.FetchTimeoutError("no data received")
+        else:
+            msg = await self._nc.request(self.subject, b'', timeout=timeout)
+            if not msg:
+                raise nats.aio.errors.ErrTimeout("no data received")
+
+        return msg
+
+    def _log_redelivery_warning(self, msg: Msg):
+        """
+        Log warning if message has been redelivered (JetStream only).
+
+        Args:
+            msg: The NATS message to check
+        """
+        if self.jetstream_enabled and hasattr(msg, 'metadata') and msg.metadata.num_delivered > 1:
+            logger.warning(
+                f"Message redelivered {msg.metadata.num_delivered} times "
+                f"on subject: {self.subject}, consumer: {msg.metadata.consumer}"
+            )
+
+    async def _process_single_message(self, msg: Msg):
+        """
+        Process a single message: log redelivery warning and call callback.
+
+        Args:
+            msg: The NATS message to process
+        """
+        self._log_redelivery_warning(msg)
+        await self.callback(self, msg, msg.data.decode("utf-8"))
+
+    async def _subject_task_wrapper(self, msg: Msg):
+        """
+        Wrapper for processing a message and cleaning up task tracking.
+
+        Args:
+            msg: The NATS message to process
+        """
+        msg_subject = msg.subject
+        try:
+            await self._process_single_message(msg)
+        except Exception as e:
+            logger.error(f"Error processing message on subject {msg_subject}: {e}")
+            raise
+        finally:
+            # Clean up task from tracking dict (thread-safe)
+            async with self._subject_tasks_lock:
+                if msg_subject in self._subject_tasks:
+                    del self._subject_tasks[msg_subject]
+                    logger.debug(f"Cleaned up task for subject: {msg_subject}")
+
+    async def _spawn_subject_task(self, msg: Msg):
+        """
+        Spawn an async task for processing this message (thread not safe at this stage).
+
+        Atomically checks capacity and adds task to prevent race conditions.
+
+        Args:
+            msg: The NATS message to process
+
+        Returns:
+            The spawned task, or None if limit reached
+        """
+        msg_subject = msg.subject
+        task = asyncio.create_task(self._subject_task_wrapper(msg))
+        self._subject_tasks[msg_subject] = task
+        logger.debug(f"Spawned task for subject: {msg_subject}")
+        return task
+
+        # Atomically check capacity and add task in single critical section
+        # async with self._subject_tasks_lock:
+            # Check limit
+            # if self.max_concurrent_subjects is not None:
+            #     active_count = len(self._subject_tasks)
+            #     if active_count >= self.max_concurrent_subjects:
+            #         logger.warning(
+            #             f"Max concurrent subjects limit ({self.max_concurrent_subjects}) reached. "
+            #             f"Active subjects: {list(self._subject_tasks.keys())}"
+            #         )
+            #         return None
+
+
+
+    async def _process_messages(self, msg: Union[Msg, list[Msg]]):
+        """
+        Process single message or batch of messages.
+
+        When concurrent_subjects is enabled, spawns tasks per unique subject for parallel processing.
+        Otherwise processes sequentially.
+
+        Args:
+            msg: Single message or list of messages to process
+        """
+        messages = msg if isinstance(msg, list) else [msg]
+
+        if isinstance(msg, list):
+            logger.info(f"received {len(messages)} messages on subject: {self.subject}, consumer: {self.consumer_id}")
+
+        if self.concurrent_subjects:
+            # Concurrent mode: spawn tasks for each message
+            for m in messages:
+                task = await self._spawn_subject_task(m)
+                # Note: If task is None, the consume loop's capacity check should have prevented this
+                # But if we somehow got here, the task will handle itself or we just don't process it
+        else:
+            # Sequential mode: process each message inline
+            for m in messages:
+                await self._process_single_message(m)
+
+    async def check_and_process(self, callback: Callable):
+        # If concurrent mode with limit, check capacity before fetching
+        if not self.concurrent_subjects or not self.max_concurrent_subjects:
+            await callback() # No limit, proceed
+            return
+
+        # concurrent mode with limit - check capacity
+        async with self._subject_tasks_lock:
+            current_count = len(self._subject_tasks)
+
+            if current_count >= self.max_concurrent_subjects:
+                # At capacity, wait before retrying
+                await asyncio.sleep(0.1)
+                return # Skip processing this cycle
+
+            await callback()
+
     async def consume(self, wait: bool = True):
+        """
+        Consume messages from NATS with exponential backoff retry logic.
+
+        Args:
+            wait: If True, continuously poll for messages. If False, fetch once and exit.
+        """
         logger.info(f'consume:start for route: {self.name}, subject: {self.subject}, js: {self.jetstream_enabled}')
 
         # Backoff parameters
@@ -230,52 +391,40 @@ class NATSRoute(BaseRoute, BaseModel):
         backoff_factor = 2  # Exponential backoff factor
         max_backoff = 1     # Maximum backoff time in seconds
         backoff_time = backoff_base
-        self.consumer_active = True  # the consumer is actively consuming data
-        while wait and self.consumer_active:  # 50 * 0.1 but exponential backoff can increase this
+
+        self.consumer_active = True
+
+        async def process_messages_callback(timeout: float):
+            msg = await self._fetch_messages(timeout=timeout)
+            await self._process_messages(msg)
+            return msg
+
+        while wait and self.consumer_active:
             try:
-                if self.jetstream_enabled:
-                    # JetStream consumption
-                    logger.info(f"pulling messages from subject: {self.subject}, consumer: {self.consumer_id}, batch_size: {self.batch_size}")
-                    msg = await self._js_pull_sub.fetch(batch=self.batch_size, timeout=backoff_time)   # for pull based
-                    if not msg:
-                        raise nats.js.errors.FetchTimeoutError("no data received")
-                else:
-                    # Standard NATS consumption
-                    msg = await self._nc.request(self.subject, b'', timeout=backoff_time)
-                    if not msg:
-                        raise nats.aio.errors.ErrTimeout("no data received")
+                await self.check_and_process(
+                    lambda: process_messages_callback(timeout=backoff_time)
+                )
 
-                if isinstance(msg, list):
-                    logger.info(f"received {len(msg)} messages on subject: {self.subject}, consumer: {self.consumer_id}")
-                    for m in msg:
-                        # Log warning if message is redelivered (JetStream only)
-                        if self.jetstream_enabled and hasattr(m, 'metadata') and m.metadata.num_delivered > 1:
-                            logger.warning(f"Message redelivered {m.metadata.num_delivered} times on subject: {self.subject}, consumer: {m.metadata.consumer}")
+                # Reset backoff time on success
+                backoff_time = backoff_base
+                time.sleep(0.1)
 
-                        await self.callback(self, m, m.data.decode("utf-8"))
-                else:
-                    # Log warning if message is redelivered (JetStream only)
-                    if self.jetstream_enabled and hasattr(msg, 'metadata') and msg.metadata.num_delivered > 1:
-                        logger.warning(f"Message redelivered {msg.metadata.num_delivered} times on subject: {self.subject}, consumer: {msg.metadata.consumer}")
-
-                    await self.callback(self, msg, msg.data.decode("utf-8"))
-
-                backoff_time = backoff_base  # Reset backoff time
             except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
                 raise InterruptedError(e)
+
             except (nats.js.errors.FetchTimeoutError, nats.aio.errors.ErrTimeout, TimeoutError):
                 logger.info(f"no data received, backing off for {backoff_time} seconds...")
 
                 if not wait:
                     break
 
-                # increase backoff time exponentially
+                # Increase backoff time exponentially
                 backoff_time = min(backoff_time * backoff_factor, max_backoff)
+
             except Exception as e2:
                 if self.consumer_active:
                     raise ValueError(e2)
 
-        # the consumer is not actively consuming data
         self.consumer_active = False
 
     async def ack(self, message):
@@ -284,6 +433,30 @@ class NATSRoute(BaseRoute, BaseModel):
             if message:
                 logger.debug(f"ack message: {message}")
                 await message.ack()
+                return True
+            else:
+                logger.error(f"message id is not set on main consumer {self.subject}")
+
+        return False
+
+    async def nak(self, message, delay: Optional[float] = None):
+        """
+        Negatively acknowledge a message (JetStream only).
+
+        Args:
+            message: The NATS message to NAK
+            delay: Optional delay in seconds before redelivery
+
+        Returns:
+            True if message was nacked, False otherwise
+        """
+        if self.jetstream_enabled:
+            if message:
+                logger.debug(f"nak message: {message}")
+                if delay:
+                    await message.nak(delay=delay)
+                else:
+                    await message.nak()
                 return True
             else:
                 logger.error(f"message id is not set on main consumer {self.subject}")

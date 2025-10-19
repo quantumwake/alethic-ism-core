@@ -47,6 +47,9 @@ class BaseRoute(BaseModel):
     async def publish(self, msg: str) -> Optional[RouteMessageStatus]:
         raise NotImplementedError()
 
+    async def publish_with_subject(self, subject: str, msg: str) -> Optional[RouteMessageStatus]:
+        raise NotImplementedError()
+
     async def consume(self, wait: bool = True):
         raise NotImplementedError()
 
