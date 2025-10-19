@@ -141,8 +141,8 @@ class ProcessorProperty(BaseModel):
 
 
 class ProcessorPropertiesBase(BaseModel):
-    requestDelay: Optional[int] = 0
-
+    maxBatchSize: Optional[int] = 100
+    maxBatchLimit: Optional[int] = 1
 
 class ProcessorPropertiesLM(ProcessorPropertiesBase):
     topK: Optional[int] = 0
@@ -152,7 +152,7 @@ class ProcessorPropertiesLM(ProcessorPropertiesBase):
     repeatPenalty: Optional[float] = 1.0
     presencePenalty: Optional[float] = 0.0
     frequencyPenalty: Optional[float] = 0.0
-
+    requestDelay: Optional[int] = 0
 
 class Processor(BaseModel):
     id: Optional[str] = None

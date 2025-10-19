@@ -237,6 +237,13 @@ class BaseProcessor(MonitoredProcessorState):
 
         return None
 
+    @property
+    def properties(self) -> ProcessorPropertiesBase:
+        """Override base class to return typed base properties"""
+        if not self.processor.properties:
+            return ProcessorPropertiesBase()
+        return ProcessorPropertiesBase(**self.processor.properties)
+
     def __init__(self,
                  output_state: State,
                  state_machine_storage: StateMachineStorage,
