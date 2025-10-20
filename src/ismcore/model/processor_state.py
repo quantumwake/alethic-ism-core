@@ -108,6 +108,8 @@ class BaseStateConfig(BaseModel):
     # to handle batch inputs as they see fit.
     flag_enable_execute_set: Optional[bool] = False
 
+    # If True, the upstream method will receive the entire set of inherited entries
+    flag_enable_execute_set_inherit_set: Optional[bool] = False
     # flag_flatten_input: Optional[bool] = False
 
 
@@ -967,8 +969,9 @@ class State(BaseModel):
         if additional_query_state:
             base_state = {**additional_query_state}
 
-        # Handle execute-set flag on input_data
-        if self.config.flag_enable_execute_set and isinstance(input_data, list):
+        # Handle execute-set flag on input_data if enabled
+        # Serialize list to avoid dot-product if necessary
+        if self.config.flag_enable_execute_set and self.config.flag_enable_execute_set_inherit_set and isinstance(input_data, list):
             if len(input_data) == 1:
                 input_data = input_data[0]
             else:
