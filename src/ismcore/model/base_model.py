@@ -162,7 +162,6 @@ class Processor(BaseModel):
     status: ProcessorStatusCode = ProcessorStatusCode.CREATED
     properties: Optional[dict] = None  # Changed from str to dict to match jsonb column
 
-
 class ProcessorState(BaseModel):
     internal_id: Optional[int] = None
     id: Optional[str] = None
