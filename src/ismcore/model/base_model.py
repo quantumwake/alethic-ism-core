@@ -243,17 +243,28 @@ class Usage(BaseModel):
 
 
 class UsageReport(BaseModel):
-    user_id: str
-    resource_id: Optional[str] = None
-    resource_type: Optional[str] = None
-    project_id: Optional[str] = None
-    day: Optional[int] = None
-    month: Optional[int] = None
-    year: Optional[int] = None
-    unit_type: Optional[str] = None
-    unit_subtype: Optional[str] = None
-    total: int
-    total_cost: Optional[float] = 0.0
+    user_id: str # the user id for whom the report is generated
+    resource_id: Optional[str] = None # added resource_id for more granular reporting (which resource accumulated the usage)
+    resource_type: Optional[str] = None # added resource_type for more granular reporting (which resource type "provider" accumulated the usage)
+    project_id: Optional[str] = None # added project_id for more granular reporting
+    minute: Optional[int] = None # added minute for more granular reporting (might be None for hourly reports)
+    hour: Optional[int] = None # added hour for more granular reporting (might be None for daily reports)
+    day: Optional[int] = None # added day for more granular reporting (might be None for monthly reports)
+    month: Optional[int] = None # added month for more granular reporting (might be None for yearly reports)
+    year: Optional[int] = None # added year for more granular reporting (should always be present, even for daily reports)
+    unit_type: Optional[str] = None # the unit type, e.g., TOKEN, might be something different in the future
+    input_cost_divisor : Optional[float] = 1000.0 # the cost divisor used per N tokens for input cost calculations
+    input_price: Optional[float] = 0.0 # price per N input tokens as per input_cost_divisor
+    input_tokens: Optional[int] = 0 # total input tokens used
+    input_cost: Optional[float] = 0.0 # total input cost calculated
+    input_count: Optional[int] = 0 # total input events counted
+    output_cost_divisor : Optional[float] = 1000.0  # the cost divisor used per N tokens for output cost calculations
+    output_price: Optional[float] = 0.0 # price per N output tokens as per output_cost_divisor
+    output_tokens: Optional[int] = 0 # total output tokens used
+    output_cost: Optional[float] = 0.0 # total output cost calculated
+    output_count: Optional[int] = 0 # total output events counted
+    total_tokens: Optional[int] = 0 # total tokens used (input_tokens + output_tokens)
+    total_cost: Optional[float] = 0.0 # total cost calculated (input_cost + output_cost)
 
 
 class UsageReportInstant(BaseModel):
