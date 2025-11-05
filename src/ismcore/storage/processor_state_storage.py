@@ -307,13 +307,13 @@ class UsageStorage:
     def fetch_usage_report_hourly(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
         raise NotImplementedError()
 
-    def fetch_usage_report_daily(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
+    def fetch_usage_report_daily(self, user_id, project_id, resource_id, resource_type, year, month, day) -> List[UsageReport]:
         raise NotImplementedError()
 
-    def fetch_usage_report_monthly(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
+    def fetch_usage_report_monthly(self, user_id, project_id, resource_id, resource_type, year, month) -> List[UsageReport]:
         raise NotImplementedError()
 
-    def fetch_usage_report_yearly(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
+    def fetch_usage_report_yearly(self, user_id, project_id, resource_id, resource_type, year) -> List[UsageReport]:
         raise NotImplementedError()
 
     # def fetch_usage_instant(self,
