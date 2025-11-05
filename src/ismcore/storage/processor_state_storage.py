@@ -36,11 +36,24 @@ logging = ism_logger(__name__)
 
 
 class FieldConfig:
-    def __init__(self, field_name: str, value: Optional[Any], use_in_where: bool, use_in_group_by: bool):
-        self.field_name = field_name  # Add field name to the class
+    def __init__(self, field_name: str, value: Optional[Any] = None, use_in_where: bool = False,
+                 use_in_group_by: bool = False, aggregate: Optional[str] = None):
+        """
+        Configuration for a field in a dynamic query.
+
+        Args:
+            field_name: Name of the field/column
+            value: Value to filter on (used with use_in_where)
+            use_in_where: Whether to include this field in WHERE clause
+            use_in_group_by: Whether to include this field in GROUP BY clause
+            aggregate: Optional aggregate function (e.g., 'SUM', 'MAX', 'AVG', 'COUNT', 'MIN')
+                      If specified, the field will be aggregated in SELECT clause
+        """
+        self.field_name = field_name
         self.value = value
         self.use_in_where = use_in_where
         self.use_in_group_by = use_in_group_by
+        self.aggregate = aggregate
 
 
 
