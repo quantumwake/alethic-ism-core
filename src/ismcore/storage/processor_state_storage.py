@@ -301,6 +301,21 @@ class StateStorage:
 
 class UsageStorage:
 
+    def fetch_usage_report_minutely(self, user_id, project_id, resource_id, resource_type, year, month, day, hour, minute) -> List[UsageReport]:
+        raise NotImplementedError()
+
+    def fetch_usage_report_hourly(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
+        raise NotImplementedError()
+
+    def fetch_usage_report_daily(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
+        raise NotImplementedError()
+
+    def fetch_usage_report_monthly(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
+        raise NotImplementedError()
+
+    def fetch_usage_report_yearly(self, user_id, project_id, resource_id, resource_type, year, month, day, hour) -> List[UsageReport]:
+        raise NotImplementedError()
+
     # def fetch_usage_instant(self,
     #                         user_id: FieldConfig,
     #                         project_id: Optional[FieldConfig] = None,
@@ -308,19 +323,19 @@ class UsageStorage:
     #                         end_date: Optional[FieldConfig] = None) -> Optional[UsageReportInstant]:
     #     raise NotImplementedError()
 
-    def fetch_usage_report(
-            self,
-            user_id: FieldConfig,
-            project_id: Optional[FieldConfig] = None,
-            resource_id: Optional[FieldConfig] = None,
-            resource_type: Optional[FieldConfig] = None,
-            year: Optional[FieldConfig] = None,
-            month: Optional[FieldConfig] = None,
-            day: Optional[FieldConfig] = None,
-            unit_type: Optional[FieldConfig] = None,
-            unit_subtype: Optional[FieldConfig] = None
-    ) -> List[UsageReport]:
-        raise NotImplementedError()
+    # def fetch_usage_report(
+    #         self,
+    #         user_id: FieldConfig,
+    #         project_id: Optional[FieldConfig] = None,
+    #         resource_id: Optional[FieldConfig] = None,
+    #         resource_type: Optional[FieldConfig] = None,
+    #         year: Optional[FieldConfig] = None,
+    #         month: Optional[FieldConfig] = None,
+    #         day: Optional[FieldConfig] = None,
+    #         unit_type: Optional[FieldConfig] = None,
+    #         unit_subtype: Optional[FieldConfig] = None
+    # ) -> List[UsageReport]:
+    #     raise NotImplementedError()
 
     # def fetch_usage_report_user(self, user_id: str) -> List[UsageReport]:
     #     raise NotImplementedError()
