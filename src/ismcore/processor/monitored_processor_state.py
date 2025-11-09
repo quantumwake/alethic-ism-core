@@ -5,7 +5,8 @@ from typing import Any
 from nats.aio.msg import Msg
 
 from ismcore.messaging.base_message_route_model import BaseRoute
-from ismcore.model.base_model import Usage, UnitType, UnitSubType, ProcessorStatusCode
+from ismcore.model.base_model import ProcessorStatusCode
+from ismcore.model.base_model_usage_and_limits import Usage, UnitType, UnitSubType
 from ismcore.utils.ism_logger import ism_logger
 
 logging = ism_logger(__name__)
@@ -24,23 +25,31 @@ class MonitoredUsage:
         result = await self.usage_route.publish(json_dump)
         return result
 
-    async def send_usage_input_tokens(self, count: int):
+    async def send_usage_input_tokens(self, count: int, metadata: dict = None):
         # track input token count
-        usage = Usage(
-            resource_id=self.processor.id, resource_type=self.provider.id,
-            transaction_time=dt.datetime.utcnow(), project_id=self.processor.project_id,
-            unit_type=UnitType.TOKEN, unit_subtype=UnitSubType.INPUT, unit_count=count,
-        )
-        await self.publish_usage(usage)
+        await self.publish_usage(Usage(
+            resource_id=self.processor.id,
+            resource_type=self.provider.id,
+            transaction_time=dt.datetime.now(dt.UTC),
+            project_id=self.processor.project_id,
+            unit_type=UnitType.TOKEN,
+            unit_subtype=UnitSubType.INPUT,
+            unit_count=count,
+            metadata=metadata,
+        ))
 
-    async def send_usage_output_tokens(self, count: int):
+    async def send_usage_output_tokens(self, count: int, metadata: dict = None):
         # track output token count
-        usage = Usage(
-            resource_id=self.processor.id, resource_type=self.provider.id,
-            transaction_time=dt.datetime.utcnow(), project_id=self.processor.project_id,
-            unit_type=UnitType.TOKEN, unit_subtype=UnitSubType.OUTPUT, unit_count=count,
-        )
-        await self.publish_usage(usage)
+        await self.publish_usage(Usage(
+            resource_id=self.processor.id,
+            resource_type=self.provider.id,
+            transaction_time=dt.datetime.now(dt.UTC),
+            project_id=self.processor.project_id,
+            unit_type=UnitType.TOKEN,
+            unit_subtype=UnitSubType.OUTPUT,
+            unit_count=count,
+            metadata=metadata,
+        ))
 
 
 class MonitoredProcessorState:

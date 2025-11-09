@@ -18,10 +18,14 @@ from ismcore.model.base_model import (
     ProcessorProperty,
     ProcessorStatusCode,
     MonitorLogEvent,
-    UsageReport,
     Session,
     SessionMessage,
     StateActionDefinition,
+)
+from ismcore.model.base_model_usage_and_limits import (
+    Usage,
+    UsageReport,
+    UserProjectCurrentUsageReport
 )
 from ismcore.model.processor_state import (
     State,
@@ -329,32 +333,8 @@ class UsageStorage:
     def fetch_usage_report_yearly(self, user_id, project_id, resource_id, resource_type, year) -> List[UsageReport]:
         raise NotImplementedError()
 
-    # def fetch_usage_instant(self,
-    #                         user_id: FieldConfig,
-    #                         project_id: Optional[FieldConfig] = None,
-    #                         start_date: Optional[FieldConfig] = None,
-    #                         end_date: Optional[FieldConfig] = None) -> Optional[UsageReportInstant]:
-    #     raise NotImplementedError()
-
-    # def fetch_usage_report(
-    #         self,
-    #         user_id: FieldConfig,
-    #         project_id: Optional[FieldConfig] = None,
-    #         resource_id: Optional[FieldConfig] = None,
-    #         resource_type: Optional[FieldConfig] = None,
-    #         year: Optional[FieldConfig] = None,
-    #         month: Optional[FieldConfig] = None,
-    #         day: Optional[FieldConfig] = None,
-    #         unit_type: Optional[FieldConfig] = None,
-    #         unit_subtype: Optional[FieldConfig] = None
-    # ) -> List[UsageReport]:
-    #     raise NotImplementedError()
-
-    # def fetch_usage_report_user(self, user_id: str) -> List[UsageReport]:
-    #     raise NotImplementedError()
-    #
-    # def fetch_usage_report_project(self, project_id: str) -> List[UsageReport]:
-    #     raise NotImplementedError()
+    def fetch_user_project_current_usage_report(self, user_id: str) -> UserProjectCurrentUsageReport | None:
+        raise NotImplementedError()
 
 
 class ProcessorStorage:

@@ -374,32 +374,37 @@ class BaseProcessor(MonitoredProcessorState):
             return False
 
         # ensure that the processor status is not in terminated state
-        if processor.status in [ProcessorStatusCode.TERMINATE,
-                                ProcessorStatusCode.FAILED,
-                                ProcessorStatusCode.STOPPED]:
-            return False
+        if processor.status in [
+            ProcessorStatusCode.TERMINATE,
+            ProcessorStatusCode.FAILED,
+            ProcessorStatusCode.STOPPED
+        ]: return False
 
         # check usage limits
+        ## TODO add project id to processor model so we do not need to fetch processor again (OR CACHE THIS IN THE DB STORAGE SIMILAR TO ALETHIC-ISM-CORE-GO sdk)
         project = self.storage.fetch_user_project(project_id=processor.project_id)
         if not project:
-            logging.error(f'critical, unable to find project id: {processor.project_id}, '
-                          f'likely a storage implementation issue, should have not got this far.')
+            logging.error(f'critical, unable to find project id: {processor.project_id} for processor id: {self.processor.id}')
             return False
 
-        user = self.storage.fetch_user_profile(user_id=project.user_id)
-        usage = self.storage.fetch_usage_report(
-            user_id=FieldConfig(
-                field_name="user_id",
-                value=project.user_id,
-                use_in_group_by=True,
-                use_in_where=True
-            )
-        )
+        ##
+        user_id = project.user_id
+        # project_id = project.id   ## TODO use this later when we add project based tiers
+        # processor_provider = self.storage.fetch_processor_provider(id=processor.provider_id) ## TODO use this later when we add processor based tiers
 
-        if usage and usage[0].total >= user.max_agentic_units:
-            logging.warning(f'usage limit reached for user: {user.user_id}, '
-                            f'total: {usage[0].total}, max limit: {user.max_agentic_units}')
-            return False
+        ## TODO need to check the user limits in addition to project limits, we need to add tiers per project as well; and we also need to add tiers per user&project&processor if any
+        user_current_usage = self.storage.fetch_user_project_current_usage_report(user_id=project.user_id)
+        if not user_current_usage:
+            logging.info(f"user has no usage yet, allowing processing for user: {project.user_id}")
+        else:
+            decision, ok = user_current_usage.is_allowed()
+            if decision == "ok":
+                logging.debug(f'user usage within limits for user: {user_id} - allowing processing {decision}')
+            elif decision == "warn":
+                logging.warning(f'usage limit approaching for user: {user_id} - allowing processing {decision}')
+            elif decision == "block":
+                logging.warning(f'usage limit reached for user: {user_id} - blocking processing {decision}')
+                return False
 
         return True
 
