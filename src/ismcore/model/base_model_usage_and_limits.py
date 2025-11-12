@@ -60,9 +60,28 @@ Decision = Literal["ok", "warn", "block"]
 
 class UserProjectCurrentUsageReport(BaseModel):
     """Represents the current usage % per user/project vs. tier limits."""
-
     user_id: str
     project_id: Optional[str] = None
+
+    ### tier / quota details
+    limit_token_per_minute:   Optional[int] = None
+    limit_token_per_hour:     Optional[int] = None
+    limit_token_per_day:      Optional[int] = None
+    limit_token_per_month:    Optional[int] = None
+    limit_token_per_year:     Optional[int] = None
+
+    limit_cost_per_minute:    Optional[float] = None
+    limit_cost_per_hour:      Optional[float] = None
+    limit_cost_per_day:       Optional[float] = None
+    limit_cost_per_month:     Optional[float] = None
+    limit_cost_per_year:      Optional[float] = None
+
+    ### calculated cost for given period (indicates the current period, as in current minute, current hour, current day, ...)
+    cur_minute_total_cost:    Optional[float] = Field(None)
+    cur_hour_total_cost:      Optional[float] = Field(None)
+    cur_day_total_cost:       Optional[float] = Field(None)
+    cur_month_total_cost:     Optional[float] = Field(None)
+    cur_year_total_cost:      Optional[float] = Field(None)
 
     # token % used
     pct_minute_tokens_used: Optional[float] = Field(None, description="0..100, NULL if no minute cap")
