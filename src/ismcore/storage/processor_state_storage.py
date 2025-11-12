@@ -333,7 +333,7 @@ class UsageStorage:
     def fetch_usage_report_yearly(self, user_id, project_id, resource_id, resource_type, year) -> List[UsageReport]:
         raise NotImplementedError()
 
-    def fetch_user_project_current_usage_report(self, user_id: str) -> UserProjectCurrentUsageReport | None:
+    def fetch_user_project_current_usage_report(self, user_id: str, project_id: str = None) -> UserProjectCurrentUsageReport | None:
         raise NotImplementedError()
 
 
