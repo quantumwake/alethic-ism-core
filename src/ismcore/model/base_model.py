@@ -166,6 +166,7 @@ class ProcessorPropertiesLM(ProcessorPropertiesBase):
     repeatPenalty: Optional[float] = 1.0
     presencePenalty: Optional[float] = 0.0
     frequencyPenalty: Optional[float] = 0.0
+    override_base_url: Optional[str] = None
 
 class Processor(BaseModel):
     id: Optional[str] = None

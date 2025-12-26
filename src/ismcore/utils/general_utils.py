@@ -11,7 +11,6 @@ from typing import Union, Dict, Any, Optional
 
 from ismcore.model.base_model import InstructionTemplate
 from ismcore.utils.ism_logger import ism_logger
-from ismcore.utils.map_utils import flatten
 
 logging = ism_logger(__name__)
 
@@ -436,8 +435,8 @@ def parse_response(raw_response: str):
     # if the parsed data is
     if data_parse_status:
         if 'json' == data_type:
-            flattened = flatten(data_parsed)
-            return flattened, data_type, raw_response  # TODO extract the list of column names
+            # Note: flattening is now handled in State.pre_state_apply() based on flag_flatten_on_save
+            return data_parsed, data_type, raw_response
         elif 'csv' == data_type:
             raise ValueError(f'unsupported csv format, need to fix the _parse_response_csv(.) function')
 

@@ -110,7 +110,10 @@ class BaseStateConfig(BaseModel):
 
     # If True, the upstream method will receive the entire set of inherited entries
     flag_enable_execute_set_inherit_set: Optional[bool] = False
-    # flag_flatten_input: Optional[bool] = False
+
+    # If True (default), flatten complex types (dict, list) to dot-notation columns.
+    # If False, store complex types as JSON strings in their column (DATA_JSON_VALUE).
+    flag_flatten_on_save: Optional[bool] = True
 
 
 class StateConfig(BaseStateConfig):
@@ -637,13 +640,25 @@ class State(BaseModel):
             if not query_state:
                 return []
 
+            def infer_data_type(value):
+                if isinstance(value, bool):
+                    return 'bool'
+                elif isinstance(value, int):
+                    return 'int'
+                elif isinstance(value, float):
+                    return 'float'
+                elif isinstance(value, (dict, list)):
+                    return 'json'
+                return 'str'
+
             columns = []
             for name, value in query_state.items():
                 column_name = clean_string_for_ddl_naming(name)
                 if not column_name:
                     logging.warning(f'skipping column `{name}`, it is not a valid name')
                 elif column_name not in self.columns:
-                    column = StateDataColumnDefinition(name=name)
+                    data_type = infer_data_type(value)
+                    column = StateDataColumnDefinition(name=name, data_type=data_type)
                     columns.append(column)
                 else:
                     logging.debug(f'column {column_name} already exists in query state {query_state}')
@@ -1171,6 +1186,20 @@ class State(BaseModel):
 
         return output_query_state
 
+    def _serialize_complex_values(self, query_state: dict) -> dict:
+        """
+        Pass through complex types (dict, list) without flattening.
+        Used when flag_flatten_on_save is False.
+        JSON serialization happens at the storage layer.
+        """
+        return query_state
+
+    def _should_flatten_on_save(self) -> bool:
+        """Check if complex types should be flattened on save (default True)."""
+        if self.config and hasattr(self.config, 'flag_flatten_on_save'):
+            return self.config.flag_flatten_on_save if self.config.flag_flatten_on_save is not None else True
+        return True
+
     def pre_state_apply(self, query_state: dict) -> dict:
         # clean up column names ensure they are standardized
         query_state = {clean_string_for_ddl_naming(key): val for key, val in query_state.items()}
@@ -1180,6 +1209,19 @@ class State(BaseModel):
 
         # apply any templates using the query state as the primary source of information
         query_state = self.apply_template_variables(query_state=query_state)
+
+        # Handle complex types based on flag_flatten_on_save
+        if self._should_flatten_on_save():
+            # Default behavior: flatten complex types to dot-notation columns
+            query_state = ismcore.utils.map_utils.flatten(query_state)
+            # flatten may return a list if there were list values, normalize to single dict
+            if isinstance(query_state, list):
+                # If flatten returns multiple rows, use the first one
+                # Note: proper handling of multiple rows would need separate apply calls
+                query_state = query_state[0] if query_state else {}
+        else:
+            # New behavior: serialize complex types to JSON strings
+            query_state = self._serialize_complex_values(query_state)
 
         return query_state
 
