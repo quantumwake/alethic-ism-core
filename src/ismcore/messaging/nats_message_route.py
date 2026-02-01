@@ -271,6 +271,8 @@ class NATSRoute(BaseRoute, BaseModel):
 
                 # increase backoff time exponentially
                 backoff_time = min(backoff_time * backoff_factor, max_backoff)
+            except ValueError as e:
+                logger.critical(f"failed to process message, ignoring: {e}")
             except Exception as e2:
                 if self.consumer_active:
                     raise ValueError(e2)

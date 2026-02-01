@@ -15,7 +15,8 @@ from ismcore.model.base_model import (
     ProcessorPropertiesBase,
     Processor,
     ProcessorState,
-    ProcessorStatusCode)
+    ProcessorStatusCode,
+    EdgeFunctionConfig)
 from ismcore.model.processor_state import (
     State,
     StateDataRowColumnData,
@@ -31,7 +32,8 @@ logging = ism_logger(__name__)
 class StatePropagationProvider:
     async def apply_state(self, processor: 'BaseProcessor',
                           input_query_state: Any,
-                          output_query_states: [dict]) -> [dict]:
+                          output_query_states: [dict],
+                          input_route_id: str = None) -> [dict]:
         raise NotImplementedError()
 
 
@@ -43,7 +45,8 @@ class StatePropagationProviderRouter(StatePropagationProvider):
     async def apply_state(self,
                           processor: 'BaseProcessor',
                           input_query_state: Any,
-                          output_query_states: [dict]) -> [dict]:
+                          output_query_states: [dict],
+                          input_route_id: str = None) -> [dict]:
         """
         Route the processed new query states from the response to a synchronization topic
 
@@ -51,6 +54,7 @@ class StatePropagationProviderRouter(StatePropagationProvider):
             processor (List[Dict]): The processor instance that is processing this input query state entry
             input_query_state (Any): The initial input query state.
             output_query_states (List[Dict]): The processed output query states.
+            input_route_id (str): The input route id where the input came from (for calibration/retry).
 
         Returns:
             List[Any]: The result of applying the query states to the output state.
@@ -59,6 +63,7 @@ class StatePropagationProviderRouter(StatePropagationProvider):
         # create a new message for routing purposes
         route_message = {
             "route_id": processor.output_processor_state.id,
+            "input_route_id": input_route_id,
             "type": "query_state_route",
             "input_query_state": input_query_state,
             "query_state": output_query_states
@@ -84,7 +89,8 @@ class StatePropagationProviderRouterStateRouter(StatePropagationProviderRouter):
     async def apply_state(self,
                           processor: 'BaseProcessor',
                           input_query_state: Any,
-                          output_query_states: [dict]) -> [dict]:
+                          output_query_states: [dict],
+                          input_route_id: str = None) -> [dict]:
         """
         Persists the processed new query states from the response.
 
@@ -92,6 +98,7 @@ class StatePropagationProviderRouterStateRouter(StatePropagationProviderRouter):
             processor (List[Dict]): Processor instance that is processing this input query state entry
             input_query_state (Any): Initial input query state.
             output_query_states (List[Dict]): Processed output states given the input, for a processor id.
+            input_route_id (str): The input route id where the input came from (for calibration/retry).
 
         Returns:
             List[Any]: The result of applying the query states to the output state.
@@ -124,10 +131,12 @@ class StatePropagationProviderRouterStateRouter(StatePropagationProviderRouter):
             return
 
         # iterate and send query states to next hops
+        # include input_route_id for calibration/retry support
         [await self.route.publish(json.dumps(
             {
                 "type": "query_state_entry",
                 "route_id": forward_route.id,
+                "input_route_id": input_route_id,
                 "query_state": output_query_states,
             }
         )) for forward_route in forward_routes]
@@ -137,7 +146,8 @@ class StatePropagationProviderRouterStateSyncStore(StatePropagationProviderRoute
     async def apply_state(self,
                           processor: 'BaseProcessor',
                           input_query_state: Any,
-                          output_query_states: [dict]) -> [dict]:
+                          output_query_states: [dict],
+                          input_route_id: str = None) -> [dict]:
         """
         Persists the processed new query states from the response.
 
@@ -145,6 +155,7 @@ class StatePropagationProviderRouterStateSyncStore(StatePropagationProviderRoute
             processor (List[Dict]): The processor instance that is processing this input query state entry
             input_query_state (Any): The initial input query state.
             output_query_states (List[Dict]): The processed output query states.
+            input_route_id (str): The input route id where the input came from (for calibration/retry).
 
         Returns:
             List[Any]: The result of applying the query states to the output state.
@@ -159,6 +170,7 @@ class StatePropagationProviderRouterStateSyncStore(StatePropagationProviderRoute
             processor=processor,
             input_query_state=input_query_state,
             output_query_states=output_query_states,
+            input_route_id=input_route_id,
         )
 
 
@@ -167,7 +179,8 @@ class StatePropagationProviderCore(StatePropagationProvider):
     async def apply_state(self,
                           processor: 'BaseProcessor',
                           input_query_state: Any,
-                          output_query_states: [dict]) -> [dict]:
+                          output_query_states: [dict],
+                          input_route_id: str = None) -> [dict]:
         """
         Writes the output_query_states to the state object, in memory
 
@@ -175,6 +188,7 @@ class StatePropagationProviderCore(StatePropagationProvider):
             processor (List[Dict]): The processor instance that is processing this input query state entry
             input_query_state (Any): The initial input query state.
             output_query_states (List[Dict]): The processed output query states.
+            input_route_id (str): The input route id where the input came from (for calibration/retry).
 
         Returns:
             List[Any]: The result of applying the query states to the output state.
@@ -191,36 +205,100 @@ class StatePropagationProviderCore(StatePropagationProvider):
         ) for query_state in output_query_states]
 
 
+class StatePropagationProviderEdgeFunction(StatePropagationProvider):
+    """
+    Routes output to edge function service if edge function is configured on the output processor state.
+    Edge functions process data on the edge (e.g., calibration, validation) before it reaches the state.
+    """
+
+    def __init__(self, route: BaseRoute = None):
+        self.route = route
+
+    async def apply_state(self,
+                          processor: 'BaseProcessor',
+                          input_query_state: Any,
+                          output_query_states: [dict],
+                          input_route_id: str = None) -> [dict]:
+        """
+        Route to edge function service if configured.
+
+        Returns output_query_states if edge function handled it, None otherwise.
+        """
+        # Check if edge function is configured and enabled
+        edge_function = processor.output_processor_state.edge_function
+        if not edge_function or not edge_function.enabled:
+            return None  # Signal that edge function didn't handle this
+
+        if not self.route:
+            logging.warning(f'edge function enabled but no route configured, skipping edge function')
+            return None
+
+        # Extract attempt from route_metadata if present (for retry tracking)
+        route_metadata = {}
+        if isinstance(input_query_state, dict):
+            route_metadata = input_query_state.get("route_metadata", {})
+        elif isinstance(input_query_state, list) and len(input_query_state) > 0:
+            route_metadata = input_query_state[0].get("route_metadata", {})
+
+        attempt = route_metadata.get("attempt", 1)
+
+        # Build minimal message - service looks up config from DB via route_id
+        edge_function_message = {
+            "type": "edge_function",
+            "route_id": processor.output_processor_state.id,
+            "input_route_id": input_route_id,
+            "input_query_state": input_query_state,
+            "query_state": output_query_states,
+            "attempt": attempt
+        }
+
+        logging.info(f'routing to edge function service for route_id: {processor.output_processor_state.id}, attempt: {attempt}')
+        await self.route.publish(json.dumps(edge_function_message))
+        return output_query_states
+
+
 class StatePropagationProviderDistributor(StatePropagationProvider):
 
-    def __init__(self, propagators: List[StatePropagationProvider]):
+    def __init__(self, propagators: List[StatePropagationProvider], edge_function_route: BaseRoute = None):
         self.propagators = propagators
+        self.edge_function_provider = StatePropagationProviderEdgeFunction(route=edge_function_route) if edge_function_route else None
 
     async def apply_state(
             self,
             processor: 'BaseProcessor',
             input_query_state: Any,
-            output_query_states: [dict]) -> [dict]:
+            output_query_states: [dict],
+            input_route_id: str = None) -> [dict]:
         """
-        Writes the output_query_states to the state object, in memory
+        Distributes output to propagators, checking for edge functions first.
 
-        Args:
-            processor (List[Dict]): The processor instance that is processing this input query state entry
-            input_query_state (Any): The initial input query state.
-            output_query_states (List[Dict]): The processed output query states.
-
-        Returns:
-            List[Any]: The result of applying the query states to the output state.
+        If edge function is configured and route is available, routes to edge function
+        service and skips normal propagation. The edge function service handles
+        routing to sync/router after processing.
         """
-        # iteration each propagator and invoke it
+        # Check for edge function first - if enabled, route there and skip normal propagation
+        if self.edge_function_provider:
+            edge_result = await self.edge_function_provider.apply_state(
+                processor=processor,
+                input_query_state=input_query_state,
+                output_query_states=output_query_states,
+                input_route_id=input_route_id
+            )
+
+            if edge_result is not None:
+                # Edge function is handling this, skip normal propagation
+                logging.debug(f'edge function handling output, skipping normal propagation')
+                return output_query_states
+
+        # No edge function or not enabled, run normal propagators
         for propagator in self.propagators:
             await propagator.apply_state(
                 processor=processor,
                 input_query_state=input_query_state,
-                output_query_states=output_query_states
+                output_query_states=output_query_states,
+                input_route_id=input_route_id
             )
 
-        # return the final propagated output query states
         return output_query_states
 
 
@@ -269,6 +347,7 @@ class BaseProcessor(MonitoredProcessorState):
         self.processor = processor
         self.output_processor_state = output_processor_state
         self.stream_route = stream_route
+        self.input_route_id = None  # set by execute_set/execute_entry for calibration/retry support
 
         logging.info(f'setting up processor: {self.processor.id if processor else None},'
                      f'provider id: {self.provider.id if provider else None}, '
@@ -408,7 +487,7 @@ class BaseProcessor(MonitoredProcessorState):
 
         return True
 
-    async def execute_set(self, input_query_state: List[dict] = None, force : bool = False):
+    async def execute_set(self, input_query_state: List[dict] = None, force: bool = False, input_route_id: str = None):
         is_allowed_to_process = await self.can_processor_process_data()
         if not is_allowed_to_process:
             logging.debug(f'processor {self.processor.id} for {self.provider.id}' f'is in a stopped state, skipping input query processing')
@@ -416,6 +495,9 @@ class BaseProcessor(MonitoredProcessorState):
 
         if self.config.flag_dedup_drop_enabled:
             pass  # TODO need to check input for deduplication (need to keep the hash of the input if this is enabled)
+
+        # store input_route_id for use in finalize_result (calibration/retry support)
+        self.input_route_id = input_route_id
 
         # execute the input entry given the processor implementation
         try:
@@ -442,13 +524,14 @@ class BaseProcessor(MonitoredProcessorState):
         except Exception as ex:
             await self.fail_execute_processor_state(route_id=self.output_processor_state.id, exception=ex)
 
-    async def execute_entry(self, input_query_state: dict, force: bool = False):
+    async def execute_entry(self, input_query_state: dict, force: bool = False, input_route_id: str = None):
         """
         Executes the processor state update and processes the input data entry.
 
         Args:
             input_query_state (Dict): The input query state to process.
             force (bool, optional): Flag to force the process. Defaults to False.
+            input_route_id (str): The input route id where the input came from (for calibration/retry).
 
         Returns:
             List[Dict]: The processed output query states.
@@ -464,6 +547,9 @@ class BaseProcessor(MonitoredProcessorState):
 
         if self.config.flag_dedup_drop_enabled:
             pass  # TODO need to check input for deduplication (need to keep the hash of the input if this is enabled)
+
+        # store input_route_id for use in finalize_result (calibration/retry support)
+        self.input_route_id = input_route_id
 
         # execute the input entry given the processor implementation
         try:
@@ -494,7 +580,7 @@ class BaseProcessor(MonitoredProcessorState):
                 data=input_query_state
             )
 
-    async def finalize_result(self, result: dict | List[dict] | str, input_data: dict | List[dict], additional_query_state: Any) -> List[Any]:
+    async def finalize_result(self, result: dict | List[dict] | str, input_data: dict | List[dict], additional_query_state: Any, input_route_id: str = None) -> List[Any]:
         """
         Finalizes the result by applying the result to the output state.
 
@@ -502,10 +588,16 @@ class BaseProcessor(MonitoredProcessorState):
             result (Any): The result of the execution.
             input_data (Any): The initial input query state.
             additional_query_state (Any): Any additional output values.
+            input_route_id (str): The input route id where the input came from (for calibration/retry).
+                                  Falls back to self.input_route_id if not provided.
 
         Returns:
             List[Any]: The final applied states.
         """
+
+        # Use instance variable as fallback for input_route_id
+        if input_route_id is None:
+            input_route_id = self.input_route_id
 
         # Apply the result from the execution
         output_query_states = await self.output_state.apply_result(
@@ -518,7 +610,8 @@ class BaseProcessor(MonitoredProcessorState):
         output_query_states = await self.state_propagation_provider.apply_state(
             processor=self,
             input_query_state=input_data,
-            output_query_states=output_query_states
+            output_query_states=output_query_states,
+            input_route_id=input_route_id
         )
 
         # Apply the new query state to the persistent storage class defined

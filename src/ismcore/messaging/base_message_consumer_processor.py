@@ -181,11 +181,12 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
                 await self.intra_execute(consumer_message_mapping=consumer_message_mapping)
 
                 # iterate each query state entry and forward it to the processor
+                # pass input_route_id so it can be included in output messages for calibration/retry
                 if output_state.config.flag_enable_execute_set:
-                    await runnable_processor.execute_set(input_query_state=query_states)
+                    await runnable_processor.execute_set(input_query_state=query_states, input_route_id=route_id)
                 else:
                     for query_state_entry in query_states:
-                        await runnable_processor.execute_entry(input_query_state=query_state_entry)
+                        await runnable_processor.execute_entry(input_query_state=query_state_entry, input_route_id=route_id)
 
                 # submit completed execution
                 await self.post_execute(consumer_message_mapping=consumer_message_mapping)

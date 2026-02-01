@@ -66,6 +66,22 @@ class ProcessorStateDirection(Enum):
     OUTPUT = "OUTPUT"
 
 
+class EdgeFunctionType(Enum):
+    CALIBRATOR = "CALIBRATOR"
+    VALIDATOR = "VALIDATOR"
+    TRANSFORMER = "TRANSFORMER"
+    FILTER = "FILTER"
+
+
+class EdgeFunctionConfig(BaseModel):
+    """Configuration for edge functions that run on processor state transitions."""
+    enabled: bool = False
+    function_type: EdgeFunctionType = EdgeFunctionType.CALIBRATOR
+    template_id: Optional[str] = None  # code/logic template
+    max_attempts: Optional[int] = 3    # for calibrator: max retry attempts
+    config: Optional[Dict] = None      # type-specific configuration
+
+
 class UsageUnitType(Enum):
     TOKEN = "TOKEN"
 
@@ -190,6 +206,9 @@ class ProcessorState(BaseModel):
     count: Optional[int] = None
     current_index: Optional[int] = None
     maximum_index: Optional[int] = None
+
+    # edge function configuration - allows processing on the edge (e.g., calibration, validation)
+    edge_function: Optional[EdgeFunctionConfig] = None
 
     def dict(self, *args, **kwargs):
         """Override dict method to exclude 'internal_id'"""
