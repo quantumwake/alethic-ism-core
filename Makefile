@@ -1,5 +1,5 @@
 # Makefile
-.PHONY: build push deploy all version
+.PHONY: build push deploy all version pkg-build pkg-publish pkg-release
 
 # Default image name - can be overridden with make IMAGE=your-image-name
 IMAGE ?= krasaee/alethic-ism-core:latest
@@ -42,11 +42,31 @@ version:
 	NEW_TAG="v$${MAJOR}.$${MINOR}.$${PATCH}"; \
 	git tag -a "$$NEW_TAG" -m "Release $$NEW_TAG"; \
 	git push origin "$$NEW_TAG"; \
-	echo "œ bumped $${OLD_TAG} ’ $${NEW_TAG}"
+	echo "ï¿½ bumped $${OLD_TAG} ï¿½ $${NEW_TAG}"
 
 # Build and push
 .PHONY: all
 all: build push
+
+# Build the Python package using uv
+.PHONY: pkg-build
+pkg-build:
+	@echo "Building Python package..."
+	@rm -rf dist/ build/ *.egg-info
+	uv pip install -U pip build setuptools setuptools-scm
+	python -m build
+	@echo "Package built successfully in dist/"
+
+# Publish the Python package to PyPI
+.PHONY: pkg-publish
+pkg-publish:
+	@echo "Publishing package to PyPI..."
+	uv pip install -U twine
+	python -m twine upload dist/*
+
+# Build and publish package in one step
+.PHONY: pkg-release
+pkg-release: pkg-build pkg-publish
 
 # Clean up old images and containers (optional)
 .PHONY: clean

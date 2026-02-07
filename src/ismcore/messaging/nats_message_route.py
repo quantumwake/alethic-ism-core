@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import nats
 from nats.aio.msg import Msg
@@ -29,6 +29,12 @@ class NATSRoute(BaseRoute, BaseModel):
     ack_wait: Optional[int] = 30  # time to wait for ack before considering the message failed
 
     jetstream_enabled: Optional[bool] = True
+
+    # concurrency settings
+    concurrent_enabled: Optional[bool] = False  # enable concurrent message handling
+    concurrent_max_workers: Optional[int] = 10  # max concurrent handlers (semaphore limit)
+    concurrent_priority_enabled: Optional[bool] = False  # enable separate high priority queue
+    concurrent_max_workers_high: Optional[int] = 5  # dedicated pool for high priority messages
 
     # internal tracking for consumers, as each consumer needs to be unique
     consumer_id: Optional[str] = "1"  # a number to identify the subscriber index on the queue
@@ -68,6 +74,23 @@ class NATSRoute(BaseRoute, BaseModel):
         """
         return self.subject  # Assuming the subject is stored in a private attribute
 
+    def get_publish_subject(self, priority: str = None, partition_key: str = None) -> str:
+        """
+        Get the subject to publish messages to.
+
+        For base NATSRoute, returns the configured subject directly.
+        Subclasses (e.g., NATSRouteConcurrent) override this to support
+        priority-based routing.
+
+        Args:
+            priority: Ignored in base class. Used by concurrent routes for "high"/"low" routing.
+            partition_key: Optional key for partitioning (e.g., project_id).
+
+        Returns:
+            The subject string to publish to.
+        """
+        return self.subject
+
     async def create_stream(self):
         self._js = self._nc.jetstream()
 
@@ -79,7 +102,8 @@ class NATSRoute(BaseRoute, BaseModel):
             logger.info("creating new jetstream")
             stream_config = nats.js.api.StreamConfig(
                 name=self.name,
-                subjects=[self.subject],
+                # Accept both exact subject and any sub-subjects (partitions, priorities)
+                subjects=[self.subject, f"{self.subject}.>"],
                 storage=StorageType.FILE,
                 retention=RetentionPolicy.WORK_QUEUE
             )
@@ -90,31 +114,36 @@ class NATSRoute(BaseRoute, BaseModel):
         return self._js
 
     async def connect(self):
-        logger.info(f'connecting to route: {self.name}, subject: {self.subject}')
-        if self._nc and self._nc.is_connected:
-            logger.debug(f'route is already connected, skipping connect on route: {self.name}, subject: {self.subject}')
-            return True
+        """
+        Establish connection to NATS server.
+
+        Creates a new connection and initializes JetStream if enabled.
+        For most use cases, prefer _ensure_connected() which checks
+        existing connection state first.
+        """
+        logger.info(f'connecting to route: {self.name}, subject: {self.subject}, url: {self.url}')
 
         try:
-            # connect to the nats core server
             self._nc = NATS()
+            await self._nc.connect(servers=[self.url])
+            logger.info(f'connected to route: {self.name}, subject: {self.subject}')
 
-            logger.debug(f'connecting to route: {self.name}, subject: {self.subject}, url {self.url}')
-            await self._nc.connect(
-                servers=[self.url],
-            )
-            logger.info(f'connected to route: {self.name}, subject: {self.subject}, url {self.url}')
-
-            # jetstream enablement flag must be set to true for jetstream to work
             if self.jetstream_enabled:
                 await self.create_stream()
 
             return True
         except Exception as e:
-            logger.warning(f"warning, failed to connect and or "
-                           f"flush of route: {self.name}, subject: {self.subject}", e)
+            logger.warning(f"failed to connect to route: {self.name}, subject: {self.subject}: {e}")
 
         return False
+
+    async def _ensure_connected(self) -> bool:
+        """
+        Ensure connection is active, connecting only if necessary.
+        """
+        if self._nc and self._nc.is_connected:
+            return True
+        return await self.connect()
 
     async def subscribe_request(self):
         async def callback(msg: Msg):
@@ -129,7 +158,7 @@ class NATSRoute(BaseRoute, BaseModel):
             durable_name = self.name
 
         self._js_pull_sub = await self._js.pull_subscribe(
-            subject=self.subject,
+            subject=None,
             durable=durable_name,
             config=ConsumerConfig(
                 ack_wait=self.ack_wait,
@@ -137,6 +166,8 @@ class NATSRoute(BaseRoute, BaseModel):
                 ack_policy=AckPolicy.EXPLICIT,
                 max_ack_pending=1000,
                 flow_control=False,
+                # Support both exact subject and partitioned subjects
+                filter_subjects=[self.subject, f"{self.subject}.>"],
             ),
         )
         return self._js_pull_sub
@@ -159,6 +190,35 @@ class NATSRoute(BaseRoute, BaseModel):
         logger.info(f'subscribe:complete to route: {self.name}, subject: {self.subject}, js: {self.jetstream_enabled}')
         return True
 
+    async def _fetch_messages(self, timeout: float) -> list:
+        """
+        Fetch messages from JetStream or standard NATS.
+
+        Always returns a list for consistent downstream handling.
+        Raises timeout exceptions when no messages are available.
+        """
+        if self.jetstream_enabled:
+            messages = await self._js_pull_sub.fetch(batch=self.batch_size, timeout=timeout)
+            if not messages:
+                raise nats.js.errors.FetchTimeoutError("no data received")
+            return messages if isinstance(messages, list) else [messages]
+        else:
+            msg = await self._nc.request(self.subject, b'', timeout=timeout)
+            if not msg:
+                raise nats.aio.errors.ErrTimeout("no data received")
+            return [msg]
+
+    async def _process_message(self, msg) -> None:
+        """
+        Process a single message: log redelivery warnings and invoke callback.
+        """
+        if self.jetstream_enabled and hasattr(msg, 'metadata') and msg.metadata.num_delivered > 1:
+            logger.warning(
+                f"Message redelivered {msg.metadata.num_delivered} times "
+                f"on subject: {self.subject}, consumer: {msg.metadata.consumer}"
+            )
+        await self.callback(self, msg, msg.data.decode("utf-8"))
+
     async def request(self, msg: Any) -> Any:
         if not msg:
             return None
@@ -171,13 +231,11 @@ class NATSRoute(BaseRoute, BaseModel):
             raise ValueError("Unsupported message type")
 
         try:
-            await self.connect()
+            await self._ensure_connected()
             res = await self._nc.request(self.subject, msg, timeout=10.0)
             return res
         except (ErrConnectionClosed, ErrTimeout, ErrNoServers, Exception) as e:
-            print("Failed to request-reply message:", e)
-        finally:
-            pass
+            logger.error(f"failed to request-reply message: {e}")
 
         return None
 
@@ -187,7 +245,14 @@ class NATSRoute(BaseRoute, BaseModel):
 
         await msg.respond(reply)
 
-    async def publish(self, msg: Any) -> Optional[RouteMessageStatus]:
+    async def publish(self, msg: Any, subject: str = None) -> Optional[RouteMessageStatus]:
+        """
+        Publish a message to the route's subject or a custom subject.
+
+        Args:
+            msg: Message to publish (str, dict, or bytes)
+            subject: Optional custom subject. If not provided, uses route's default subject.
+        """
         if not msg:
             return None
 
@@ -198,14 +263,16 @@ class NATSRoute(BaseRoute, BaseModel):
         else:
             raise ValueError("Unsupported message type")
 
+        target_subject = subject or self.subject
+
         try:
-            await self.connect()
+            await self._ensure_connected()
 
             if self.jetstream_enabled:
-                logger.debug(f'preparing to publish data onto route: {self.name}, subject: {self.subject}')
-                awk = await self._js.publish(subject=self.subject, payload=msg)
+                logger.debug(f'publishing to route: {self.name}, subject: {target_subject}')
+                awk = await self._js.publish(subject=target_subject, payload=msg)
             else:
-                await self._nc.publish(subject=self.subject, payload=msg)
+                await self._nc.publish(subject=target_subject, payload=msg)
                 awk = "N/A"
 
             return RouteMessageStatus(
@@ -213,63 +280,38 @@ class NATSRoute(BaseRoute, BaseModel):
                 status=MessageStatus.QUEUED
             )
         except (ErrConnectionClosed, ErrTimeout, ErrNoServers, Exception) as e:
-            print("Failed to send message:", e)
+            logger.error(f"failed to publish message: {e}")
             return RouteMessageStatus(
                 message=msg,
                 status=MessageStatus.FAILED,
                 error=str(e)
             )
-        finally:
-            pass
 
     async def consume(self, wait: bool = True):
         logger.info(f'consume:start for route: {self.name}, subject: {self.subject}, js: {self.jetstream_enabled}')
 
-        # Backoff parameters
-        backoff_base = 0.1  # Starting backoff time in seconds
-        backoff_factor = 2  # Exponential backoff factor
-        max_backoff = 1     # Maximum backoff time in seconds
+        backoff_base = 0.1
+        backoff_factor = 2
+        max_backoff = 1.0
         backoff_time = backoff_base
-        self.consumer_active = True  # the consumer is actively consuming data
-        while wait and self.consumer_active:  # 50 * 0.1 but exponential backoff can increase this
+        self.consumer_active = True
+
+        while wait and self.consumer_active:
             try:
-                if self.jetstream_enabled:
-                    # JetStream consumption
-                    logger.info(f"pulling messages from subject: {self.subject}, consumer: {self.consumer_id}, batch_size: {self.batch_size}")
-                    msg = await self._js_pull_sub.fetch(batch=self.batch_size, timeout=backoff_time)   # for pull based
-                    if not msg:
-                        raise nats.js.errors.FetchTimeoutError("no data received")
-                else:
-                    # Standard NATS consumption
-                    msg = await self._nc.request(self.subject, b'', timeout=backoff_time)
-                    if not msg:
-                        raise nats.aio.errors.ErrTimeout("no data received")
+                logger.debug(f"pulling messages from subject: {self.subject}, consumer: {self.consumer_id}, batch_size: {self.batch_size}")
+                messages = await self._fetch_messages(timeout=backoff_time)
 
-                if isinstance(msg, list):
-                    logger.info(f"received {len(msg)} messages on subject: {self.subject}, consumer: {self.consumer_id}")
-                    for m in msg:
-                        # Log warning if message is redelivered (JetStream only)
-                        if self.jetstream_enabled and hasattr(m, 'metadata') and m.metadata.num_delivered > 1:
-                            logger.warning(f"Message redelivered {m.metadata.num_delivered} times on subject: {self.subject}, consumer: {m.metadata.consumer}")
+                logger.info(f"received {len(messages)} messages on subject: {self.subject}, consumer: {self.consumer_id}")
+                for msg in messages:
+                    await self._process_message(msg)
 
-                        await self.callback(self, m, m.data.decode("utf-8"))
-                else:
-                    # Log warning if message is redelivered (JetStream only)
-                    if self.jetstream_enabled and hasattr(msg, 'metadata') and msg.metadata.num_delivered > 1:
-                        logger.warning(f"Message redelivered {msg.metadata.num_delivered} times on subject: {self.subject}, consumer: {msg.metadata.consumer}")
-
-                    await self.callback(self, msg, msg.data.decode("utf-8"))
-
-                backoff_time = backoff_base  # Reset backoff time
+                backoff_time = backoff_base
             except (ErrConnectionClosed, ErrTimeout, ErrNoServers) as e:
                 raise InterruptedError(e)
             except (nats.js.errors.FetchTimeoutError, nats.aio.errors.ErrTimeout, TimeoutError):
-                logger.info(f"no data received, backing off for {backoff_time} seconds...")
-
+                logger.debug(f"no data received, backing off for {backoff_time} seconds...")
                 if not wait:
                     break
-
-                # increase backoff time exponentially
                 backoff_time = min(backoff_time * backoff_factor, max_backoff)
             except ValueError as e:
                 logger.critical(f"failed to process message, ignoring: {e}")
@@ -277,7 +319,6 @@ class NATSRoute(BaseRoute, BaseModel):
                 if self.consumer_active:
                     raise ValueError(e2)
 
-        # the consumer is not actively consuming data
         self.consumer_active = False
 
     async def ack(self, message):

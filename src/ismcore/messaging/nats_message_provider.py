@@ -1,6 +1,8 @@
 from ismcore.messaging.base_message_provider import BaseRouteProvider
+from ismcore.messaging.nats_message_route_concurrent import NATSRouteConcurrent
 from ismcore.messaging.nats_message_route import NATSRoute
 from ismcore.utils.ism_logger import ism_logger
+
 
 logger = ism_logger(__name__)
 
@@ -17,18 +19,30 @@ class NATSMessageProvider(BaseRouteProvider):
         #         stream: "??"
         #         selector: mock/route/selector/path
 
-        route = NATSRoute(
+        # common route parameters
+        route_params = dict(
             name=route_config['name'],
             selector=route_config['selector'],
             url=route_config['url'],
             subject=route_config['subject'],
-            ack_wait=route_config['ack_wait'] if 'ack_wait' in route_config else 90,
-            batch_size=route_config['batch_size'] if 'batch_size' in route_config else 1,
-            queue=route_config['queue'] if 'queue' in route_config else None, ### TODO - queue is not in the yaml file? maybe not needed for pull subscriptions but needed for requests?
-            jetstream_enabled=route_config['jetstream_enabled'] if 'jetstream_enabled' in route_config else True,
-            # group=route_config['group'] if 'group' in route_config else None,
+            ack_wait=route_config.get('ack_wait', 90),
+            batch_size=route_config.get('batch_size', 1),
+            queue=route_config.get('queue'),
+            jetstream_enabled=route_config.get('jetstream_enabled', True),
+            concurrent_enabled=route_config.get('concurrent_enabled', False),
+            concurrent_max_workers=route_config.get('concurrent_max_workers', 10),
+            concurrent_priority_enabled=route_config.get('concurrent_priority_enabled', False),
+            concurrent_max_workers_high=route_config.get('concurrent_max_workers_high', 5),
         )
-        logger.debug(f"created route: {route.name}; selector {route.selector}; subject: {route.subject}; batch: {route.batch_size}; ack_wait: {route.ack_wait}; queue: {route.queue}; jetstream_enabled: {route.jetstream_enabled}")
+
+        # use concurrent route if enabled
+        if route_params['concurrent_enabled']:
+            route = NATSRouteConcurrent(**route_params)
+            logger.debug(f"created concurrent route: {route.name}; subject: {route.subject}; workers: {route.concurrent_max_workers}; priority: {route.concurrent_priority_enabled}")
+        else:
+            route = NATSRoute(**route_params)
+            logger.debug(f"created route: {route.name}; selector {route.selector}; subject: {route.subject}; batch: {route.batch_size}")
+
         return route
 
 
