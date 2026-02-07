@@ -92,25 +92,44 @@ class NATSRoute(BaseRoute, BaseModel):
         return self.subject
 
     async def create_stream(self):
+        """
+        Create or update JetStream stream to accept both exact subject
+        and partitioned/priority subjects ({subject}.>).
+        """
         self._js = self._nc.jetstream()
+        required_subjects = [self.subject, f"{self.subject}.>"]
 
-        logger.info("connecting to jetstream")
+        logger.info(f"ensuring jetstream stream: {self.name}")
         try:
-            js_name = await self._js.find_stream_name_by_subject(self.subject)
+            # Check if stream exists
+            stream_info = await self._js.stream_info(self.name)
+            current_subjects = stream_info.config.subjects or []
+
+            # Update if subjects are missing
+            missing = [s for s in required_subjects if s not in current_subjects]
+            if missing:
+                logger.info(f"updating stream {self.name} to add subjects: {missing}")
+                updated_subjects = list(set(current_subjects + required_subjects))
+                await self._js.update_stream(
+                    config=nats.js.api.StreamConfig(
+                        name=self.name,
+                        subjects=updated_subjects,
+                        storage=stream_info.config.storage,
+                        retention=stream_info.config.retention,
+                    )
+                )
         except nats.js.errors.NotFoundError:
-            # create the stream if it doesn't exist
-            logger.info("creating new jetstream")
+            # Create new stream
+            logger.info(f"creating new jetstream: {self.name}")
             stream_config = nats.js.api.StreamConfig(
                 name=self.name,
-                # Accept both exact subject and any sub-subjects (partitions, priorities)
-                subjects=[self.subject, f"{self.subject}.>"],
+                subjects=required_subjects,
                 storage=StorageType.FILE,
                 retention=RetentionPolicy.WORK_QUEUE
             )
-
             await self._js.add_stream(stream_config)
 
-        logger.info(f"connected to jetstream: {self.name}")
+        logger.info(f"jetstream ready: {self.name}")
         return self._js
 
     async def connect(self):
@@ -152,23 +171,36 @@ class NATSRoute(BaseRoute, BaseModel):
         self._nc_sub = await self._nc.subscribe(subject=self.subject, queue=self.queue, cb=callback)
 
     async def subscribe_pull_jetstream(self):
-        if self.consumer_id:
-            durable_name = f"{self.name}_sub_{self.consumer_id}"
-        else:
-            durable_name = self.name
+        """
+        Create a JetStream pull subscription supporting both exact subject
+        and partitioned subjects ({subject}.>).
 
-        self._js_pull_sub = await self._js.pull_subscribe(
-            subject=None,
-            durable=durable_name,
-            config=ConsumerConfig(
-                ack_wait=self.ack_wait,
-                deliver_policy=DeliverPolicy.ALL,
-                ack_policy=AckPolicy.EXPLICIT,
-                max_ack_pending=1000,
-                flow_control=False,
-                # Support both exact subject and partitioned subjects
-                filter_subjects=[self.subject, f"{self.subject}.>"],
-            ),
+        Uses add_consumer + pull_subscribe_bind for multiple filter_subjects support.
+        """
+        durable_name = f"{self.name}_sub_{self.consumer_id}" if self.consumer_id else self.name
+
+        # Create consumer with multiple filter subjects
+        try:
+            await self._js.add_consumer(
+                stream=self.name,
+                config=ConsumerConfig(
+                    durable_name=durable_name,
+                    ack_wait=self.ack_wait,
+                    deliver_policy=DeliverPolicy.ALL,
+                    ack_policy=AckPolicy.EXPLICIT,
+                    max_ack_pending=1000,
+                    flow_control=False,
+                    filter_subjects=[self.subject, f"{self.subject}.>"],
+                ),
+            )
+        except Exception as e:
+            # Consumer may already exist
+            logger.debug(f"consumer may already exist: {e}")
+
+        # Bind to the consumer
+        self._js_pull_sub = await self._js.pull_subscribe_bind(
+            consumer=durable_name,
+            stream=self.name,
         )
         return self._js_pull_sub
 

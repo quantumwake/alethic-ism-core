@@ -48,7 +48,10 @@ class StatePropagationProviderRouter(StatePropagationProvider):
                           output_query_states: [dict],
                           input_route_id: str = None) -> [dict]:
         """
-        Route the processed new query states from the response to a synchronization topic
+        Route the processed new query states from the response to a synchronization topic.
+
+        Publishes to {subject}.{state_id} to enable parallel processing while ensuring
+        messages for the same state_id are processed by the same consumer.
 
         Args:
             processor (List[Dict]): The processor instance that is processing this input query state entry
@@ -59,8 +62,8 @@ class StatePropagationProviderRouter(StatePropagationProvider):
         Returns:
             List[Any]: The result of applying the query states to the output state.
         """
+        state_id = processor.output_state.id
 
-        # create a new message for routing purposes
         route_message = {
             "route_id": processor.output_processor_state.id,
             "input_route_id": input_route_id,
@@ -69,7 +72,9 @@ class StatePropagationProviderRouter(StatePropagationProvider):
             "query_state": output_query_states
         }
 
-        await self.route.publish(json.dumps(route_message))
+        # Publish to {subject}.{state_id} for partitioned processing
+        subject = self.route.get_publish_subject(partition_key=state_id)
+        await self.route.publish(json.dumps(route_message), subject=subject)
         return output_query_states
 
 

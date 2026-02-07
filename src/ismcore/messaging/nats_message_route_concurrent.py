@@ -60,38 +60,54 @@ class NATSRouteConcurrent(NATSRoute):
                 {base_subject}.low             → low priority (exact)
                 {base_subject}.low.>           → low priority (with partition)
 
-        Note: We use filter_subjects to combine multiple patterns into single consumers.
+        Uses add_consumer + pull_subscribe_bind for multiple filter_subjects support.
         """
-        config = ConsumerConfig(
-            ack_wait=self.ack_wait,
-            deliver_policy=DeliverPolicy.ALL,
-            ack_policy=AckPolicy.EXPLICIT,
-            max_ack_pending=1000,
-            flow_control=False,
-            filter_subjects=[f"{self.subject}.high", f"{self.subject}.high.>"],
-        )
+        durable_high = f"{self.name}_high_{self.consumer_id}"
+        durable_low = f"{self.name}_low_{self.consumer_id}"
 
-        self._js_pull_sub_high = await self._js.pull_subscribe(
-            subject=None,
-            durable=f"{self.name}_high_{self.consumer_id}",
-            config=config,
+        # Create high priority consumer
+        try:
+            await self._js.add_consumer(
+                stream=self.name,
+                config=ConsumerConfig(
+                    durable_name=durable_high,
+                    ack_wait=self.ack_wait,
+                    deliver_policy=DeliverPolicy.ALL,
+                    ack_policy=AckPolicy.EXPLICIT,
+                    max_ack_pending=1000,
+                    flow_control=False,
+                    filter_subjects=[f"{self.subject}.high", f"{self.subject}.high.>"],
+                ),
+            )
+        except Exception as e:
+            logger.debug(f"high priority consumer may already exist: {e}")
+
+        self._js_pull_sub_high = await self._js.pull_subscribe_bind(
+            consumer=durable_high,
+            stream=self.name,
         )
         logger.info(f"subscribed to high priority: {self.subject}.high[.>]")
 
-        config_low = ConsumerConfig(
-            ack_wait=self.ack_wait,
-            deliver_policy=DeliverPolicy.ALL,
-            ack_policy=AckPolicy.EXPLICIT,
-            max_ack_pending=1000,
-            flow_control=False,
-            # Include base subject as fallback for non-priority-aware publishers
-            filter_subjects=[self.subject, f"{self.subject}.low", f"{self.subject}.low.>"],
-        )
+        # Create low priority consumer (includes base subject fallback)
+        try:
+            await self._js.add_consumer(
+                stream=self.name,
+                config=ConsumerConfig(
+                    durable_name=durable_low,
+                    ack_wait=self.ack_wait,
+                    deliver_policy=DeliverPolicy.ALL,
+                    ack_policy=AckPolicy.EXPLICIT,
+                    max_ack_pending=1000,
+                    flow_control=False,
+                    filter_subjects=[self.subject, f"{self.subject}.low", f"{self.subject}.low.>"],
+                ),
+            )
+        except Exception as e:
+            logger.debug(f"low priority consumer may already exist: {e}")
 
-        self._js_pull_sub_low = await self._js.pull_subscribe(
-            subject=None,
-            durable=f"{self.name}_low_{self.consumer_id}",
-            config=config_low,
+        self._js_pull_sub_low = await self._js.pull_subscribe_bind(
+            consumer=durable_low,
+            stream=self.name,
         )
         logger.info(f"subscribed to low priority: {self.subject}[.low[.>]]")
 
@@ -134,8 +150,11 @@ class NATSRouteConcurrent(NATSRoute):
         return self.get_publish_subject(priority="low", partition_key=partition_key)
 
     def _dispatch(self, msg: Any, semaphore: asyncio.Semaphore, label: str = "default"):
-        """Fire-and-forget task dispatch with semaphore for concurrency control."""
-        # Log redelivery before dispatch
+        """
+        Fire-and-forget task dispatch with semaphore for concurrency control.
+
+        Note: The callback is responsible for acking the message.
+        """
         if hasattr(msg, 'metadata') and msg.metadata.num_delivered > 1:
             logger.warning(f"[{label}] redelivery #{msg.metadata.num_delivered}: {msg.subject}")
 
@@ -145,8 +164,6 @@ class NATSRouteConcurrent(NATSRoute):
                     await self.callback(self, msg, msg.data.decode("utf-8"))
                 except Exception as e:
                     logger.error(f"[{label}] handler error on subject {msg.subject}: {e}")
-                finally:
-                    await self.ack(msg)
 
         task = asyncio.create_task(handle())
         self._pending_tasks.add(task)
