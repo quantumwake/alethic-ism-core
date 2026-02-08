@@ -73,6 +73,14 @@ class EdgeFunctionType(Enum):
     FILTER = "FILTER"
 
 
+class ConcurrencyMode(Enum):
+    """Determines how concurrency keys are derived for message routing."""
+    PROJECT_ID = "project-id"    # One concurrent request per project (default)
+    USER_ID = "user-id"          # One concurrent request per user
+    ROUTE_ID = "route-id"        # One concurrent request per route
+    EXPRESSION = "expression"    # Derive key from input data via expression
+
+
 class EdgeFunctionConfig(BaseModel):
     """Configuration for edge functions that run on processor state transitions."""
     enabled: bool = False
@@ -173,6 +181,8 @@ class ProcessorPropertiesBase(BaseModel):
     requestDelay: Optional[int] = 0
     maxBatchSize: Optional[int] = 100
     maxBatchLimit: Optional[int] = 1
+    concurrencyMode: Optional[ConcurrencyMode] = ConcurrencyMode.PROJECT_ID
+    concurrencyExpression: Optional[str] = None
 
 class ProcessorPropertiesLM(ProcessorPropertiesBase):
     topK: Optional[int] = 0

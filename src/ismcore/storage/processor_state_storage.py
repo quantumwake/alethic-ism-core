@@ -374,13 +374,37 @@ class ProcessorStorage:
 
 
 class ProcessorStateRouteStorage:
+    """
+    Abstract storage interface for processor state routes.
+
+    Processor state routes define the relationship between processors and states,
+    including direction (INPUT/OUTPUT), status, and edge function configuration.
+    """
 
     def fetch_processor_state_routes_by_project_id(self, project_id) \
             -> Optional[List[ProcessorState]]:
+        """
+        Fetch all processor state routes associated with a project.
+
+        Args:
+            project_id: The project ID to filter by
+
+        Returns:
+            List of ProcessorState objects for the project, or None if not found
+        """
         raise NotImplementedError()
 
     def fetch_processor_state_route_by_route_id(self, route_id: str) \
             -> Optional[ProcessorState]:
+        """
+        Fetch a single processor state route by its route ID.
+
+        Args:
+            route_id: The unique route identifier
+
+        Returns:
+            The ProcessorState object if found, None otherwise
+        """
         raise NotImplementedError()
 
     def fetch_processor_state_route(self,
@@ -390,16 +414,78 @@ class ProcessorStateRouteStorage:
                                     direction: ProcessorStateDirection = None,
                                     status: ProcessorStatusCode = None) \
             -> Optional[List[ProcessorState]]:
+        """
+        Fetch processor state routes matching the given criteria.
+
+        All parameters are optional and act as filters.
+
+        Args:
+            route_id: Filter by route ID
+            processor_id: Filter by processor ID
+            state_id: Filter by state ID
+            direction: Filter by direction (INPUT/OUTPUT)
+            status: Filter by status code
+
+        Returns:
+            List of matching ProcessorState objects, or None if not found
+        """
         raise NotImplementedError()
 
     def insert_processor_state_route(self, processor_state: ProcessorState) \
             -> ProcessorState:
+        """
+        Insert or update a processor state route (upsert).
+
+        WARNING: This method updates ALL mutable fields on conflict. If you only
+        need to update the status, use update_processor_state_route_status() instead
+        to avoid overwriting other fields like edge_function.
+
+        Args:
+            processor_state: The ProcessorState object to insert/update
+
+        Returns:
+            The ProcessorState with internal_id populated from the database
+        """
+        raise NotImplementedError()
+
+    def update_processor_state_route_status(self, route_id: str, status: ProcessorStatusCode) -> int:
+        """
+        Update only the status field of a processor state route.
+
+        This method should be used when you only need to change the status without
+        affecting other fields like edge_function, count, current_index, etc.
+
+        Args:
+            route_id: The ID of the processor state route to update
+            status: The new status to set
+
+        Returns:
+            Number of rows affected (0 or 1)
+        """
         raise NotImplementedError()
 
     def delete_processor_state_route(self, route_id: str) -> int:
+        """
+        Delete a processor state route by its route ID.
+
+        Args:
+            route_id: The route ID to delete
+
+        Returns:
+            Number of rows deleted (0 or 1)
+        """
         raise NotImplementedError()
 
     def delete_processor_state_routes_by_state_id(self, state_id: str) -> int:
+        """
+        Delete all processor state routes associated with a state.
+
+        Args:
+            state_id: The state ID whose routes should be deleted
+
+        Returns:
+            Number of rows deleted
+        """
         raise NotImplementedError()
 
 
