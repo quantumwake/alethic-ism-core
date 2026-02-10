@@ -149,9 +149,12 @@ class NATSRouteConcurrent(NATSRoute):
         """Convenience method for low priority publish subject."""
         return self.get_publish_subject(priority="low", partition_key=partition_key)
 
-    def _dispatch(self, msg: Any, semaphore: asyncio.Semaphore, label: str = "default"):
+    def _create_task(self, msg: Any, semaphore: asyncio.Semaphore, label: str = "default"):
         """
-        Fire-and-forget task dispatch with semaphore for concurrency control.
+        Create fire-and-forget task. Semaphore already acquired by consume loop.
+
+        The semaphore is released in the task's finally block when the callback
+        completes (success or error), freeing the slot for the next fetch.
 
         Note: The callback is responsible for acking the message.
         """
@@ -159,11 +162,13 @@ class NATSRouteConcurrent(NATSRoute):
             logger.warning(f"[{label}] redelivery #{msg.metadata.num_delivered}: {msg.subject}")
 
         async def handle():
-            async with semaphore:
-                try:
-                    await self.callback(self, msg, msg.data.decode("utf-8"))
-                except Exception as e:
-                    logger.error(f"[{label}] handler error on subject {msg.subject}: {e}")
+            try:
+                await self.callback(self, msg, msg.data.decode("utf-8"))
+            except Exception as e:
+                logger.error(f"[{label}] handler error on subject {msg.subject}: {e}")
+            finally:
+                # Release semaphore slot acquired by consume loop
+                semaphore.release()
 
         task = asyncio.create_task(handle())
         self._pending_tasks.add(task)
@@ -179,19 +184,32 @@ class NATSRouteConcurrent(NATSRoute):
         backoff_time = backoff_base
 
         while wait and self.consumer_active:
+            # Block until semaphore slot available - don't fetch until we can process.
+            # This prevents queue buildup and ack timeouts from fetching faster than
+            # we can process.
+            await semaphore.acquire()
+            task_created = False
+
             try:
-                messages = await subscription.fetch(batch=self.batch_size, timeout=backoff_time)
+                messages = await subscription.fetch(batch=1, timeout=backoff_time)
                 if messages:
-                    logger.debug(f"[{label}] received {len(messages)} messages")
-                    for msg in messages:
-                        self._dispatch(msg, semaphore, label)
+                    msg = messages[0]
+                    logger.debug(f"[{label}] received message: {msg.subject}")
+                    # Task takes ownership of semaphore slot, releases on completion
+                    self._create_task(msg, semaphore, label)
+                    task_created = True
                     backoff_time = backoff_base
             except (asyncio.TimeoutError, FetchTimeoutError, TimeoutError):
                 backoff_time = min(backoff_time * backoff_factor, max_backoff)
             except Exception as e:
                 if self.consumer_active:
                     logger.error(f"[{label}] consume error: {e}")
-                    backoff_time = min(backoff_time * backoff_factor, max_backoff)
+                backoff_time = min(backoff_time * backoff_factor, max_backoff)
+            finally:
+                # Release semaphore if no task was created (timeout, error, or empty fetch).
+                # If task was created, it owns the slot and releases on completion.
+                if not task_created:
+                    semaphore.release()
 
     async def consume(self, wait: bool = True):
         """Consume with concurrent dispatch."""
