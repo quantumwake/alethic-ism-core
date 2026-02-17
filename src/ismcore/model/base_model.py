@@ -51,7 +51,7 @@ class WorkflowNode(BaseModel):
     position_y: float
     width: Optional[float] = None
     height: Optional[float] = None
-o    metadata: Optional[Dict] = None  # Stores UI state like collapsed, custom settings, etc.
+    metadata: Optional[Dict] = None  # Stores UI state like collapsed, custom settings, etc.
 
 
 class WorkflowEdge(BaseModel):
