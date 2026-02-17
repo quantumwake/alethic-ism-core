@@ -22,6 +22,7 @@ class UserProfile(BaseModel):
     name: Optional[str] = None
     tier_id: str = "tier1"
     created_date: Optional[dt.datetime] = dt.datetime.now(tz=dt.timezone.utc)
+    settings: Optional[Dict] = None  # User preferences and settings
 
 class UserProfileCredential(BaseModel):
     user_id: str
@@ -37,6 +38,7 @@ class UserProject(BaseModel):
     updated_date: Optional[dt.datetime] = None
     deleted_date: Optional[dt.datetime] = None
     properties: Optional[str] = None
+    settings: Optional[Dict] = None  # Project-specific settings and preferences
 
 
 class WorkflowNode(BaseModel):
@@ -49,6 +51,7 @@ class WorkflowNode(BaseModel):
     position_y: float
     width: Optional[float] = None
     height: Optional[float] = None
+o    metadata: Optional[Dict] = None  # Stores UI state like collapsed, custom settings, etc.
 
 
 class WorkflowEdge(BaseModel):
