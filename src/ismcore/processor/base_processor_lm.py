@@ -124,12 +124,13 @@ class BaseProcessorLM(BaseProcessor):
         #     "input": input_template
         # })
 
-    async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]):
+    async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]) -> dict | List[dict] | None:
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
-    async def process_input_data(self, input_data: dict | List[dict], force: bool = False):
+
+    async def process_input_data(self, input_data: dict | List[dict], force: bool = False) -> tuple[dict | List[any] | None, any]:
         if not input_data:
-            return []
+            return [], None
 
         # TODO maybe validate the input state to see if it was already processed for this particular output state?
         #
@@ -158,12 +159,15 @@ class BaseProcessorLM(BaseProcessor):
             )
 
             # we build a new output state to be appended to the output states
+            additional_query_state = None
             if self.config.flag_include_prompts_in_state:
                 additional_query_state = {'user_prompt': user_prompt, 'system_prompt': system_prompt}
-            else:
-                additional_query_state = None
 
-            return await self.finalize_result(result=result, input_data=input_data, additional_query_state=additional_query_state)
+            # finalize the output by performing any necessary post-processing, such as updating the query state entry with the result,
+            #  and return the finalized output, along with the original raw response data from the upstream processor implementation (if applicable)
+            finalized_output = self.finalize_result(result=result, input_data=input_data, additional_query_state=additional_query_state)
+            return await finalized_output, response_raw_data
+
         except Exception as exception:
             await self.fail_execute_processor_state(
                 # self.output_processor_state,
@@ -171,6 +175,7 @@ class BaseProcessorLM(BaseProcessor):
                 exception=exception,
                 data=input_data
             )
+            return None, None
 
     async def process_input_data_stream(self, input_data: dict | List[dict], force: bool = False):
         if not self.stream_route:

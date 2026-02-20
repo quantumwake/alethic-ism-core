@@ -535,3 +535,138 @@ def str2bool(value) -> bool:
     if value and value.lower() in ('true', '1', 't'):
         return True
     return False
+
+
+def is_json_serializable(value: Any) -> bool:
+    try:
+        json.dumps(value)
+        return True
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _try_json_loads(text: str) -> Optional[Any]:
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+def _find_matching_bracket(text: str, start: int) -> int:
+    open_char = text[start]
+    close_char = '}' if open_char == '{' else ']'
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i in range(start, len(text)):
+        c = text[i]
+        if escape_next:
+            escape_next = False
+            continue
+        if c == '\\' and in_string:
+            escape_next = True
+            continue
+        if c == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if c == open_char:
+            depth += 1
+        elif c == close_char:
+            depth -= 1
+            if depth == 0:
+                return i
+
+    return -1
+
+
+def _extract_from_code_blocks(text: str) -> Optional[Any]:
+    patterns = [
+        r'```jsonl\s*([\s\S]*?)\s*```',
+        r'```json\s*([\s\S]*?)\s*```',
+        r'```\s*([\s\S]*?)\s*```',
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            candidate = match.group(1).strip()
+            parsed = _try_json_loads(candidate)
+            if parsed is not None:
+                return parsed
+
+            # for jsonl: try parsing as newline-delimited JSON
+            if 'jsonl' in pattern:
+                lines = [l.strip() for l in candidate.splitlines() if l.strip()]
+                results = []
+                for line in lines:
+                    p = _try_json_loads(line)
+                    if p is None:
+                        break
+                    results.append(p)
+                else:
+                    if results:
+                        return results
+
+    return None
+
+
+def _extract_json_structure(text: str) -> Optional[Any]:
+    for start_char in ('{', '['):
+        pos = 0
+        while pos < len(text):
+            start = text.find(start_char, pos)
+            if start < 0:
+                break
+            end = _find_matching_bracket(text, start)
+            if end < 0:
+                break
+            candidate = text[start:end + 1]
+            parsed = _try_json_loads(candidate)
+            if parsed is not None:
+                return parsed
+            pos = start + 1
+
+    return None
+
+
+def extract_json(response: str, clean_keys: bool = False) -> tuple[bool, Optional[str], Any]:
+    if not response or not response.strip():
+        return False, None, response
+
+    text = response.strip()
+
+    # 1) direct parse
+    parsed = _try_json_loads(text)
+    if parsed is not None:
+        if clean_keys:
+            parsed = _clean_json_keys(parsed)
+        return True, 'json', parsed
+
+    # 2) extract from markdown code blocks (```json, ```jsonl, ```)
+    parsed = _extract_from_code_blocks(text)
+    if parsed is not None:
+        if clean_keys:
+            parsed = _clean_json_keys(parsed)
+        return True, 'json', parsed
+
+    # 3) find JSON structure in raw text
+    parsed = _extract_json_structure(text)
+    if parsed is not None:
+        if clean_keys:
+            parsed = _clean_json_keys(parsed)
+        return True, 'json', parsed
+
+    return False, None, response
+
+
+def _clean_json_keys(data: Any) -> Any:
+    if isinstance(data, dict):
+        return {clean_string_for_ddl_naming(k): v for k, v in data.items()}
+    elif isinstance(data, list):
+        return [
+            {clean_string_for_ddl_naming(k): v for k, v in item.items()}
+            if isinstance(item, dict) else item
+            for item in data
+        ]
+    return data

@@ -1,11 +1,12 @@
 import json
 import asyncio
+from datetime import datetime, timezone
 from typing import Any, List, Dict, Union
 
 from ismcore.messaging.base_message_route_model import BaseRoute
 from ismcore.processor.monitored_processor_state import MonitoredProcessorState
 from ismcore.storage.processor_state_storage import StateMachineStorage, FieldConfig
-from ismcore.utils.general_utils import build_template_text_v2
+from ismcore.utils.general_utils import build_template_text_v2, is_json_serializable
 from ismcore.utils.state_utils import validate_processor_status_change
 from ismcore.utils.ism_logger import ism_logger
 from ismcore.model.base_model import (
@@ -15,8 +16,7 @@ from ismcore.model.base_model import (
     ProcessorPropertiesBase,
     Processor,
     ProcessorState,
-    ProcessorStatusCode,
-    EdgeFunctionConfig)
+    ProcessorStatusCode)
 from ismcore.model.processor_state import (
     State,
     StateDataRowColumnData,
@@ -512,11 +512,15 @@ class BaseProcessor(MonitoredProcessorState):
             await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.RUNNING)
 
             # RUNNING (INTRA): the processor is executing the output instructions on the input
+            output_raw = None
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if self.config.flag_expect_stream:
                 await self.process_input_data_stream(input_data=input_query_state)
             else:
-                output_query_states = await self.process_input_data(input_data=input_query_state, force=force)
+                output_query_states, output_raw = await self.process_input_data(input_data=input_query_state, force=force)
+
+            #
+            self.post_flag_process(output_query_states=output_query_states, raw_output=output_raw)
 
             # Apply request delay if configured
             if self.properties.requestDelay > 0:
@@ -568,7 +572,7 @@ class BaseProcessor(MonitoredProcessorState):
             if isinstance(self.config, StateConfigStream) or self.config.flag_expect_stream:
                 await self.process_input_data_stream(input_data=input_query_state)
             else:
-                output_query_states = await self.process_input_data(input_data=input_query_state, force=force)
+                output_query_states, raw_output = await self.process_input_data(input_data=input_query_state, force=force)
 
             # Apply request delay if configured
             if self.properties.requestDelay > 0:
@@ -628,7 +632,7 @@ class BaseProcessor(MonitoredProcessorState):
         # return the results
         return output_query_states
 
-    async def process_input_data(self, input_data: dict | List[dict], force: bool = False):
+    async def process_input_data(self, input_data: dict | List[dict], force: bool = False) -> tuple[dict | List[any] | None, any]:
         raise NotImplementedError("event processing is not supported by this processor")
 
     ## TODO need to clean up these methods
@@ -730,7 +734,37 @@ class BaseProcessor(MonitoredProcessorState):
     #
     # async def stream_input_data_entry(self, input_query_state: dict):
     #     raise NotImplementedError("stream processing is not supported by this processor")
+    def post_flag_process(self, output_query_states: dict | list, raw_output) -> [dict | list[dict] | None]:
 
+
+        additional_query_state = None
+        # apply raw output, if set and flag is enabled, this is used for providers that return a raw response
+        # in addition to the structured query states, and the user wants to keep the raw response in the state
+        #  for later use (e.g., for retrieval or auditing purposes)
+        if self.config.flag_keep_raw_output and raw_output:
+            # p = parse_response_json(response=response_raw_data)
+            is_json_serializable()
+            additional_query_state = {'_raw_output': raw_output }
+
+        # include provider information in the query state if the flag is enabled,
+        # useful when multiple processing providers are publishing to the same state output
+        if self.config.flag_include_provider_info:
+            provider_info = f"{self.provider.name}.{self.provider.version}"
+            additional_query_state = {"provider": provider_info, **additional_query_state}
+
+        if self.config.flag_include_processing_created_at:
+            additional_query_state = {"created_at": datetime.now(timezone.utc).isoformat(), **additional_query_state}
+
+        if not additional_query_state:
+            return output_query_states
+
+        if isinstance(output_query_states, list):
+            for i in range(len(output_query_states)):
+                output_query_states[i] = { **output_query_states[i], **additional_query_state }
+        else:
+            output_query_states = { **output_query_states, **additional_query_state }
+
+        return output_query_states
 
 if __name__ == '__main__':
     # build a test state

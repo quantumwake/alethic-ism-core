@@ -115,6 +115,15 @@ class BaseStateConfig(BaseModel):
     # If False, store complex types as JSON strings in their column (DATA_JSON_VALUE).
     flag_flatten_on_save: Optional[bool] = True
 
+    # If False (default), raw output of processor will be stored as part of _raw_output
+    flag_keep_raw_output: Optional[bool] = True
+
+    #
+    flag_include_provider_info: Optional[bool] = True
+
+    #
+    flag_include_processing_created_at: Optional[bool] = True
+
 
 class StateConfig(BaseStateConfig):
     # Optional override of the name identifier for the state configuration.
@@ -1016,6 +1025,7 @@ class State(BaseModel):
                 input_query_state=(input_data if isinstance(input_data, dict) else input_data),
                 output_query_state=base_state
             )
+
 
         # Build output states
         outputs: List[Dict] = []
