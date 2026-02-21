@@ -762,7 +762,7 @@ class BaseProcessor(MonitoredProcessorState):
         # include provider information in the query state if the flag is enabled,
         # useful when multiple processing providers are publishing to the same state output
         if self.config.flag_include_provider_info:
-            provider_info = f"{self.provider.name}.{self.provider.version}"
+            provider_info = f"{self.provider.name}.{self.provider.version}".lower()
             additional_query_state["provider"] = provider_info
 
         if self.config.flag_include_processing_created_at:
