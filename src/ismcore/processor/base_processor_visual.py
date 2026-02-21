@@ -45,7 +45,7 @@ class BaseProcessorVisual(BaseProcessor):
         try:
 
             # execute the underlying model function
-            result, result_type, response_raw_data = (
+            response, response_type, response_raw = (
                 self._execute(
                     template=template,
                     values=input_query_state
@@ -58,8 +58,9 @@ class BaseProcessorVisual(BaseProcessor):
             }
 
             return await self.finalize_result(
-                result=result,
+                result=response,
                 input_data=input_query_state,
+                raw_output=response_raw,
                 additional_query_state=additional_query_state
             )
 

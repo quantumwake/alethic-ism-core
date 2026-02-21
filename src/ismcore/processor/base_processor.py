@@ -512,23 +512,17 @@ class BaseProcessor(MonitoredProcessorState):
             await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.RUNNING)
 
             # RUNNING (INTRA): the processor is executing the output instructions on the input
-            output_raw = None
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if self.config.flag_expect_stream:
                 await self.process_input_data_stream(
                     input_data=input_query_state
                 )
-            else:
                 output_query_states, output_raw = await self.process_input_data(
                     input_data=input_query_state,
-                    force=force
+                    force=force,
                 )
-
-            #
-            output_query_states = self.post_flag_process(
-                output_query_states=output_query_states,
-                raw_output=output_raw
-            )
+            else:
+                pass
 
             # Apply request delay if configured
             if self.properties.requestDelay > 0:
@@ -579,12 +573,17 @@ class BaseProcessor(MonitoredProcessorState):
             output_raw = None
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if isinstance(self.config, StateConfigStream) or self.config.flag_expect_stream:
-                await self.process_input_data_stream(input_data=input_query_state)
+                await self.process_input_data_stream(
+                    input_data=input_query_state
+                )
             else:
-                output_query_states, raw_output = await self.process_input_data(input_data=input_query_state, force=force)
+                output_query_states, raw_output = await self.process_input_data(
+                    input_data=input_query_state,
+                    force=force
+                )
 
             #
-            output_query_states = self.post_flag_process(output_query_states=output_query_states, raw_output=output_raw)
+            output_query_states = self.apply_flag_outputs(output_query_states=output_query_states, raw_output=output_raw)
 
             # Apply request delay if configured
             if self.properties.requestDelay > 0:
@@ -601,19 +600,25 @@ class BaseProcessor(MonitoredProcessorState):
                 data=input_query_state
             )
 
-    async def finalize_result(self, result: dict | List[dict] | str, input_data: dict | List[dict], additional_query_state: Any, input_route_id: str = None) -> List[Any]:
+    async def finalize_result(self,
+        result: dict | List[dict] | str, input_data: dict | List[dict],
+        additional_query_state: any,
+        input_route_id: str = None,
+        raw_output: any = None,
+    ) -> List[any]:
         """
         Finalizes the result by applying the result to the output state.
 
         Args:
-            result (Any): The result of the execution.
-            input_data (Any): The initial input query state.
-            additional_query_state (Any): Any additional output values.
+            result (any): The result of the execution.
+            input_data (any): The initial input query state.
+            additional_query_state (any): Any additional output values.
+            raw_output (any): The raw output from the execution, used for applying output processing flags.
             input_route_id (str): The input route id where the input came from (for calibration/retry).
                                   Falls back to self.input_route_id if not provided.
 
         Returns:
-            List[Any]: The final applied states.
+            List[any]: The final applied states.
         """
 
         # Use instance variable as fallback for input_route_id
@@ -627,7 +632,13 @@ class BaseProcessor(MonitoredProcessorState):
             additional_query_state=additional_query_state  # any additional output values
         )
 
-        # Apply the new query states to the state propagator, if defined
+        # apply output processing flags to the output query states (e.g. flag_keep_raw_output, etc.)
+        output_query_states = self.apply_flag_outputs(
+            output_query_states=output_query_states,
+            raw_output=raw_output
+        )
+
+        # apply the new query states to the state propagator, if defined
         output_query_states = await self.state_propagation_provider.apply_state(
             processor=self,
             input_query_state=input_data,
@@ -746,7 +757,7 @@ class BaseProcessor(MonitoredProcessorState):
     #
     # async def stream_input_data_entry(self, input_query_state: dict):
     #     raise NotImplementedError("stream processing is not supported by this processor")
-    def post_flag_process(self, output_query_states: dict | list, raw_output) -> [dict | list[dict] | None]:
+    def apply_flag_outputs(self, output_query_states: dict | list, raw_output) -> [dict | list[dict] | None]:
 
 
         additional_query_state = {}

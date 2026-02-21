@@ -79,18 +79,6 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
             if 'route_id' not in consumer_message_mapping:
                 raise ValueError(f'no route id found in consumed message content')
 
-            # fetch and validate the processor association, including provider selector
-            # processor_id = consumer_message_mapping['processor_id']
-            # processor = self.storage.fetch_processor(processor_id=processor_id)
-            # if not processor:
-            #     raise ValueError(f'no processor found for processor id: {processor_id} ')
-            #
-            # provider = self.storage.fetch_processor_provider(id=processor.provider_id)
-            # if not provider:
-            #     raise ValueError(f'no provider found for processor {processor_id}')
-
-            # fetch the processors to forward the state query to, state must be an input of the state id
-
             # fetch the processor state route such that we can find the processor and all its output states
             route_id = consumer_message_mapping['route_id']
             processor_state_route = self.storage.fetch_processor_state_route(route_id=route_id)

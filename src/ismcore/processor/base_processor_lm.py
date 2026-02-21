@@ -163,7 +163,7 @@ class BaseProcessorLM(BaseProcessor):
         # begin the processing of the prompts
         try:
             # execute the underlying model function
-            result, result_type, response_raw_data = await self._execute(
+            response, response_type, response_raw = await self._execute(
                 user_prompt=user_prompt,
                 system_prompt=system_prompt,
                 values=input_data
@@ -176,8 +176,13 @@ class BaseProcessorLM(BaseProcessor):
 
             # finalize the output by performing any necessary post-processing, such as updating the query state entry with the result,
             #  and return the finalized output, along with the original raw response data from the upstream processor implementation (if applicable)
-            finalized_output = self.finalize_result(result=result, input_data=input_data, additional_query_state=additional_query_state)
-            return await finalized_output, response_raw_data
+            finalized_output = self.finalize_result(
+                result=response,
+                input_data=input_data,
+                additional_query_state=additional_query_state,
+                raw_output=response_raw
+            )
+            return await finalized_output, response_raw
 
         except Exception as exception:
             await self.fail_execute_processor_state(
