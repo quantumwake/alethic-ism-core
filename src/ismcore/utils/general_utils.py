@@ -342,6 +342,7 @@ def parse_response_json(response: str):
                  .replace('{\\n', '{')
                  .replace('\\n}', '}')
                  .replace('",\\n', '",')
+                 .replace(',\\n', ',')
                  .replace('},\\n', '},')
                  .replace('\\n,{', ',{')
                  .replace('}\\n', '}')
@@ -420,6 +421,12 @@ def parse_response_json(response: str):
     return True, 'json', json_response
 
 def parse_response_auto_detect_type(response: str):
+    # try extract_json first (direct parse, code blocks, bracket matching)
+    data_parse_status, data_type, data_parsed = extract_json(response=response, clean_keys=True)
+    if data_parse_status:
+        return data_parse_status, data_type, data_parsed
+
+    # fall back to legacy newline-munging parser
     data_parse_status, data_type, data_parsed = parse_response_json(response=response)
     return data_parse_status, data_type, data_parsed
 

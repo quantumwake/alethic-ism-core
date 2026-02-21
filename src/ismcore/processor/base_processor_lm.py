@@ -124,11 +124,22 @@ class BaseProcessorLM(BaseProcessor):
         #     "input": input_template
         # })
 
-    async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]) -> dict | List[dict] | None:
+    async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]) \
+            -> tuple[dict | List[dict] | None, str, any]:
+        """Execute the underlying model call. Must be implemented by subclasses.
+
+        Returns:
+            tuple of (parsed_output, output_type, raw_output)
+                - parsed_output: the processed result as a dict or list of dicts, or None on failure
+                - output_type: string identifier for the output format (e.g. 'json', 'text', 'csv', 'binary', etc.)
+                - raw_output: the unmodified response from the model
+        """
         raise NotImplementedError(f'You must implement the _execute(..) method')
 
 
-    async def process_input_data(self, input_data: dict | List[dict], force: bool = False) -> tuple[dict | List[any] | None, any]:
+    async def process_input_data(self, input_data: dict | List[dict], force: bool = False)\
+            -> tuple[dict | List[any] | None, any]:
+
         if not input_data:
             return [], None
 

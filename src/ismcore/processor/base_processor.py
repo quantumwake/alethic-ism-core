@@ -515,12 +515,20 @@ class BaseProcessor(MonitoredProcessorState):
             output_raw = None
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if self.config.flag_expect_stream:
-                await self.process_input_data_stream(input_data=input_query_state)
+                await self.process_input_data_stream(
+                    input_data=input_query_state
+                )
             else:
-                output_query_states, output_raw = await self.process_input_data(input_data=input_query_state, force=force)
+                output_query_states, output_raw = await self.process_input_data(
+                    input_data=input_query_state,
+                    force=force
+                )
 
             #
-            self.post_flag_process(output_query_states=output_query_states, raw_output=output_raw)
+            output_query_states = self.post_flag_process(
+                output_query_states=output_query_states,
+                raw_output=output_raw
+            )
 
             # Apply request delay if configured
             if self.properties.requestDelay > 0:
@@ -568,11 +576,15 @@ class BaseProcessor(MonitoredProcessorState):
             await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.RUNNING)
 
             # RUNNING (INTRA): the processor is executing the output instructions on the input
+            output_raw = None
             output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
             if isinstance(self.config, StateConfigStream) or self.config.flag_expect_stream:
                 await self.process_input_data_stream(input_data=input_query_state)
             else:
                 output_query_states, raw_output = await self.process_input_data(input_data=input_query_state, force=force)
+
+            #
+            output_query_states = self.post_flag_process(output_query_states=output_query_states, raw_output=output_raw)
 
             # Apply request delay if configured
             if self.properties.requestDelay > 0:
@@ -737,23 +749,24 @@ class BaseProcessor(MonitoredProcessorState):
     def post_flag_process(self, output_query_states: dict | list, raw_output) -> [dict | list[dict] | None]:
 
 
-        additional_query_state = None
+        additional_query_state = {}
         # apply raw output, if set and flag is enabled, this is used for providers that return a raw response
         # in addition to the structured query states, and the user wants to keep the raw response in the state
         #  for later use (e.g., for retrieval or auditing purposes)
         if self.config.flag_keep_raw_output and raw_output:
-            # p = parse_response_json(response=response_raw_data)
-            is_json_serializable()
-            additional_query_state = {'_raw_output': raw_output }
+            if is_json_serializable(raw_output):
+                additional_query_state['_raw_output'] = raw_output
+            else:
+                additional_query_state['_raw_output'] = str(raw_output)
 
         # include provider information in the query state if the flag is enabled,
         # useful when multiple processing providers are publishing to the same state output
         if self.config.flag_include_provider_info:
             provider_info = f"{self.provider.name}.{self.provider.version}"
-            additional_query_state = {"provider": provider_info, **additional_query_state}
+            additional_query_state["provider"] = provider_info
 
         if self.config.flag_include_processing_created_at:
-            additional_query_state = {"created_at": datetime.now(timezone.utc).isoformat(), **additional_query_state}
+            additional_query_state["created_at"] = datetime.now(timezone.utc).isoformat()
 
         if not additional_query_state:
             return output_query_states
