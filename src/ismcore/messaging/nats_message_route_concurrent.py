@@ -191,6 +191,7 @@ class NATSRouteConcurrent(NATSRoute):
             task_created = False
 
             try:
+                logger.debug(f"[{label}] pulling messages from subject: {self.subject}, consumer: {self.consumer_id}, batch_size: 1")
                 messages = await subscription.fetch(batch=1, timeout=backoff_time)
                 if messages:
                     msg = messages[0]
@@ -200,6 +201,7 @@ class NATSRouteConcurrent(NATSRoute):
                     task_created = True
                     backoff_time = backoff_base
             except (asyncio.TimeoutError, FetchTimeoutError, TimeoutError):
+                logger.debug(f"[{label}] no data received on subject: {self.subject}, backing off for {backoff_time} seconds...")
                 backoff_time = min(backoff_time * backoff_factor, max_backoff)
             except Exception as e:
                 if self.consumer_active:
