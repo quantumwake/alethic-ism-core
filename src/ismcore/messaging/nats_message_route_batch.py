@@ -5,7 +5,6 @@ from typing import Optional, Callable
 import nats.aio.errors
 import nats.js.errors
 from nats.aio.errors import ErrConnectionClosed, ErrTimeout, ErrNoServers
-
 from ismcore.messaging.nats_message_route import NATSRoute
 from ismcore.utils.ism_logger import ism_logger
 
@@ -21,15 +20,14 @@ class NATSRouteBatch(NATSRoute):
     group_by_fn: Optional[Callable] = None
 
     @classmethod
-    def from_route(cls, route: NATSRoute, batch_size: int,
+    def from_route(cls, route: NATSRoute,
                    batch_callback: Callable, group_by_fn: Callable) -> 'NATSRouteBatch':
         """Construct a NATSRouteBatch from an existing NATSRoute's config."""
-        route_data = json.loads(route.model_dump_json())
-        route_data['batch_size'] = batch_size
-        instance = cls(**route_data)
-        instance.batch_callback = batch_callback
-        instance.group_by_fn = group_by_fn
-        return instance
+        return cls(
+            **route.model_dump(),
+            batch_callback=batch_callback,
+            group_by_fn=group_by_fn,
+        )
 
     async def consume(self, wait: bool = True):
         logger.info(
