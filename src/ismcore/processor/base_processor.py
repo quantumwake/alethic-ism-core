@@ -23,7 +23,11 @@ from ismcore.model.processor_state import (
     StateDataColumnDefinition,
     StateDataKeyDefinition,
     StateConfig,
-    StateDataColumnIndex, StateConfigStream,
+    StateDataColumnIndex,
+    ExecutionStrategy,
+    RoutingMode,
+    PersistenceMode,
+    OutputEnrichment,
 )
 
 logging = ism_logger(__name__)
@@ -111,8 +115,9 @@ class StatePropagationProviderRouterStateRouter(StatePropagationProviderRouter):
 
         output_state = processor.output_state
 
-        # If the flag is set to false, then skip it
-        if not processor.config.flag_auto_route_output_state:
+        props = processor.output_state.typed_properties
+        routing_mode = props.routing.mode if props.routing else RoutingMode.DISABLED
+        if routing_mode == RoutingMode.DISABLED:
             logging.debug(f'skipping auto route of output state events, for state id: {output_state.id}')
             return output_query_states
 
@@ -166,8 +171,9 @@ class StatePropagationProviderRouterStateSyncStore(StatePropagationProviderRoute
             List[Any]: The result of applying the query states to the output state.
         """
 
-        # If the flag is set and the flat is false, then skip it
-        if not processor.config.flag_auto_save_output_state:
+        props = processor.output_state.typed_properties
+        persistence_mode = props.persistence.mode if props.persistence else PersistenceMode.DISABLED
+        if persistence_mode == PersistenceMode.DISABLED:
             logging.debug(f'skipping persistence of state events, for state id: {processor.output_state.id}')
             return output_query_states
 
@@ -311,18 +317,15 @@ class BaseProcessor(MonitoredProcessorState):
 
     @property
     def template(self) -> InstructionTemplate | None:
-        # if not isinstance(self.config, StateConfigStream):
-        #     raise ValueError("system template cannot be set for streaming configuration, use template instead")
-
-        if self.config.template_id:
-            template = self.storage.fetch_template(self.config.template_id)
-            return template
-
+        """Fetch the instruction template from storage, if one is configured."""
+        template_id = getattr(self.config, 'template_id', None)
+        if template_id:
+            return self.storage.fetch_template(template_id)
         return None
 
     @property
     def properties(self) -> ProcessorPropertiesBase:
-        """Override base class to return typed base properties"""
+        """Return typed processor properties (e.g. requestDelay, concurrency settings)."""
         if not self.processor.properties:
             return ProcessorPropertiesBase()
         return ProcessorPropertiesBase(**self.processor.properties)
@@ -336,15 +339,20 @@ class BaseProcessor(MonitoredProcessorState):
                  state_propagation_provider: StatePropagationProvider = StatePropagationProviderCore(),
                  stream_route: BaseRoute = None,
                  **kwargs):
+        """Initialize a processor bound to an output state.
 
+        Args:
+            output_state: The State object this processor writes results to.
+            state_machine_storage: Storage backend for fetching processors, templates, usage, etc.
+            provider: The provider (model/service) backing this processor.
+            processor: The Processor entity from the database.
+            output_processor_state: The ProcessorState linking processor to output state.
+            state_propagation_provider: Strategy for propagating output (core, router, sync-store, etc.).
+            stream_route: Route for streaming output, required when execution strategy is STREAM.
+        """
         super().__init__(**kwargs)
 
-        # TODO move into a Syncable and StateRouteable feature class
-        # self.sync_store_route = sync_store_route
-        # self.state_router_route = state_router_route
-
         self.state_propagation_provider = state_propagation_provider
-
         self.current_status = ProcessorStatusCode.CREATED
         self.output_state = output_state
         self.storage = state_machine_storage
@@ -352,23 +360,17 @@ class BaseProcessor(MonitoredProcessorState):
         self.processor = processor
         self.output_processor_state = output_processor_state
         self.stream_route = stream_route
-        self.input_route_id = None  # set by execute_set/execute_entry for calibration/retry support
+        self.input_route_id = None  # set by execute() for calibration/retry support
 
-        logging.info(f'setting up processor: {self.processor.id if processor else None},'
-                     f'provider id: {self.provider.id if provider else None}, '
-                     f'provider name: {self.provider.name if provider else None}, '
-                     f'provider version: {self.provider.version if provider else None}, '
-                     f'config: {self.config}')
-
-    @property
-    def properties(self) -> ProcessorPropertiesBase:
-        """Return typed processor properties"""
-        if not self.processor.properties:
-            return ProcessorPropertiesBase()
-        return ProcessorPropertiesBase(**self.processor.properties)
+        logging.info(
+            f'setting up processor: {self.processor.id if processor else None}, '
+            f'provider: {self.provider.name if provider else None} '
+            f'v{self.provider.version if provider else None}'
+        )
 
     @property
-    def config(self) -> Union[StateConfig, StateConfigStream]:
+    def config(self) -> StateConfig:
+        """Shortcut to the output state's configuration."""
         return self.output_state.config
 
     @config.setter
@@ -377,10 +379,12 @@ class BaseProcessor(MonitoredProcessorState):
 
     @property
     def data(self):
+        """Shortcut to the output state's row data."""
         return self.output_state.data
 
     @property
     def columns(self):
+        """Shortcut to the output state's column definitions."""
         return self.output_state.columns
 
     @columns.setter
@@ -389,9 +393,18 @@ class BaseProcessor(MonitoredProcessorState):
 
     @property
     def mapping(self):
+        """Shortcut to the output state's key → row index mapping."""
         return self.output_state.mapping
 
     def fetch_session_data(self, input_data):
+        """Retrieve prior session messages for context-aware processing.
+
+        Looks up the session history by (source, session_id) from the input dict
+        and returns a list of deserialized message dicts.
+
+        Returns:
+            List[dict]: Prior session messages, empty list if unavailable.
+        """
         if not isinstance(input_data, dict):
             return []
 
@@ -407,198 +420,193 @@ class BaseProcessor(MonitoredProcessorState):
         if not session_history:
             return []
 
-        messages_dict = [json.loads(entry.original_content) for entry in session_history]
-
-        # messages_dict = []
-        # for entry in session_history:
-        #     try:
-        #         entry = json.loads(entry)
-        #     except:
-        #         pass
-        #
-        #     if isinstance(entry, dict):
-        #         # role = entry['role'] if 'role' in entry else 'history'
-        #         # content = entry['content'].strip() if 'content' in entry else str(entry)
-        #         messages_dict.append(entry)
-        #     else:
-        #         messages_dict.append({"role": "user", "content": str(entry)})
-
-        return messages_dict
+        return [json.loads(entry.original_content) for entry in session_history]
 
     def has_query_state(self, query_state_key: str, force: bool = False):
-        # make sure that the state is initialized and that there is a data key
+        """Check whether a query state key has already been processed.
+
+        Args:
+            query_state_key: The state key hash to look up.
+            force: If True, ignore cached state and return False.
+
+        Returns:
+            None if mapping is not initialized, True if cached, False otherwise.
+        """
         if not self.mapping:
             return None
 
-        # skip if not forced and state exists
         if not force and query_state_key in self.mapping:
             logging.info(f'query {query_state_key}, cached, on config: {self.config}')
             return True
 
-        # otherwise return none, which means no state exists
         logging.info(f'query {query_state_key}, not cached, on config: {self.config}')
         return False
 
     def get_current_status(self):
+        """Return the current in-memory processor status."""
         return self.current_status
 
     def update_current_status(self, new_status: ProcessorStatusCode):
+        """Transition the processor to a new status with validation.
+
+        Raises if the transition is not allowed by the status state machine.
+        """
         validate_processor_status_change(
             current_status=self.get_current_status(),
             new_status=new_status
         )
-
         self.current_status = new_status
 
-    async def can_processor_process_data(self):
+    _TERMINAL_STATUSES = frozenset({
+        ProcessorStatusCode.TERMINATE,
+        ProcessorStatusCode.FAILED,
+        ProcessorStatusCode.STOPPED,
+    })
+
+    async def _can_processor_process_data(self) -> bool:
+        """Determine whether this processor is allowed to execute.
+
+        Performs three sequential checks:
+          1. Processor existence — guards against stale references.
+          2. Processor status — rejects terminal states (TERMINATE, FAILED, STOPPED).
+          3. Usage limits — fetches the owning project's current usage report and
+             short-circuits on "block" decisions from the usage tier.
+
+        Returns:
+            True if execution should proceed, False otherwise.
+        """
+        # 1. Verify processor still exists in storage
         processor = self.storage.fetch_processor(processor_id=self.processor.id)
         if not processor:
-            logging.error(f'critical, unable to find processor id: {self.processor.id}, '
-                          f'likely a storage implementation issue, should have not got this far.')
+            logging.error(
+                f'processor {self.processor.id} not found in storage — '
+                f'likely a stale reference or storage implementation issue'
+            )
             return False
 
-        # ensure that the processor status is not in terminated state
-        if processor.status in [
-            ProcessorStatusCode.TERMINATE,
-            ProcessorStatusCode.FAILED,
-            ProcessorStatusCode.STOPPED
-        ]: return False
+        # 2. Reject terminal statuses
+        if processor.status in self._TERMINAL_STATUSES:
+            logging.debug(
+                f'processor {self.processor.id} is in terminal state '
+                f'{processor.status}, skipping execution'
+            )
+            return False
 
-        # check usage limits
-        ## TODO add project id to processor model so we do not need to fetch processor again (OR CACHE THIS IN THE DB STORAGE SIMILAR TO ALETHIC-ISM-CORE-GO sdk)
+        # 3. Check usage limits against the owning project
+        # TODO: cache project lookup or add project_id to Processor model
         project = self.storage.fetch_user_project(project_id=processor.project_id)
         if not project:
-            logging.error(f'critical, unable to find project id: {processor.project_id} for processor id: {self.processor.id}')
+            logging.error(
+                f'project {processor.project_id} not found for '
+                f'processor {self.processor.id}'
+            )
             return False
 
-        ##
         user_id = project.user_id
-        # project_id = project.id   ## TODO use this later when we add project based tiers
-        # processor_provider = self.storage.fetch_processor_provider(id=processor.provider_id) ## TODO use this later when we add processor based tiers
+        usage = self.storage.fetch_user_project_current_usage_report(user_id=user_id)
+        if not usage:
+            # No usage record yet — first-time user, allow processing
+            logging.info(f'no usage record for user {user_id}, allowing processing')
+            return True
 
-        ## TODO need to check the user limits in addition to project limits, we need to add tiers per project as well; and we also need to add tiers per user&project&processor if any
-        user_current_usage = self.storage.fetch_user_project_current_usage_report(user_id=project.user_id)
-        if not user_current_usage:
-            logging.info(f"user has no usage yet, allowing processing for user: {project.user_id}")
-        else:
-            decision, ok = user_current_usage.is_allowed()
-            if decision == "ok":
-                logging.debug(f'user usage within limits for user: {user_id} - allowing processing {decision}')
-            elif decision == "warn":
-                logging.warning(f'usage limit approaching for user: {user_id} - allowing processing {decision}')
-            elif decision == "block":
-                logging.warning(f'usage limit reached for user: {user_id} - blocking processing {decision}')
-                return False
+        decision, detail = usage.is_allowed()
+        if decision == "block":
+            logging.warning(
+                f'usage limit reached for user {user_id}: {detail} — blocking'
+            )
+            return False
+
+        if decision == "warn":
+            logging.warning(
+                f'usage limit approaching for user {user_id}: {detail} — allowing'
+            )
 
         return True
 
-    async def execute_set(self, input_query_state: List[dict] = None, force: bool = False, input_route_id: str = None):
-        is_allowed_to_process = await self.can_processor_process_data()
-        if not is_allowed_to_process:
-            logging.debug(f'processor {self.processor.id} for {self.provider.id}' f'is in a stopped state, skipping input query processing')
-            return []
+    def _should_use_stream(self) -> bool:
+        """Check whether this processor should use streaming execution."""
+        props = self.output_state.typed_properties
+        if props.execution and props.execution.strategy:
+            strategy = ExecutionStrategy(props.execution.strategy)
+            return strategy == ExecutionStrategy.STREAM
+        return False
 
-        if self.config.flag_dedup_drop_enabled:
-            pass  # TODO need to check input for deduplication (need to keep the hash of the input if this is enabled)
+    async def _apply_request_delay(self):
+        """Sleep for the configured requestDelay (ms) between executions.
 
-        # store input_route_id for use in finalize_result (calibration/retry support)
-        self.input_route_id = input_route_id
-
-        # execute the input entry given the processor implementation
-        try:
-            route_id = self.output_processor_state.id
-
-            # RUNNING: the processor is about to execute the instructions
-            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.RUNNING)
-
-            # RUNNING (INTRA): the processor is executing the output instructions on the input
-            output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
-            if self.config.flag_expect_stream:
-                await self.process_input_data_stream(
-                    input_data=input_query_state
-                )
-                output_query_states, output_raw = await self.process_input_data(
-                    input_data=input_query_state,
-                    force=force,
-                )
-            else:
-                pass
-
-            # Apply request delay if configured
-            if self.properties.requestDelay > 0:
-                logging.debug(f'processor {self.processor.id} for {self.provider.id} applying request delay of {self.properties.requestDelay} ms')
-                await asyncio.sleep(self.properties.requestDelay / 1000.0)  # Convert ms to seconds
-
-            # COMPLETED: the processor has completed execution of instructions
-            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
-            return output_query_states
-        except Exception as ex:
-            await self.fail_execute_processor_state(route_id=self.output_processor_state.id, exception=ex)
-
-    async def execute_entry(self, input_query_state: dict, force: bool = False, input_route_id: str = None):
+        Used to rate-limit calls to external providers (e.g. LLM APIs).
+        No-op if requestDelay is 0.
         """
-        Executes the processor state update and processes the input data entry.
+        if self.properties.requestDelay > 0:
+            logging.debug(
+                f'processor {self.processor.id} for {self.provider.id} '
+                f'applying request delay of {self.properties.requestDelay} ms'
+            )
+            await asyncio.sleep(self.properties.requestDelay / 1000.0)
+
+    async def execute(self, input_data, force=False, input_route_id=None) -> list:
+        """
+        Unified execution pipeline for both individual entries and batch sets.
 
         Args:
-            input_query_state (Dict): The input query state to process.
-            force (bool, optional): Flag to force the process. Defaults to False.
-            input_route_id (str): The input route id where the input came from (for calibration/retry).
+            input_data: dict (single entry) or List[dict] (batch).
+            force: Flag to force the process.
+            input_route_id: The input route id where the input came from (for calibration/retry).
 
         Returns:
-            List[Dict]: The processed output query states.
-
-        Raises:
-            Exception: If an error occurs during execution.
+            List[dict]: The processed output query states.
         """
-        is_allowed_to_process = await self.can_processor_process_data()
-        if not is_allowed_to_process:
-            logging.debug(f'processor {self.processor.id} for {self.provider.id}'
-                          f'is in a stopped state, skipping input query processing')
+        if not await self._can_processor_process_data():
+            logging.debug(
+                f'processor {self.processor.id} for {self.provider.id} '
+                f'is in a stopped state, skipping'
+            )
             return []
 
-        if self.config.flag_dedup_drop_enabled:
-            pass  # TODO need to check input for deduplication (need to keep the hash of the input if this is enabled)
-
-        # store input_route_id for use in finalize_result (calibration/retry support)
         self.input_route_id = input_route_id
 
-        # execute the input entry given the processor implementation
         try:
+            # send state processor status running event
             route_id = self.output_processor_state.id
+            await self.send_processor_state_update(
+                route_id=route_id,
+                status=ProcessorStatusCode.RUNNING
+            )
 
-            # RUNNING: the processor is about to execute the instructions
-            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.RUNNING)
-
-            # RUNNING (INTRA): the processor is executing the output instructions on the input
-            output_raw = None
-            output_query_states = []  # TODO not sure if we should do something with if the config is a streams?
-            if isinstance(self.config, StateConfigStream) or self.config.flag_expect_stream:
-                await self.process_input_data_stream(
-                    input_data=input_query_state
+            output_query_states = []
+            if self._should_use_stream():
+                await self._process_input_data_stream(
+                    input_data=input_data
                 )
             else:
+                # invoke processor with inbound input
                 output_query_states, raw_output = await self.process_input_data(
-                    input_data=input_query_state,
-                    force=force
+                    input_data=input_data, force=force
                 )
 
-            #
-            output_query_states = self.apply_flag_outputs(output_query_states=output_query_states, raw_output=output_raw)
+                # enrich output with metadata (raw_output, provider, created_at)
+                output_query_states = self._apply_flag_outputs(
+                    output_query_states=output_query_states,
+                    raw_output=raw_output
+                )
 
-            # Apply request delay if configured
-            if self.properties.requestDelay > 0:
-                logging.debug(f'processor {self.processor.id} for {self.provider.id} applying request delay of {self.properties.requestDelay} ms')
-                await asyncio.sleep(self.properties.requestDelay / 1000.0)  # Convert ms to seconds
+            # apply a delay if configured in next inbound processing event
+            await self._apply_request_delay()
 
-            # COMPLETED: the processor has completed execution of instructions
-            await self.send_processor_state_update(route_id=route_id, status=ProcessorStatusCode.COMPLETED)
+            # send state processor status completed event
+            await self.send_processor_state_update(
+                route_id=route_id,
+                status=ProcessorStatusCode.COMPLETED
+            )
             return output_query_states
+
         except Exception as ex:
             await self.fail_execute_processor_state(
                 route_id=self.output_processor_state.id,
                 exception=ex,
-                data=input_query_state
+                data=input_data,
             )
+            return []
 
     async def finalize_result(self,
         result: dict | List[dict] | str, input_data: dict | List[dict],
@@ -606,39 +614,40 @@ class BaseProcessor(MonitoredProcessorState):
         input_route_id: str = None,
         raw_output: any = None,
     ) -> List[any]:
-        """
-        Finalizes the result by applying the result to the output state.
+        """Finalize processor output: apply inheritance, propagate to downstream.
+
+        Called by concrete processor subclasses at the end of process_input_data().
+        Applies the result to the output state (inheritance, key generation),
+        then propagates to downstream consumers via the state propagation provider.
+
+        Note: Output enrichment (raw_output, provider, created_at) is applied
+        in execute(), not here. The raw_output param is kept for signature
+        compatibility but is no longer used in this method.
 
         Args:
-            result (any): The result of the execution.
-            input_data (any): The initial input query state.
-            additional_query_state (any): Any additional output values.
-            raw_output (any): The raw output from the execution, used for applying output processing flags.
-            input_route_id (str): The input route id where the input came from (for calibration/retry).
-                                  Falls back to self.input_route_id if not provided.
+            result: The processor's output — dict, list of dicts, or str.
+            input_data: The original input query state.
+            additional_query_state: Extra key-value pairs to merge into output.
+            input_route_id: Source route for calibration/retry. Falls back to
+                            self.input_route_id if not provided.
+            raw_output: Deprecated here — enrichment now happens in execute().
 
         Returns:
-            List[any]: The final applied states.
+            List[dict]: The finalized output query states after propagation.
         """
 
         # Use instance variable as fallback for input_route_id
         if input_route_id is None:
             input_route_id = self.input_route_id
 
-        # Apply the result from the execution
+        # Apply the result from the execution (inheritance, key generation, etc.)
         output_query_states = await self.output_state.apply_result(
-            result=result,  # the result of the execution
-            input_data=input_data,  # the initial input state
-            additional_query_state=additional_query_state  # any additional output values
+            result=result,
+            input_data=input_data,
+            additional_query_state=additional_query_state
         )
 
-        # apply output processing flags to the output query states (e.g. flag_keep_raw_output, etc.)
-        output_query_states = self.apply_flag_outputs(
-            output_query_states=output_query_states,
-            raw_output=raw_output
-        )
-
-        # apply the new query states to the state propagator, if defined
+        # Propagate output to downstream consumers (sync-store, router, etc.)
         output_query_states = await self.state_propagation_provider.apply_state(
             processor=self,
             input_query_state=input_data,
@@ -646,23 +655,32 @@ class BaseProcessor(MonitoredProcessorState):
             input_route_id=input_route_id
         )
 
-        # Apply the new query state to the persistent storage class defined
-        # output_query_states = await self.save_states(
-        #     input_query_state=input_query_state,
-        #     output_query_states=output_query_states
-        # )
-
-        # return the results
         return output_query_states
 
     async def process_input_data(self, input_data: dict | List[dict], force: bool = False) -> tuple[dict | List[any] | None, any]:
+        """Process input data and return (output_query_states, raw_output).
+
+        Must be implemented by concrete processor subclasses (e.g. LM, DB, Code).
+
+        Args:
+            input_data: Single entry dict or batch list depending on execution strategy.
+            force: If True, re-process even if the entry was already cached.
+
+        Returns:
+            Tuple of (processed output states, raw provider response).
+        """
         raise NotImplementedError("event processing is not supported by this processor")
 
-    ## TODO need to clean up these methods
-    async def _stream(self, input_data: Any, template: str):
-        raise NotImplementedError()
+    async def process_input_data_stream(self, input_data: dict | List[dict]):
+        """Yield streaming content chunks for the given input.
 
-    async def process_input_data_stream(self, input_data: dict | List[dict], force: bool = False):
+        Must be implemented by streaming-capable processor subclasses.
+        Each yielded str is published to the stream route by _process_input_data_stream.
+        """
+        raise NotImplementedError("streaming is not supported by this processor")
+
+    async def _process_input_data_stream(self, input_data: dict | List[dict]):
+        """Internal stream orchestrator: route setup, chunk publishing, cleanup."""
         if not self.stream_route:
             raise ValueError(
                 f"streams are not supported by provider: {self.output_processor_state.id}, "
@@ -671,112 +689,69 @@ class BaseProcessor(MonitoredProcessorState):
         if not input_data:
             raise ValueError("invalid input state, cannot be empty")
 
-        # TODO this such a terrible HACK to use a session id for a given processor state stream
         if 'session_id' in input_data:
             session_id = input_data["session_id"]
             subject = f"processor.state.{self.output_state.id}.{session_id}"
         else:
             subject = f"processor.state.{self.output_state.id}"
 
-        name = f"{subject}".replace("-", "_")
-
-        # begin the processing of the prompts
+        name = subject.replace("-", "_")
         logging.debug(f"entered streaming mode, state_id: {self.output_state.id}")
 
-        # submit to the fully qualified subject, which may include a session id
         stream_route = self.stream_route.clone(
-            route_config_updates={
-                "subject": subject,
-                "name": name
-            }
+            route_config_updates={"subject": subject, "name": name}
         )
 
-        # check if template attribute exists in
-        if hasattr(self, 'template'):
-            if not self.template:
-                template = None
-            else:
-                template = build_template_text_v2(self.template, input_data)
-        else:
-            template = None
-
-
         try:
-            # submit the original request to the stream, to all subscribers of the subject
-            # TODO this needs to be invoked at the LM processor level, pre-stream-processing
-            if 'source' in input_data:
-                await stream_route.publish(input_data['source'])
-                await stream_route.publish("<<>>SOURCE<<>>")
-
-            if 'input' in input_data:
-                await stream_route.publish(input_data['input'])
-                await stream_route.publish("<<>>INPUT<<>>")
-
-            # flush the stream to ensure the messages are sent to the stream server
-            await stream_route.flush()
-
-            # build a coroutine calling the concrete implementation of the stream
-            stream = self._stream(input_data=input_data, template=template)
-
-            # execute and iterate the yielded data directly into the upstream route
-            async for content in stream:
+            async for content in self.process_input_data_stream(input_data=input_data):
                 try:
                     if isinstance(content, str):
                         await stream_route.publish(content)
                         await stream_route.flush()
                     elif content is None:
-                        # Log or handle the None case if necessary
                         logging.warning('Received NoneType content, skipping...')
                     else:
-                        # Handle unexpected types
                         logging.warning(f'Unexpected content type: {type(content)}')
                 except Exception as critical:
-                    # Provide more detailed exception handling
                     logging.critical(f'Exception encountered during streaming: {critical}', exc_info=True)
 
-            # TODO this needs to be invoked at the LM processor level, post-stream-processing
-            # submit the response message to the stream.
-            await stream_route.publish("<<>>ASSISTANT<<>>")
-            await stream_route.flush()
-
-            # should gracefully close the connection
             await stream_route.disconnect()
-
             logging.debug(f"exit streaming mode, state_id: {self.output_state.id}")
         except Exception as exception:
-            # submit the response message to the stream.
-            await stream_route.publish("<<>>ERROR<<>>")
-            await stream_route.flush()
             await self.fail_execute_processor_state(
-                # self.output_processor_state,
                 route_id=self.output_processor_state.id,
                 exception=exception,
                 data=input_data
             )
+    def _apply_flag_outputs(self, output_query_states: dict | list, raw_output) -> [dict | list[dict] | None]:
+        """Enrich output query states with metadata based on output properties.
 
-    #
-    # async def stream_input_data_entry(self, input_query_state: dict):
-    #     raise NotImplementedError("stream processing is not supported by this processor")
-    def apply_flag_outputs(self, output_query_states: dict | list, raw_output) -> [dict | list[dict] | None]:
+        Applies optional enrichments controlled by State.properties.output.enrichments:
+          - _raw_output: the raw provider response (OutputEnrichment.RAW_OUTPUT)
+          - provider: "{name}.{version}" string (OutputEnrichment.PROVIDER)
+          - created_at: UTC ISO timestamp (OutputEnrichment.CREATED_AT)
 
+        Called from execute() after process_input_data() completes.
+        """
+        props = self.output_state.typed_properties
+        enrichments = set(props.output.enrichments) if props.output and props.output.enrichments else set()
 
         additional_query_state = {}
-        # apply raw output, if set and flag is enabled, this is used for providers that return a raw response
-        # in addition to the structured query states, and the user wants to keep the raw response in the state
-        #  for later use (e.g., for retrieval or auditing purposes)
-        if self.config.flag_keep_raw_output and raw_output:
+
+        # Attach raw provider response for auditing/retrieval
+        if OutputEnrichment.RAW_OUTPUT in enrichments and raw_output:
             if is_json_serializable(raw_output):
                 additional_query_state['_raw_output'] = raw_output
             else:
                 additional_query_state['_raw_output'] = str(raw_output)
 
-        # include provider information in the query state if the flag is enabled,
+        # include provider information in the query state,
         # useful when multiple processing providers are publishing to the same state output
-        if self.config.flag_include_provider_info:
+        if OutputEnrichment.PROVIDER in enrichments:
             provider_info = f"{self.provider.name}.{self.provider.version}".lower()
             additional_query_state["provider"] = provider_info
 
-        if self.config.flag_include_processing_created_at:
+        if OutputEnrichment.CREATED_AT in enrichments:
             additional_query_state["created_at"] = datetime.now(timezone.utc).isoformat()
 
         if not additional_query_state:

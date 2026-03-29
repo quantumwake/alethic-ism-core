@@ -31,8 +31,8 @@ class BaseProcessorVisual(BaseProcessor):
                              f'got {type(self.output_state.config)}, '
                              f'expected {StateConfigVisual}')
 
-    def _execute(self, template: str, values: dict):
-        raise NotImplementedError(f'You must implement the _execute(..) method')
+    def execute_visual(self, template: str, values: dict):
+        raise NotImplementedError(f'You must implement the execute_visual(..) method')
 
     async def process_input_data_entry(self, input_query_state: dict, force: bool = False):
         if not input_query_state:
@@ -46,7 +46,7 @@ class BaseProcessorVisual(BaseProcessor):
 
             # execute the underlying model function
             response, response_type, response_raw = (
-                self._execute(
+                self.execute_visual(
                     template=template,
                     values=input_query_state
                 )

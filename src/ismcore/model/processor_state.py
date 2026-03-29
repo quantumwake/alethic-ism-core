@@ -15,58 +15,85 @@ from ismcore.utils.general_utils import (
 
 logging = ism_logger(__name__)
 
-#
-# class CustomStateUnpickler(pickle.Unpickler):
-#     def load(self):
-#         obj = super().load()
-#
-#         # Modify obj here if it's the desired class
-#
-#         def update_state_config_properties(_config: Union[StateConfig, StateConfigDB, StateConfigLM]):
-#             if 'output_primary_key_definition' in _config.__dict__:
-#                 _config.primary_key = _config.output_primary_key_definition
-#                 del _config.output_primary_key_definition
-#
-#             if 'include_extra_from_input_definition' in _config.__dict__:
-#                 _config.query_state_inheritance = _config.include_extra_from_input_definition
-#                 del _config.include_extra_from_input_definition
-#
-#             return _config
-#
-#         if isinstance(obj, StateConfig):
-#             obj = update_state_config_properties(_config=obj)
-#         elif isinstance(obj, State):
-#             obj.config = update_state_config_properties(_config=obj.config)
-#
-#         return obj
-#
-#     def find_class(self, module, name):
-#         try:
-#             return super().find_class(module, name)
-#         except ModuleNotFoundError as e:
-#             if 'State' == name:
-#                 return State
-#             elif 'StateConfig' == name:
-#                 return StateConfig
-#             elif 'StateConfigLM' == name:
-#                 return StateConfigLM
-#             elif 'StateConfigDB' == name:
-#                 return StateConfigDB
-#             elif 'StateDataColumnDefinition' == name:
-#                 return StateDataColumnDefinition
-#             elif 'StateDataRowColumnData' == name:
-#                 return StateDataRowColumnData
-#             elif 'StateDataColumnIndex' == name:
-#                 return StateDataColumnIndex
-#             elif 'StateDataKeyDefinition' == name:
-#                 return StateDataKeyDefinition
-#             elif 'ProcessorStatus' == name:
-#                 return ProcessorStatusCode
-#             elif 'InstructionTemplate' == name:
-#                 return InstructionTemplate
-#
-#             raise e
 
+# ── State Properties enums & sub-models ──────────────────────────────────
+
+class ExecutionStrategy(str, PyEnum):
+    INDIVIDUAL = "individual"   # default — one entry at a time
+    BATCH = "batch"             # entire List[dict] to processor
+    STREAM = "stream"           # streaming execution
+
+
+class RoutingMode(str, PyEnum):
+    DISABLED = "disabled"       # default — no auto-routing
+    IMMEDIATE = "immediate"     # route right after processing
+    AFTER_SAVE = "after_save"   # route after persistence completes
+
+
+class RoutingDispatch(str, PyEnum):
+    BATCH = "batch"             # default — send List[dict] as one message
+    INDIVIDUAL = "individual"   # split into individual messages
+
+
+class PersistenceMode(str, PyEnum):
+    DISABLED = "disabled"       # default — no auto-save
+    INDIVIDUAL_ROWS = "individual_rows"  # each dict = separate row
+    JSON_COLUMN = "json_column"          # single row, _result_set column
+    LIST_COLUMNS = "list_columns"        # single row, key = [values...]
+
+
+class FlattenMode(str, PyEnum):
+    DOT_NOTATION = "dot_notation"   # default — a.b.c columns
+    JSON_STRING = "json_string"     # serialize complex types as JSON strings
+    NONE = "none"                   # preserve complex types as-is
+
+
+class InheritanceMode(str, PyEnum):
+    ALL = "all"                 # default — copy everything from input
+    SELECTIVE = "selective"     # use query_state_inheritance key definitions
+    INVERSE = "inverse"         # remove specified keys from output
+
+
+class OutputEnrichment(str, PyEnum):
+    RAW_OUTPUT = "raw_output"
+    PROVIDER = "provider"
+    CREATED_AT = "created_at"
+    PROMPTS = "prompts"
+
+
+class ExecutionProperties(BaseModel):
+    strategy: Optional[str] = ExecutionStrategy.INDIVIDUAL
+    # inherit_set: Optional[bool] = False  # removed — inheritance is controlled by InheritanceProperties.mode + PersistenceProperties.flatten
+
+
+class RoutingProperties(BaseModel):
+    mode: Optional[str] = RoutingMode.DISABLED
+    dispatch: Optional[str] = RoutingDispatch.BATCH
+
+
+class PersistenceProperties(BaseModel):
+    mode: Optional[str] = PersistenceMode.DISABLED
+    flatten: Optional[str] = FlattenMode.DOT_NOTATION
+    storage_class: Optional[str] = "database"
+
+
+class InheritanceProperties(BaseModel):
+    mode: Optional[str] = InheritanceMode.ALL
+    require_primary_key: Optional[bool] = False
+
+
+class OutputProperties(BaseModel):
+    enrichments: Optional[List[str]] = ["raw_output", "provider", "created_at"]
+
+
+class StateProperties(BaseModel):
+    execution: Optional[ExecutionProperties] = None
+    routing: Optional[RoutingProperties] = None
+    persistence: Optional[PersistenceProperties] = None
+    inheritance: Optional[InheritanceProperties] = None
+    output: Optional[OutputProperties] = None
+    dedup_enabled: Optional[bool] = False
+    append_to_session: Optional[bool] = False
 
 class StateDataKeyDefinition(BaseModel):
     id: Optional[int] = None
@@ -95,34 +122,36 @@ class BaseStateConfig(BaseModel):
     # Defines the storage backend to use (e.g., "database", "parquet", etc.)
     storage_class: Optional[str] = "database"
 
+    # FLAGS REMOVAL: all flags below are deprecated — use State.properties / StateProperties instead.
+
     # If True, entries processed by this state will be appended to a session context,
     # allowing later retrieval based on a session_id provided in the input dictionary.
-    flag_append_to_session: Optional[bool] = False
+    # flag_append_to_session: Optional[bool] = False
 
     # If True, deduplication is enabled by hashing the entire input entry and
     # skipping execution if an identical entry has already been processed.
-    flag_dedup_drop_enabled: Optional[bool] = False
+    # flag_dedup_drop_enabled: Optional[bool] = False
 
     # If True, the upstream method will receive the entire input set (list/slice) at once
     # rather than processing one entry at a time. This allows concrete implementations
     # to handle batch inputs as they see fit.
-    flag_enable_execute_set: Optional[bool] = False
+    # flag_enable_execute_set: Optional[bool] = False
 
     # If True, the upstream method will receive the entire set of inherited entries
-    flag_enable_execute_set_inherit_set: Optional[bool] = False
+    # flag_enable_execute_set_inherit_set: Optional[bool] = False
 
     # If True (default), flatten complex types (dict, list) to dot-notation columns.
     # If False, store complex types as JSON strings in their column (DATA_JSON_VALUE).
-    flag_flatten_on_save: Optional[bool] = True
+    # flag_flatten_on_save: Optional[bool] = True
 
     # If False (default), raw output of processor will be stored as part of _raw_output
-    flag_keep_raw_output: Optional[bool] = True
+    # flag_keep_raw_output: Optional[bool] = True
 
-    #
-    flag_include_provider_info: Optional[bool] = True
+    # If True, include provider name.version in output state
+    # flag_include_provider_info: Optional[bool] = True
 
-    #
-    flag_include_processing_created_at: Optional[bool] = True
+    # If True, include UTC timestamp of when processing occurred
+    # flag_include_processing_created_at: Optional[bool] = True
 
 
 class StateConfig(BaseStateConfig):
@@ -154,49 +183,42 @@ class StateConfig(BaseStateConfig):
     # `{ "question": "what is the name of {person}" }`, where `{person}` is populated from another input key.
     template_columns: Optional[List[StateDataKeyDefinition]] = None
 
+    # FLAGS REMOVAL: all flags below are deprecated — use State.properties / StateProperties instead.
+
     # Enforces that all inputs must contain a valid primary key;
     # otherwise, the entry will be rejected or skipped during processing.
-    flag_require_primary_key: Optional[bool] = False
+    # flag_require_primary_key: Optional[bool] = False
 
     # If True, automatically copies all values from inherited entries
     # into the current input context based on the `query_state_inheritance` definition.
-    flag_query_state_inheritance_all: Optional[bool] = True
+    # flag_query_state_inheritance_all: Optional[bool] = True
 
     # If True, reverses the inheritance direction:
     # instead of copying from previous entries into the current one,
     # the current input will be merged *into* the matching inherited entries.
-    flag_query_state_inheritance_inverse: Optional[bool] = False
+    # flag_query_state_inheritance_inverse: Optional[bool] = False
 
     # If True, automatically saves the output of this state to the storage backend
     # (e.g., database or parquet) without requiring explicit save logic.
-    flag_auto_save_output_state: Optional[bool] = False
+    # flag_auto_save_output_state: Optional[bool] = False
 
     # If True, automatically routes the state output to downstream or connected states
     # based on the dependency graph or configuration.
-    flag_auto_route_output_state: Optional[bool] = False
+    # flag_auto_route_output_state: Optional[bool] = False
 
     # If True, ensures that routing to downstream states occurs **after** the output has been saved.
     # Helps enforce data consistency in workflows that depend on saved intermediate states.
-    flag_auto_route_output_state_after_save: Optional[bool] = False
+    # flag_auto_route_output_state_after_save: Optional[bool] = False
 
-    # If True, the system will call the `_stream` method on the state implementation
-    # and expect it to yield values, instead of calling `_set` or `_entry`.
-    flag_expect_stream: Optional[bool] = False
 
 
 class StateConfigLM(StateConfig):
     user_template_id: str
     system_template_id: Optional[str] = None
 
+    # FLAGS REMOVAL: deprecated — use State.properties / StateProperties instead.
     # If True, include the user and system prompts in the state column.
-    flag_include_prompts_in_state: Optional[bool] = False
-
-
-## TODO Deprecate in favor of flag_expect_stream???
-class StateConfigStream(BaseStateConfig):
-    url: Optional[str] = None
-    template_id: Optional[str] = None
-    # storage_class = "stream"
+    # flag_include_prompts_in_state: Optional[bool] = False
 
 
 class StateConfigCode(StateConfig):
@@ -360,7 +382,6 @@ class State(BaseModel):
         StateConfigDB,
         StateConfigVisual,
         StateConfigCode,
-        StateConfigStream,
         StateConfigAudio,
         StateConfigUserInput,
     ]] = None
@@ -372,6 +393,13 @@ class State(BaseModel):
     create_date: Optional[dt] = None
     update_date: Optional[dt] = None
     state_type: Optional[str] = None
+    properties: Optional[dict] = None  # nullable JSONB column
+
+    @property
+    def typed_properties(self) -> StateProperties:
+        if self.properties:
+            return StateProperties.model_validate(self.properties)
+        return StateProperties()
 
     @model_validator(mode="after")
     def derive_state_type(self):
@@ -408,8 +436,6 @@ class State(BaseModel):
             value['config'] = StateConfigCode(**config_value)
         elif state_type == 'StateConfigVisual':
             value['config'] = StateConfigVisual(**config_value)
-        elif state_type == 'StateConfigStream':
-            value['config'] = StateConfigStream(**config_value)
         elif state_type == 'StateConfigAudio':
             value['config'] = StateConfigAudio(**config_value)
         elif state_type == 'StateConfigUserInput':
@@ -937,8 +963,10 @@ class State(BaseModel):
         if not self.config.query_state_inheritance:
             return output_query_state
 
-        # Remove the keys defined in inheritance (as a result of inverse flag)
-        if self.config.flag_query_state_inheritance_inverse:
+        # FLAGS REMOVAL: was self.config.flag_query_state_inheritance_inverse
+        # if self.config.flag_query_state_inheritance_inverse:
+        inheritance_mode = self.typed_properties.inheritance.mode if self.typed_properties.inheritance else InheritanceMode.ALL
+        if inheritance_mode == InheritanceMode.INVERSE:
             [
                 # Delete the value by key from the output
                 output_query_state.pop(keyDefinition.name, None)
@@ -993,33 +1021,30 @@ class State(BaseModel):
         if additional_query_state:
             base_state = {**additional_query_state}
 
-        # Handle execute-set flag on input_data if enabled
-        # Serialize list to avoid dot-product if necessary
-        if self.config.flag_enable_execute_set and self.config.flag_enable_execute_set_inherit_set and isinstance(input_data, list):
-            if len(input_data) == 1:
-                input_data = input_data[0]
-            else:
-                # serialize list to avoid dot-product
-                serialized = json.dumps(
-                    input_data,
-                    indent=2,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(',', ':'),
-                    default=str
-                )
-                input_data = {"inherit_set": serialized}
-                # dot-product support pending
-                # raise NotImplementedError(
-                #     "Cannot inherit list input without dot-product support"
-                # )
+        # FLAGS REMOVAL: was self.config.flag_enable_execute_set and self.config.flag_enable_execute_set_inherit_set
+        # if self.config.flag_enable_execute_set and self.config.flag_enable_execute_set_inherit_set and isinstance(input_data, list):
+        #     if len(input_data) == 1:
+        #         input_data = input_data[0]
+        #     else:
+        #         serialized = json.dumps(input_data, ...)
+        #         input_data = {"inherit_set": serialized}
 
-        # Inheritance logic
-        if self.config.flag_query_state_inheritance_all:
-            base_state = {**base_state, **(input_data if isinstance(input_data, dict) else {})}
-            # drop old state keys since they might get replaced with new ones
-            base_state.pop('state_key', None)
-            base_state.pop('state_key_plain', None)
+        # Batch input: always wrap as a single column, even if 0 or 1 items.
+        # Persistence/flatten layer determines serialization format.
+        props = self.typed_properties
+        exec_strategy = props.execution.strategy if props.execution else ExecutionStrategy.INDIVIDUAL
+        if exec_strategy == ExecutionStrategy.BATCH and isinstance(input_data, list):
+            input_data = {"inherited_batch_data": input_data}
+
+        # FLAGS REMOVAL: was self.config.flag_query_state_inheritance_all
+        # if self.config.flag_query_state_inheritance_all:
+        inheritance_mode = self.typed_properties.inheritance.mode if self.typed_properties.inheritance else InheritanceMode.ALL
+        if inheritance_mode == InheritanceMode.ALL:
+            if isinstance(input_data, dict):
+                base_state = {**base_state, **input_data}
+                # drop old state keys since they might get replaced with new ones
+                base_state.pop('state_key', None)
+                base_state.pop('state_key_plain', None)
         else:
             base_state = await self.apply_query_state_inheritance(
                 input_query_state=(input_data if isinstance(input_data, dict) else input_data),
@@ -1128,13 +1153,18 @@ class State(BaseModel):
         Returns:
             bool: True if the primary key is defined, False otherwise.
         """
-        if self.config.flag_require_primary_key and not self.config.primary_key:
+        # FLAGS REMOVAL: was self.config.flag_require_primary_key
+        # if self.config.flag_require_primary_key and not self.config.primary_key:
+        #     raise ValueError(f'primary key is not defined for state {self.id}')
+        props = self.typed_properties
+        require_pk = props.inheritance.require_primary_key if props.inheritance else False
+        if require_pk and not self.config.primary_key:
             raise ValueError(f'primary key is not defined for state {self.id}')
 
         if not self.config.primary_key:
             logging.debug(
                 f'no primary key defined for state id {self.id}, '
-                f'however flag_require_primary_key is set to {self.config.flag_require_primary_key}'
+                f'require_primary_key is set to {require_pk}'
             )
             return False
 
@@ -1206,8 +1236,12 @@ class State(BaseModel):
 
     def _should_flatten_on_save(self) -> bool:
         """Check if complex types should be flattened on save (default True)."""
-        if self.config and hasattr(self.config, 'flag_flatten_on_save'):
-            return self.config.flag_flatten_on_save if self.config.flag_flatten_on_save is not None else True
+        # FLAGS REMOVAL: was self.config.flag_flatten_on_save
+        # if self.config and hasattr(self.config, 'flag_flatten_on_save'):
+        #     return self.config.flag_flatten_on_save if self.config.flag_flatten_on_save is not None else True
+        props = self.typed_properties
+        if props.persistence and props.persistence.flatten:
+            return FlattenMode(props.persistence.flatten) == FlattenMode.DOT_NOTATION
         return True
 
     def pre_state_apply(self, query_state: dict) -> dict:

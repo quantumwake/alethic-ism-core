@@ -1,4 +1,4 @@
-from ismcore.utils.general_utils import parse_response_json, parse_response
+from ismcore.utils.general_utils import parse_response_json, parse_response, parse_response_auto_detect_type
 
 
 def test_parse_json_text_simply_json_array():
@@ -49,3 +49,36 @@ def test_parse_response_json_with_escaped_apostrophe():
     assert data_parsed['qsa_syn_infl_cost'] == "Not much"
 
 
+def test_parse_response_malformed_json_stores_raw_result():
+    """When JSON parsing fails, the raw result should be preserved in _raw_result."""
+    text = '{ "answer": "some answer", "rationale": "this has an unclosed quote }'
+
+    data_parsed, data_type, raw_response = parse_response(text)
+
+    assert data_type == 'raw'
+    assert isinstance(data_parsed, dict)
+    assert '_raw_result' in data_parsed
+    assert data_parsed['_raw_result'] == text.strip()
+
+
+def test_parse_response_auto_detect_type_does_not_raise_on_malformed_json():
+    """parse_response_auto_detect_type should never raise, even with unparseable input."""
+    text = 'this is not json at all { broken }'
+
+    status, dtype, result = parse_response_auto_detect_type(text)
+
+    assert status is False
+    assert result == text
+
+
+def test_parse_response_valid_json_still_works():
+    """Ensure valid JSON still parses correctly after the raw_result fallback changes."""
+    text = '{"key": "value", "num": 42}'
+
+    data_parsed, data_type, raw_response = parse_response(text)
+
+    assert data_type == 'json'
+    assert isinstance(data_parsed, dict)
+    assert data_parsed['key'] == 'value'
+    assert data_parsed['num'] == 42
+    assert '_raw_result' not in data_parsed

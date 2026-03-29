@@ -203,9 +203,19 @@ def build_template_text_mako(template: [str, dict], data: any, error_callback: c
 
         return result
     except Exception as e:
+        # extract mako-specific error detail when available
+        try:
+            from mako import exceptions as mako_exceptions
+            mako_detail = mako_exceptions.text_error_template().render_unicode()
+        except Exception:
+            mako_detail = None
+
         error = f'failed to process mako template {template} with error: {e}'
+        if mako_detail:
+            error += f'\n--- mako error detail ---\n{mako_detail}'
+
         logging.error(error)
-        raise ValueError(error)
+        raise ValueError(error) from e
 
 
 def get_template_content(template: Union[dict, str]):
@@ -427,8 +437,12 @@ def parse_response_auto_detect_type(response: str):
         return data_parse_status, data_type, data_parsed
 
     # fall back to legacy newline-munging parser
-    data_parse_status, data_type, data_parsed = parse_response_json(response=response)
-    return data_parse_status, data_type, data_parsed
+    try:
+        data_parse_status, data_type, data_parsed = parse_response_json(response=response)
+        return data_parse_status, data_type, data_parsed
+    except Exception as e:
+        logging.warning(f'json parsing failed, raw result will be preserved: {e}')
+        return False, None, response
 
 
 def parse_response(raw_response: str):
@@ -447,7 +461,8 @@ def parse_response(raw_response: str):
         elif 'csv' == data_type:
             raise ValueError(f'unsupported csv format, need to fix the _parse_response_csv(.) function')
 
-    return raw_response, data_type, raw_response
+    # parsing failed — preserve the raw result so data is not lost
+    return {'_raw_result': raw_response}, 'raw', raw_response
 
 
 def parse_response_strip_assistant_message(raw_response: str):

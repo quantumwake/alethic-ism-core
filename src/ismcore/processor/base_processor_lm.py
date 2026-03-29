@@ -1,10 +1,10 @@
 import json
 import datetime as dt
 
-from typing import Union, List
+from typing import List
 
 from ismcore.model.base_model import SessionMessage, ProcessorPropertiesLM
-from ismcore.model.processor_state import StateConfigLM, StateConfigStream
+from ismcore.model.processor_state import StateConfigLM, OutputEnrichment
 from ismcore.processor.base_processor import BaseProcessor
 from ismcore.utils.general_utils import build_template_text_v2
 from ismcore.utils.ism_logger import ism_logger
@@ -17,12 +17,10 @@ class BaseProcessorLM(BaseProcessor):
         super().__init__(**kwargs)
 
         # ensure that the configuration passed is of StateConfigLM
-        if (not isinstance(self.output_state.config, StateConfigLM) and not
-                isinstance(self.output_state.config, StateConfigStream)):
-
+        if not isinstance(self.output_state.config, StateConfigLM):
             raise ValueError(f'invalid state config, '
                              f'got {type(self.output_state.config)}, '
-                             f'expected {StateConfigLM} or {StateConfigStream}')
+                             f'expected {StateConfigLM}')
 
     @property
     def properties(self) -> ProcessorPropertiesLM:
@@ -32,14 +30,11 @@ class BaseProcessorLM(BaseProcessor):
         return ProcessorPropertiesLM(**self.processor.properties)
 
     @property
-    def config(self) -> Union[StateConfigLM, StateConfigStream]:
+    def config(self) -> StateConfigLM:
         return self.output_state.config
 
     @property
     def user_template(self):
-        if not isinstance(self.config, StateConfigLM):
-            raise ValueError("system template cannot be set for streaming configuration, use template instead")
-
         if self.config.user_template_id:
             template = self.storage.fetch_template(self.config.user_template_id)
             return template
@@ -48,37 +43,46 @@ class BaseProcessorLM(BaseProcessor):
 
     @property
     def system_template(self):
-        if not isinstance(self.config, StateConfigLM):
-            raise ValueError("system template cannot be set for streaming configuration, use template instead")
-
         if self.config.system_template_id:
             template = self.storage.fetch_template(self.config.system_template_id)
             return template
 
         return None
 
-    def derive_messages(self, template):
-        return [{
-            "role": "user",
-            "content": template
-        }]
+    def derive_messages(self, user_prompt: str, system_prompt: str = None) -> list[dict]:
+        """Build the base messages list for an LLM API call."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt.strip()})
+        if user_prompt:
+            messages.append({"role": "user", "content": user_prompt.strip()})
+        return messages
 
-    def derive_messages_with_session_data_if_any(self, template: str, input_data: any):
+    def derive_messages_with_session_data_if_any(
+        self, user_prompt: str, system_prompt: str = None, input_data: any = None
+    ) -> list[dict]:
+        """Build messages list, prepending session history if available.
+
+        Ordering: system prompt -> session history -> current user prompt.
+        """
+        current_messages = self.derive_messages(user_prompt=user_prompt, system_prompt=system_prompt)
+
         if not isinstance(input_data, dict):
-            return self.derive_messages(template=template)
+            return current_messages
+        if not {'session_id', 'source', 'input'}.issubset(input_data.keys()):
+            return current_messages
 
-        if not set(['session_id', 'source', 'input']).issubset(input_data.keys()):
-            return self.derive_messages(template=template)
+        session_messages = self.fetch_session_data(input_data)
+        if not session_messages:
+            return current_messages
 
-        message_list = self.fetch_session_data(input_data)
-        if message_list:
-            message_list = [
-                {"role": msg['role'], "content": msg['content']}
-                for msg in message_list
-            ]
+        history = [{"role": msg['role'], "content": msg['content']} for msg in session_messages]
 
-        message_list.extend(self.derive_messages(template=template))
-        return message_list
+        # system first, then history, then current user prompt
+        result = [msg for msg in current_messages if msg['role'] == 'system']
+        result.extend(history)
+        result.extend(msg for msg in current_messages if msg['role'] != 'system')
+        return result
 
     def update_session_data(self, input_data: any, input_template: str, output_data: str):
         if not isinstance(input_data, dict):
@@ -90,15 +94,7 @@ class BaseProcessorLM(BaseProcessor):
         user_id = input_data['source']
         session_id = input_data['session_id']
 
-        # self.update_session_data_entry(session_id=session_id, session_entry={
-        #     "source": input_data['source'] if 'source' in input_data else "user",
-        #     "role": "user",  # TODO?
-        #     "input": input_data['input'] if 'input' in input_data else input_template,
-        #     "content": input_template,  # the rendered template (given input_data) as executed by processor
-        # })
-
-        # session message object representing the original text that came in from the user and
-        # the prompt that was actually executed (as per instruction template for StateConfig -> self.config)
+        # session message: original user text + rendered prompt that was executed
         self.storage.insert_session_message(SessionMessage(
             user_id=user_id,
             session_id=session_id,
@@ -107,24 +103,38 @@ class BaseProcessorLM(BaseProcessor):
             message_date=dt.datetime.utcnow()
         ))
 
-        # session message representing the assistant generated text, given the user executed content (as per above)
-        # the prompt that was actually executed (as per instruction template for StateConfig -> self.config)
+        # session message: assistant-generated response
         self.storage.insert_session_message(SessionMessage(
             user_id=user_id,
             session_id=session_id,
-            original_content=json.dumps({"role": "assistant", "content": input_template}),
+            original_content=json.dumps({"role": "assistant", "content": output_data}),
             executed_content=None,
             message_date=dt.datetime.utcnow()
         ))
-        #
-        # self.update_session_data_entry(session_id=session_id, session_entry={
-        #     "role": "assistant",
-        #     "source": input_data['source'] if 'source' in input_data else "assistant",
-        #     "content": output_data,
-        #     "input": input_template
-        # })
 
-    async def _execute(self, user_prompt: str, system_prompt: str, values: dict | List[dict]) \
+    async def process_input_data_stream(self, input_data: dict | List[dict]):
+        """LM streaming: resolve templates, emit chat markers, yield model chunks."""
+        user_prompt = build_template_text_v2(self.user_template, input_data)
+        system_prompt = build_template_text_v2(self.system_template, input_data) if self.system_template else None
+
+        if 'source' in input_data:
+            yield input_data['source']
+            yield "<<>>SOURCE<<>>"
+
+        if 'input' in input_data:
+            yield input_data['input']
+            yield "<<>>INPUT<<>>"
+
+        async for chunk in self.stream_llm(user_prompt=user_prompt, system_prompt=system_prompt, values=input_data):
+            yield chunk
+
+        yield "<<>>ASSISTANT<<>>"
+
+    async def stream_llm(self, user_prompt: str, system_prompt: str, values: dict | List[dict]):
+        """Yield raw LLM response chunks. Override in concrete LLM processors."""
+        raise NotImplementedError("LLM streaming not implemented")
+
+    async def execute_llm(self, user_prompt: str, system_prompt: str, values: dict | List[dict]) \
             -> tuple[dict | List[dict] | None, str, any]:
         """Execute the underlying model call. Must be implemented by subclasses.
 
@@ -134,7 +144,7 @@ class BaseProcessorLM(BaseProcessor):
                 - output_type: string identifier for the output format (e.g. 'json', 'text', 'csv', 'binary', etc.)
                 - raw_output: the unmodified response from the model
         """
-        raise NotImplementedError(f'You must implement the _execute(..) method')
+        raise NotImplementedError(f'You must implement the execute_llm(..) method')
 
 
     async def process_input_data(self, input_data: dict | List[dict], force: bool = False)\
@@ -163,7 +173,7 @@ class BaseProcessorLM(BaseProcessor):
         # begin the processing of the prompts
         try:
             # execute the underlying model function
-            response, response_type, response_raw = await self._execute(
+            response, response_type, response_raw = await self.execute_llm(
                 user_prompt=user_prompt,
                 system_prompt=system_prompt,
                 values=input_data
@@ -171,18 +181,19 @@ class BaseProcessorLM(BaseProcessor):
 
             # we build a new output state to be appended to the output states
             additional_query_state = None
-            if self.config.flag_include_prompts_in_state:
+            props = self.output_state.typed_properties
+            if props.output and props.output.enrichments and OutputEnrichment.PROMPTS in props.output.enrichments:
                 additional_query_state = {'user_prompt': user_prompt, 'system_prompt': system_prompt}
 
             # finalize the output by performing any necessary post-processing, such as updating the query state entry with the result,
             #  and return the finalized output, along with the original raw response data from the upstream processor implementation (if applicable)
-            finalized_output = self.finalize_result(
+            finalized_output = await self.finalize_result(
                 result=response,
                 input_data=input_data,
                 additional_query_state=additional_query_state,
                 raw_output=response_raw
             )
-            return await finalized_output, response_raw
+            return finalized_output, response_raw
 
         except Exception as exception:
             await self.fail_execute_processor_state(
@@ -192,90 +203,3 @@ class BaseProcessorLM(BaseProcessor):
                 data=input_data
             )
             return None, None
-
-    async def process_input_data_stream(self, input_data: dict | List[dict], force: bool = False):
-        if not self.stream_route:
-            raise ValueError(
-                f"streams are not supported by provider: {self.output_processor_state.id}, "
-                f"route_id {self.output_processor_state.id}")
-
-        if not input_data:
-            raise ValueError("invalid input state, cannot be empty")
-
-        # if not isinstance(self.config, StateConfigStream):
-        #     raise NotImplementedError()
-
-        template = build_template_text_v2(self.template, input_data)
-
-        # TODO this such a terrible HACK to use a session id for a given processor state stream
-        if 'session_id' in input_data:
-            session_id = input_data["session_id"]
-            subject = f"processor.state.{self.output_state.id}.{session_id}"
-        else:
-            subject = f"processor.state.{self.output_state.id}"
-
-        name = f"{subject}".replace("-", "_")
-
-        # begin the processing of the prompts
-        logging.debug(f"entered streaming mode, state_id: {self.output_state.id}")
-
-        # submit to the fully qualified subject, which may include a session id
-        stream_route = self.stream_route.clone(
-            route_config_updates={
-                "subject": subject,
-                "name": name
-            }
-        )
-
-        try:
-            # submit the original request to the stream, such that it is broadcasted to all subscribers of the subject
-            # TODO this needs to be invoked at the LM processor level, pre-stream-processing
-            if 'source' in input_data:
-                await stream_route.publish(input_data['source'])
-                await stream_route.publish("<<>>SOURCE<<>>")
-
-            if 'input' in input_data:
-                await stream_route.publish(input_data['input'])
-                await stream_route.publish("<<>>INPUT<<>>")
-
-            # flush the stream to ensure the messages are sent to the stream server
-            await stream_route.flush()
-
-            # build a coroutine calling the concrete implementation of the stream
-            stream = self._stream(input_data=input_data, template=template)
-
-            # execute and iterate the yielded data directly into the upstream route
-            async for content in stream:
-                try:
-                    if isinstance(content, str):
-                        await stream_route.publish(content)
-                        await stream_route.flush()
-                    elif content is None:
-                        # Log or handle the None case if necessary
-                        logging.warning('Received NoneType content, skipping...')
-                    else:
-                        # Handle unexpected types
-                        logging.warning(f'Unexpected content type: {type(content)}')
-                except Exception as critical:
-                    # Provide more detailed exception handling
-                    logging.critical(f'Exception encountered during streaming: {critical}', exc_info=True)
-
-            # TODO this needs to be invoked at the LM processor level, post-stream-processing
-            # submit the response message to the stream.
-            await stream_route.publish("<<>>ASSISTANT<<>>")
-            await stream_route.flush()
-
-            # should gracefully close the connection
-            await stream_route.disconnect()
-
-            logging.debug(f"exit streaming mode, state_id: {self.output_state.id}")
-        except Exception as exception:
-            # submit the response message to the stream.
-            await stream_route.publish("<<>>ERROR<<>>")
-            await stream_route.flush()
-            await self.fail_execute_processor_state(
-                # self.output_processor_state,
-                route_id=self.output_processor_state.id,
-                exception=exception,
-                data=input_data
-            )

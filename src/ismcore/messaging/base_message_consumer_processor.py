@@ -4,7 +4,7 @@ from typing import Dict
 
 from ismcore.messaging.base_message_provider import BaseMessageConsumer, BaseRoute
 from ismcore.model.base_model import Processor, ProcessorProvider, ProcessorState, ProcessorStateDirection
-from ismcore.model.processor_state import State
+from ismcore.model.processor_state import State, ExecutionStrategy
 from ismcore.processor.base_processor import BaseProcessor
 from ismcore.storage.processor_state_storage import StateMachineStorage
 from ismcore.utils import general_utils
@@ -58,6 +58,24 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
         # create (or fetch cached state) processor handling this state output instruction
         raise NotImplementedError(f'must return an instance of BaseProcessorLM for provider {provider.id}, '
                                   f'output state: {output_state.id}')
+
+    @staticmethod
+    def _get_execution_strategy(output_state: State) -> ExecutionStrategy:
+        props = output_state.typed_properties
+        if props.execution and props.execution.strategy:
+            try:
+                return ExecutionStrategy(props.execution.strategy)
+            except ValueError:
+                raise ValueError(
+                    f"invalid execution strategy '{props.execution.strategy}' "
+                    f"for state {output_state.id}, "
+                    f"must be one of: {[e.value for e in ExecutionStrategy]}"
+                )
+
+        # FLAGS REMOVAL: legacy fallback commented out
+        # if getattr(output_state.config, 'flag_enable_execute_set', False):
+        #     return ExecutionStrategy.BATCH
+        return ExecutionStrategy.INDIVIDUAL
 
     async def fetch_processor_state_outputs(self, consumer_message_mapping: dict):
         try:
@@ -168,13 +186,17 @@ class BaseMessageConsumerProcessor(BaseMessageConsumer):
                 # update the processor state with the relevant status of RUNNING
                 await self.intra_execute(consumer_message_mapping=consumer_message_mapping)
 
-                # iterate each query state entry and forward it to the processor
-                # pass input_route_id so it can be included in output messages for calibration/retry
-                if output_state.config.flag_enable_execute_set:
-                    await runnable_processor.execute_set(input_query_state=query_states, input_route_id=route_id)
+                # dispatch based on execution strategy (properties or legacy flags)
+                strategy = self._get_execution_strategy(output_state)
+                if strategy in (ExecutionStrategy.BATCH, ExecutionStrategy.STREAM):
+                    await runnable_processor.execute(
+                        input_data=query_states, input_route_id=route_id
+                    )
                 else:
                     for query_state_entry in query_states:
-                        await runnable_processor.execute_entry(input_query_state=query_state_entry, input_route_id=route_id)
+                        await runnable_processor.execute(
+                            input_data=query_state_entry, input_route_id=route_id
+                        )
 
                 # submit completed execution
                 await self.post_execute(consumer_message_mapping=consumer_message_mapping)

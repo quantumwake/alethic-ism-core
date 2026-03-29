@@ -149,6 +149,14 @@ class ProcessorProviderStorage:
             -> Optional[List[ProcessorProvider]]:
         raise NotImplementedError()
 
+    def search_processor_providers(self,
+                                   name: str = None,
+                                   version: str = None,
+                                   class_name: str = None,
+                                   limit: int = 20) \
+            -> Optional[List[ProcessorProvider]]:
+        raise NotImplementedError()
+
     def insert_processor_provider(self, provider: ProcessorProvider) -> ProcessorProvider | None:
         raise NotImplementedError()
 
