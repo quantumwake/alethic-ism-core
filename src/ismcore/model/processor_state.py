@@ -36,10 +36,15 @@ class RoutingDispatch(str, PyEnum):
 
 
 class PersistenceMode(str, PyEnum):
-    DISABLED = "disabled"       # default — no auto-save
-    INDIVIDUAL_ROWS = "individual_rows"  # each dict = separate row
-    JSON_COLUMN = "json_column"          # single row, _result_set column
-    LIST_COLUMNS = "list_columns"        # single row, key = [values...]
+    # Row-level shape of what gets written. Orthogonal to FlattenMode (how complex
+    # values within a row are rendered). FlattenMode only applies to INDIVIDUAL_ROWS;
+    # for CLOB / LIST_COLUMNS the persistence mode alone fixes the shape.
+    DISABLED = "disabled"                # default — no auto-save
+    INDIVIDUAL_ROWS = "individual_rows"  # tabular rows; count/columns determined by FlattenMode + data complexity
+    CLOB = "clob"                        # single row, whole query_state as one JSON character blob column
+    # ARRAY_COLUMNS = "array_columns"    # single row, each key = [values...] (array-valued columns)
+    #   ^ disabled for now: batch-level aggregation (aggregates across rows), not yet
+    #     implemented as a per-row transform. See docs/activities.md.
 
 
 class FlattenMode(str, PyEnum):
@@ -915,9 +920,46 @@ class State(BaseModel):
         :return: The processed query state after the application process.
         """
 
-        # Pre-state apply - perform transformations before applying the state
-        query_state = self.pre_state_apply(query_state=query_state)
+        # Pre-state apply - perform transformations before applying the state.
+        # When persistence mode is INDIVIDUAL_ROWS and the query state contains an
+        # array (e.g. {"choices": [{...}, {...}]}), flatten fans the array out into
+        # multiple rows and pre_state_apply returns a *list* instead of a single dict.
+        prepared = self.pre_state_apply(query_state=query_state)
 
+        # Fan out: apply each flattened row independently. A query state that fanned
+        # out returns the list of applied rows; a single (un-fanned) query state
+        # still returns a dict, preserving the original 1-in/1-out contract.
+        if isinstance(prepared, list):
+            return [
+                self._apply_prepared_query_state(
+                    query_state=row,
+                    skip_has_query_state=skip_has_query_state,
+                    skip_data_append=skip_data_append,
+                    scope_variable_mappings=scope_variable_mappings
+                )
+                for row in prepared
+            ]
+
+        return self._apply_prepared_query_state(
+            query_state=prepared,
+            skip_has_query_state=skip_has_query_state,
+            skip_data_append=skip_data_append,
+            scope_variable_mappings=scope_variable_mappings
+        )
+
+    def _apply_prepared_query_state(self,
+                                    query_state: dict,
+                                    skip_has_query_state: bool = False,
+                                    skip_data_append: bool = False,
+                                    scope_variable_mappings: dict = None):
+        """
+        Apply a single, already pre-processed (flattened + cleaned) query state row
+        to this state object: derive constant/callable columns and the primary key,
+        register columns, append the row data and update the row-key mappings.
+
+        This is the per-row half of :meth:`apply_query_state`; it is invoked once per
+        row when an array-bearing query state fans out into multiple rows.
+        """
         # Pre-state apply - applies any constant and or callable value to the query state
         query_state = self.pre_state_apply_callable_and_constant_columns(
             query_state=query_state,
@@ -1228,25 +1270,72 @@ class State(BaseModel):
 
     def _serialize_complex_values(self, query_state: dict) -> dict:
         """
-        Pass through complex types (dict, list) without flattening.
-        Used when flag_flatten_on_save is False.
-        JSON serialization happens at the storage layer.
+        Pass complex types (dict, list) through as native objects (FlattenMode.NONE).
+        The storage layer infers a json column for them. Scalars are untouched.
         """
         return query_state
+
+    @staticmethod
+    def _serialize_complex_values_as_json_string(query_state: dict) -> dict:
+        """
+        Serialize complex values (dict, list) to JSON strings (FlattenMode.JSON_STRING)
+        so they persist as a *text* column rather than a native json column. Scalar
+        values pass through unchanged.
+        """
+        return {
+            key: (json.dumps(val) if isinstance(val, (dict, list)) else val)
+            for key, val in query_state.items()
+        }
+
+    def _flatten_mode(self) -> FlattenMode:
+        """Resolve the configured flatten mode (default DOT_NOTATION)."""
+        props = self.typed_properties
+        if props.persistence and props.persistence.flatten:
+            return FlattenMode(props.persistence.flatten)
+        return FlattenMode.DOT_NOTATION
 
     def _should_flatten_on_save(self) -> bool:
         """Check if complex types should be flattened on save (default True)."""
         # FLAGS REMOVAL: was self.config.flag_flatten_on_save
         # if self.config and hasattr(self.config, 'flag_flatten_on_save'):
         #     return self.config.flag_flatten_on_save if self.config.flag_flatten_on_save is not None else True
-        props = self.typed_properties
-        if props.persistence and props.persistence.flatten:
-            return FlattenMode(props.persistence.flatten) == FlattenMode.DOT_NOTATION
-        return True
+        return self._flatten_mode() == FlattenMode.DOT_NOTATION
 
-    def pre_state_apply(self, query_state: dict) -> dict:
+    def _persistence_mode(self) -> str:
+        """
+        Resolve the configured persistence mode as its raw string value (default
+        DISABLED). Returns the raw string rather than constructing PersistenceMode(...)
+        so a stale/unknown mode (e.g. a renamed value still stored on an old state)
+        never raises — callers compare it against the (str) enum members.
+        """
+        props = self.typed_properties
+        if props.persistence and props.persistence.mode:
+            return props.persistence.mode
+        return PersistenceMode.DISABLED
+
+    def _should_persist_individual_rows(self) -> bool:
+        """
+        Check if an array in the query state should fan out into individual rows on
+        save (persistence mode INDIVIDUAL_ROWS — "each dict = separate row").
+
+        Defaults to False so existing states are unaffected; fan-out is opt-in.
+        """
+        return self._persistence_mode() == PersistenceMode.INDIVIDUAL_ROWS
+
+    @staticmethod
+    def _clean_ddl_keys(query_state: dict) -> dict:
+        """
+        Normalize query state keys to ddl-safe column names.
+
+        Collapses dot-notation keys emitted by :func:`flatten` (nested dicts /
+        flattened arrays) into underscore column names, e.g. ``choices.choice`` ->
+        ``choices_choice``.
+        """
+        return {clean_string_for_ddl_naming(key): val for key, val in query_state.items()}
+
+    def pre_state_apply(self, query_state: dict) -> Union[dict, List[dict]]:
         # clean up column names ensure they are standardized
-        query_state = {clean_string_for_ddl_naming(key): val for key, val in query_state.items()}
+        query_state = self._clean_ddl_keys(query_state)
 
         # remapped query state before applying it to the state
         query_state = self.remap_query_state(query_state=query_state)
@@ -1254,17 +1343,58 @@ class State(BaseModel):
         # apply any templates using the query state as the primary source of information
         query_state = self.apply_template_variables(query_state=query_state)
 
-        # Handle complex types based on flag_flatten_on_save
+        # CLOB and ARRAY_COLUMNS fully determine the row shape on their own; FlattenMode
+        # (how complex values render into columns) only applies to the tabular
+        # INDIVIDUAL_ROWS family, so it is bypassed for these modes.
+        persistence_mode = self._persistence_mode()
+
+        if persistence_mode == PersistenceMode.CLOB:
+            # Collapse the whole query state into a single JSON character-blob column
+            # (one row). Stored as text — hence CLOB.
+            return {"_result_set": json.dumps(query_state, ensure_ascii=False)}
+
+        # ARRAY_COLUMNS disabled for now — batch-level aggregation (aggregates values
+        # across rows), not yet implemented as a per-row transform. See docs/activities.md.
+        # When re-enabled, it must aggregate the full row set, not a single query state:
+        # if persistence_mode == PersistenceMode.ARRAY_COLUMNS:
+        #     # Array-valued columns aggregate values *across* rows, a batch-level operation
+        #     # that cannot be derived from a single query state here. Not yet implemented:
+        #     # pass complex values through natively so nothing is silently dropped.
+        #     logging.warning(
+        #         f'persistence mode array_columns is not yet implemented for state {self.id}; '
+        #         f'passing query state through without aggregation'
+        #     )
+        #     return self._serialize_complex_values(query_state)
+
+        # Tabular family (INDIVIDUAL_ROWS / default): FlattenMode controls how complex
+        # values map to columns and rows.
         if self._should_flatten_on_save():
-            # Default behavior: flatten complex types to dot-notation columns
+            # Default behavior: flatten complex types to dot-notation columns. When the
+            # query state contains an array, flatten() fans it out and returns a *list*
+            # of rows (one per array item); otherwise it returns a single dict.
             query_state = ismcore.utils.map_utils.flatten(query_state)
-            # flatten may return a list if there were list values, normalize to single dict
+
             if isinstance(query_state, list):
-                # If flatten returns multiple rows, use the first one
-                # Note: proper handling of multiple rows would need separate apply calls
-                query_state = query_state[0] if query_state else {}
+                # flatten emits dot-notation keys (e.g. 'choices.choice'); normalize each
+                # row to ddl-safe column names (e.g. 'choices_choice').
+                rows = [self._clean_ddl_keys(row) for row in query_state]
+
+                # Fan out into multiple rows only when persistence is configured for
+                # individual rows ("each dict = separate row"). Any other mode preserves
+                # the legacy single-row behavior (keep the first row) so existing states
+                # are unaffected.
+                if self._should_persist_individual_rows():
+                    return rows
+
+                query_state = rows[0] if rows else {}
+            else:
+                # single row: still normalize dot-notation keys produced by nested dicts
+                query_state = self._clean_ddl_keys(query_state)
+        elif self._flatten_mode() == FlattenMode.JSON_STRING:
+            # serialize complex values to JSON strings -> text column
+            query_state = self._serialize_complex_values_as_json_string(query_state)
         else:
-            # New behavior: serialize complex types to JSON strings
+            # FlattenMode.NONE: keep complex values as native objects -> json column
             query_state = self._serialize_complex_values(query_state)
 
         return query_state

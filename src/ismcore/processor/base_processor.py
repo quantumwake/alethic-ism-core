@@ -206,14 +206,24 @@ class StatePropagationProviderCore(StatePropagationProvider):
         """
         # Otherwise attempt to persist the data
         logging.debug(f'persisting processed new query states from response. query states: {output_query_states} ')
-        return [processor.output_state.apply_query_state(  # Iterate each query state and apply it to the output state
-            query_state=query_state,
-            scope_variable_mappings={
-                "provider": processor.provider,
-                "processor": processor.processor,
-                "input_query_state": input_query_state
-            }
-        ) for query_state in output_query_states]
+        applied_query_states = []
+        for query_state in output_query_states:
+            # Iterate each query state and apply it to the output state. A query state
+            # containing an array fans out into multiple rows (apply_query_state returns
+            # a list) when persistence mode is INDIVIDUAL_ROWS; otherwise it returns a dict.
+            applied = processor.output_state.apply_query_state(
+                query_state=query_state,
+                scope_variable_mappings={
+                    "provider": processor.provider,
+                    "processor": processor.processor,
+                    "input_query_state": input_query_state
+                }
+            )
+            if isinstance(applied, list):
+                applied_query_states.extend(applied)
+            else:
+                applied_query_states.append(applied)
+        return applied_query_states
 
 
 class StatePropagationProviderEdgeFunction(StatePropagationProvider):
